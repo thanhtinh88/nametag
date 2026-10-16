@@ -104,6 +104,8 @@ const addressSchema = z.object({
   region: z.string().max(100).nullable().optional(), // State/Province
   postalCode: z.string().max(20).nullable().optional(),
   country: z.string().max(100).nullable().optional(),
+  latitude: z.number().min(-90).max(90).nullable().optional(),
+  longitude: z.number().min(-180).max(180).nullable().optional(),
 });
 
 const urlSchema = z.object({
@@ -215,6 +217,10 @@ export const createPersonSchema = z.object({
     .describe('Group IDs to add this person to'),
   connectedThroughId: z.string().optional()
     .describe('If set, creates a person-to-person relationship instead of person-to-user'),
+  connectedEventId: z.string().nullable().optional()
+    .describe('If set, links this person to an event upon creation/update'),
+  connectedEventRole: z.string().max(100).nullable().optional()
+    .describe('Role of this person in the connected event'),
   importantDates: z.array(importantDateSchema).optional(),
   contactReminderEnabled: z.boolean().optional(),
   contactReminderInterval: z.number().int().min(1).max(99).nullable().optional(),
@@ -715,6 +721,66 @@ export const updateEndpointSchema = z.object({
    * the response, and never again, the same contract as creation.
    */
   rotateSecret: z.literal(true).optional(),
+});
+
+// ============================================
+// Event schemas
+// ============================================
+
+export const eventStatusSchema = z.enum(['PLANNED', 'ONGOING', 'COMPLETED', 'CANCELLED']);
+
+export const eventPersonInputSchema = z.object({
+  personId: z.string().min(1, 'Person ID is required'),
+  role: z.string().max(100).nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+export const createEventSchema = z.object({
+  title: z.string().trim().min(1, 'Title is required').max(200),
+  category: z.string().max(100).nullable().optional(),
+  status: eventStatusSchema.optional().default('PLANNED'),
+  startDate: z.preprocess(
+    (val) => (val === '' ? null : val),
+    z.string().max(50).nullable().optional(),
+  ),
+  endDate: z.preprocess(
+    (val) => (val === '' ? null : val),
+    z.string().max(50).nullable().optional(),
+  ),
+  hasTime: z.boolean().optional().default(false),
+  description: z.string().max(20000).nullable().optional(),
+  photo: z.string().nullable().optional(),
+  groupIds: z.array(z.string()).optional(),
+  addresses: z.array(addressSchema).optional(),
+  urls: z.array(urlSchema).optional(),
+  customFields: z.array(customFieldSchema).optional(),
+  participants: z.array(eventPersonInputSchema).optional(),
+});
+
+export const updateEventSchema = createEventSchema.partial();
+
+export const createPersonEventSchema = z.object({
+  personId: z.string().min(1, 'Person ID is required'),
+  role: z.string().max(100).nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+export const updatePersonEventSchema = z.object({
+  id: z.string().min(1, 'ID is required'),
+  role: z.string().max(100).nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+export const createEventRelationshipSchema = z.object({
+  relatedEventId: z.string().min(1, 'Related Event ID is required'),
+  relationshipType: z.string().max(100).nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+export const updateEventRelationshipSchema = z.object({
+  id: z.string().min(1, 'ID is required'),
+  relationshipType: z.string().max(100).nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
 });
 
 // ============================================

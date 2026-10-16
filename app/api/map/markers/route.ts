@@ -146,6 +146,83 @@ export const GET = withAuth(async (request, session) => {
       }
     }
 
+    if (prisma.event?.findMany) {
+      const events = await prisma.event.findMany({
+        where: { userId: session.user.id, deletedAt: null },
+        select: {
+          id: true,
+          title: true,
+          addresses: {
+            select: {
+              id: true,
+              type: true,
+              streetLine1: true,
+              streetLine2: true,
+              locality: true,
+              region: true,
+              postalCode: true,
+              country: true,
+              latitude: true,
+              longitude: true,
+              geocodeStatus: true,
+            },
+          },
+          groups: {
+            where: { group: { deletedAt: null } },
+            select: { group: { select: { id: true, name: true, color: true } } },
+          },
+        },
+      });
+
+      for (const event of events) {
+        const groupIds = event.groups.map((eg) => eg.group.id);
+        for (const eg of event.groups) {
+          groupsById.set(eg.group.id, eg.group);
+        }
+        const groupColor =
+          event.groups.find((eg) => eg.group.color)?.group.color ?? '#f59e0b';
+
+        for (const address of event.addresses) {
+          if (
+            address.geocodeStatus !== 'success' ||
+            address.latitude === null ||
+            address.longitude === null
+          ) {
+            continue;
+          }
+          const addressText = [
+            address.streetLine1,
+            address.streetLine2,
+            address.locality,
+            address.region,
+            address.postalCode,
+            address.country
+              ? getCountryName(address.country) || address.country
+              : null,
+          ]
+            .filter((part) => part && part.trim().length > 0)
+            .join(', ');
+
+          markers.push({
+            id: `evaddr_${address.id}`,
+            source: 'event_address',
+            personId: event.id,
+            personName: `📅 ${event.title}`,
+            latitude: Number(address.latitude),
+            longitude: Number(address.longitude),
+            label: address.type ?? 'event',
+            city: address.locality,
+            region: address.region,
+            country: address.country,
+            addressText: addressText || null,
+            groupIds,
+            hasPhoto: false,
+            groupColor,
+          });
+        }
+      }
+    }
+
     const groups = [...groupsById.values()].sort((a, b) => a.name.localeCompare(b.name));
     unlocatedPeople.sort((a, b) => a.personName.localeCompare(b.personName));
 

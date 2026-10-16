@@ -488,6 +488,59 @@ describe('FieldManager — addresses', () => {
 
     expect(screen.getByText(/123 Main St/)).toBeInTheDocument();
   });
+
+  it('supports adding an address with latitude and longitude', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    renderWithIntl(
+      <FieldManager
+        items={[]}
+        onChange={onChange}
+        fieldConfig={addressFieldConfig}
+        label="Addresses"
+        emptyText="No addresses added yet"
+      />
+    );
+
+    await user.click(screen.getByText('+ Add'));
+    await user.type(screen.getByPlaceholderText('Latitude (-90 to 90)'), '10.762622');
+    await user.type(screen.getByPlaceholderText('Longitude (-180 to 180)'), '106.660172');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+
+    expect(onChange).toHaveBeenCalledWith([
+      expect.objectContaining({
+        latitude: 10.762622,
+        longitude: 106.660172,
+      }),
+    ]);
+  });
+
+  it('parses pasted "lat, lng" coordinate pairs into latitude and longitude', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    renderWithIntl(
+      <FieldManager
+        items={[]}
+        onChange={onChange}
+        fieldConfig={addressFieldConfig}
+        label="Addresses"
+        emptyText="No addresses added yet"
+      />
+    );
+
+    await user.click(screen.getByText('+ Add'));
+    const latInput = screen.getByPlaceholderText('Latitude (-90 to 90)');
+    await user.click(latInput);
+    await user.paste('21.028511, 105.804817');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+
+    expect(onChange).toHaveBeenCalledWith([
+      expect.objectContaining({
+        latitude: 21.028511,
+        longitude: 105.804817,
+      }),
+    ]);
+  });
 });
 
 // ─── URL ──────────────────────────────────────────────────────────────────────

@@ -245,6 +245,76 @@ export const GET = withAuth(async (request, session) => {
 
     edges.push(...dedupedEdges.values());
 
+    if (prisma.event?.findMany) {
+      const events = await prisma.event.findMany({
+        where: whereClause,
+        select: {
+          id: true,
+          title: true,
+          photo: true,
+          groups: {
+            where: { group: { deletedAt: null } },
+            select: { group: { select: { id: true, name: true, color: true } } },
+          },
+          people: {
+            where: { deletedAt: null, person: { deletedAt: null } },
+            select: { personId: true, role: true },
+          },
+          relationshipsFrom: {
+            where: { deletedAt: null, toEvent: { deletedAt: null } },
+            select: { toEventId: true, relationshipType: true },
+          },
+        },
+      });
+
+      const eventNodeIds = new Set<string>();
+      for (const ev of events) {
+        const eventNodeId = `event-${ev.id}`;
+        nodes.push({
+          id: eventNodeId,
+          label: `📅 ${ev.title}`,
+          groups: ev.groups.map((eg) => eg.group.id),
+          colors:
+            ev.groups.length > 0
+              ? ev.groups.map((eg) => eg.group.color || '#F59E0B')
+              : ['#F59E0B'],
+          isCenter: false,
+          photo: ev.photo,
+        });
+        eventNodeIds.add(eventNodeId);
+        nodeIds.add(eventNodeId);
+
+        for (const pe of ev.people) {
+          if (nodeIds.has(pe.personId)) {
+            edges.push({
+              source: pe.personId,
+              target: eventNodeId,
+              type: pe.role || 'Event',
+              color: '#F59E0B',
+            });
+          }
+        }
+      }
+
+      const seenEventEdges = new Set<string>();
+      for (const ev of events) {
+        const sourceId = `event-${ev.id}`;
+        for (const rel of ev.relationshipsFrom) {
+          const targetId = `event-${rel.toEventId}`;
+          if (!eventNodeIds.has(targetId)) continue;
+          const pairKey = [sourceId, targetId].sort().join('--');
+          if (seenEventEdges.has(pairKey)) continue;
+          seenEventEdges.add(pairKey);
+          edges.push({
+            source: sourceId,
+            target: targetId,
+            type: rel.relationshipType || 'Related Event',
+            color: '#D97706',
+          });
+        }
+      }
+    }
+
     // Enrich edges with source and target labels for tooltip display
     const nodeLabels = new Map<string, string>();
     nodes.forEach((n) => nodeLabels.set(n.id, n.label));

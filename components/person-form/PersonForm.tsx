@@ -94,6 +94,8 @@ export interface PersonFormProps {
       region?: string | null;
       postalCode?: string | null;
       country?: string | null;
+      latitude?: number | null;
+      longitude?: number | null;
     }>;
     urls?: Array<{
       id?: string;
@@ -127,6 +129,10 @@ export interface PersonFormProps {
     displayNameOverride?: string | null;
     groups: Array<{ groupId: string }>;
   }>;
+  availableEvents?: Array<{
+    id: string;
+    title: string;
+  }>;
   userName?: string;
   mode: 'create' | 'edit';
   dateFormat?: 'MDY' | 'DMY' | 'YMD';
@@ -135,6 +141,7 @@ export interface PersonFormProps {
   initialName?: string;
   initialKnownThrough?: string;
   initialRelationshipType?: string;
+  initialConnectedEventId?: string;
   reminderLimit?: {
     canCreate: boolean;
     current: number;
@@ -155,6 +162,7 @@ export default function PersonForm({
   groups,
   relationshipTypes,
   availablePeople = [],
+  availableEvents = [],
   mode,
   dateFormat = 'MDY',
   hasCardDavConnection,
@@ -162,6 +170,7 @@ export default function PersonForm({
   initialName,
   initialKnownThrough,
   initialRelationshipType,
+  initialConnectedEventId,
   reminderLimit,
   defaultReminderLeadDays,
 }: PersonFormProps) {
@@ -197,6 +206,7 @@ export default function PersonForm({
     initialName,
     initialKnownThrough,
     initialRelationshipType,
+    initialConnectedEventId,
     availablePeople,
     youLabel: t('you'),
   });
@@ -527,6 +537,7 @@ export default function PersonForm({
           onKnownThroughChange={handleKnownThroughChange}
           peopleWithUser={peopleWithUser}
           relationshipTypes={relationshipTypes}
+          availableEvents={availableEvents}
           nameOrder={nameOrder}
         />
       </Section>

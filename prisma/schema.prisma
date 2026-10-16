@@ -64,6 +64,7 @@ model User {
   notificationEndpoints NotificationEndpoint[]
 
   journalEntries        JournalEntry[]
+  events                Event[]
 
   @@unique([provider, providerAccountId])
   @@map("users")
@@ -126,6 +127,7 @@ model Person {
   dismissalsAsA      DuplicateDismissal[]   @relation("DismissalPersonA")
   dismissalsAsB      DuplicateDismissal[]   @relation("DismissalPersonB")
   journalEntries     JournalEntryPerson[]
+  events             PersonEvent[]
 
   @@index([userId])
   @@index([relationshipToUserId])
@@ -155,6 +157,7 @@ model Group {
   // Relations
   user   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   people PersonGroup[]
+  events EventGroup[]
 
   @@index([userId])
   @@index([userId, deletedAt]) // For soft delete filtering
@@ -1007,3 +1010,165 @@ model NotificationEndpoint {
   @@index([userId, enabled])
   @@map("notification_endpoints")
 }
+
+// ============================================
+// EVENT MODELS
+// ============================================
+
+enum EventStatus {
+  PLANNED
+  ONGOING
+  COMPLETED
+  CANCELLED
+}
+
+// Event Model - Core entity representing events in the user's network
+model Event {
+  id          String      @id @default(cuid())
+  userId      String
+  title       String
+  category    String?
+  status      EventStatus @default(PLANNED)
+  startDate   DateTime?
+  endDate     DateTime?
+  hasTime     Boolean     @default(false)
+  description String?     @db.Text
+  photo       String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  deletedAt   DateTime?
+
+  // Relations
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  groups            EventGroup[]
+  addresses         EventAddress[]
+  urls              EventUrl[]
+  customFields      EventCustomField[]
+  people            PersonEvent[]
+  relationshipsFrom EventRelationship[] @relation("EventRelationshipsFrom")
+  relationshipsTo   EventRelationship[] @relation("EventRelationshipsTo")
+
+  @@index([userId])
+  @@index([userId, startDate])
+  @@index([userId, title])
+  @@index([userId, deletedAt])
+  @@map("events")
+}
+
+// EventGroup - Many-to-many join table between Event and Group
+model EventGroup {
+  eventId String
+  groupId String
+  addedAt DateTime @default(now())
+
+  // Relations
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, groupId])
+  @@index([eventId])
+  @@index([groupId])
+  @@map("event_groups")
+}
+
+// EventAddress - Physical addresses and coordinates for an Event
+model EventAddress {
+  id            String    @id @default(cuid())
+  eventId       String
+  type          String
+  streetLine1   String?
+  streetLine2   String?
+  locality      String?
+  region        String?
+  postalCode    String?
+  country       String?
+  latitude      Decimal?  @db.Decimal(10, 8)
+  longitude     Decimal?  @db.Decimal(11, 8)
+  geocodedAt    DateTime?
+  geocodeStatus String?   // "pending" | "success" | "failed" | "disabled"
+  geocodeHash   String?
+  createdAt     DateTime  @default(now())
+
+  // Relations
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@index([geocodeStatus])
+  @@map("event_addresses")
+}
+
+// EventUrl - URLs/Documents associated with an Event
+model EventUrl {
+  id        String   @id @default(cuid())
+  eventId   String
+  type      String
+  url       String
+  createdAt DateTime @default(now())
+
+  // Relations
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@map("event_urls")
+}
+
+// EventCustomField - Custom key-value fields associated with an Event
+model EventCustomField {
+  id        String   @id @default(cuid())
+  eventId   String
+  key       String
+  value     String   @db.Text
+  type      String?
+  createdAt DateTime @default(now())
+
+  // Relations
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@map("event_custom_fields")
+}
+
+// PersonEvent - Relationship between a Person and an Event
+model PersonEvent {
+  id        String    @id @default(cuid())
+  personId  String
+  eventId   String
+  role      String?   // e.g., "Organizer", "Participant", "Speaker", "Guest", "Related"
+  notes     String?   @db.Text
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  // Relations
+  person Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+  event  Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([personId])
+  @@index([eventId])
+  @@index([personId, deletedAt])
+  @@index([eventId, deletedAt])
+  @@map("person_events")
+}
+
+// EventRelationship - Relationship between two Events
+model EventRelationship {
+  id               String    @id @default(cuid())
+  fromEventId      String
+  toEventId        String
+  relationshipType String?   // e.g., "SUB_EVENT", "PARENT_EVENT", "RELATED_EVENT", "FOLLOW_UP"
+  notes            String?   @db.Text
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  // Relations
+  fromEvent Event @relation("EventRelationshipsFrom", fields: [fromEventId], references: [id], onDelete: Cascade)
+  toEvent   Event @relation("EventRelationshipsTo", fields: [toEventId], references: [id], onDelete: Cascade)
+
+  @@index([fromEventId])
+  @@index([toEventId])
+  @@index([fromEventId, deletedAt])
+  @@index([toEventId, deletedAt])
+  @@map("event_relationships")
+}
+

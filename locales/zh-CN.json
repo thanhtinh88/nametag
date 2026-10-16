@@ -64,7 +64,8 @@
     },
     "journal": "日记",
     "createJournal": "新条目",
-    "map": "地图"
+    "map": "地图",
+    "events": "事件"
   },
   "notifications": {
     "push": {
@@ -1339,7 +1340,10 @@
           "home": "家",
           "work": "工作",
           "other": "其他"
-        }
+        },
+        "latitudePlaceholder": "纬度 (-90 至 90)",
+        "longitudePlaceholder": "经度 (-180 至 180)",
+        "coordinatesHelp": "纬度：-90 至 90，经度：-180 至 180"
       },
       "urls": {
         "label": "链接",
@@ -1401,7 +1405,12 @@
           "github": "GitHub 个人资料",
           "custom": "自定义字段"
         }
-      }
+      },
+      "connectedEventLabel": "Connected Event (Optional)",
+      "connectedEventHelp": "Attach this person to an event they participated in or are associated with",
+      "selectEvent": "None (no event)",
+      "connectedEventRoleLabel": "Role in Event",
+      "connectedEventRolePlaceholder": "e.g., Organizer, Speaker, Participant, Witness..."
     },
     "exportVcf": "导出 VCF",
     "exportingVcf": "导出中...",
@@ -2156,6 +2165,76 @@
       "iosStep3": "点按“添加”",
       "dismiss": "暂不",
       "unsupported": "你的浏览器可能支持从自身菜单安装。请查找“添加到主屏幕”“安装”或“添加到程序坞”。"
+    }
+  },
+  "events": {
+    "title": "Events",
+    "addNewEvent": "Add Event",
+    "editEvent": "Edit {title}",
+    "backToEvents": "← Back to Events",
+    "noEvents": "No events yet",
+    "noEventsDescription": "Create an event to link people who participated in or are connected to the same occasion, investigation, or milestone.",
+    "searchPlaceholder": "Search events...",
+    "filterByStatus": "Status",
+    "filterByGroup": "Group",
+    "filterByCategory": "Category",
+    "allStatuses": "All Statuses",
+    "allGroups": "All Groups",
+    "allCategories": "All Categories",
+    "participantsCount": "{count, plural, =0 {No people} =1 {1 person} other {# people}}",
+    "totalCount": "{count, plural, =0 {0 events} =1 {1 event} other {# events}}",
+    "status": {
+      "PLANNED": "Planned",
+      "ONGOING": "Ongoing",
+      "COMPLETED": "Completed",
+      "CANCELLED": "Cancelled"
+    },
+    "form": {
+      "titleRequired": "Event Title *",
+      "titlePlaceholder": "e.g., Tech Conference 2026, Project Alpha...",
+      "category": "Category",
+      "categoryPlaceholder": "e.g., Conference, Trip, Case, Milestone...",
+      "status": "Status",
+      "startDate": "Start Date",
+      "endDate": "End Date",
+      "description": "Description & Notes",
+      "descriptionPlaceholder": "Add details, context, or markdown notes about this event...",
+      "groups": "Groups / Tags",
+      "addresses": "Event Locations",
+      "noAddresses": "No locations added",
+      "urls": "Event Links / URLs",
+      "noUrls": "No links added",
+      "createButton": "Create Event",
+      "saveButton": "Save Changes",
+      "creating": "Creating...",
+      "saving": "Saving..."
+    },
+    "detail": {
+      "participants": "People Involved",
+      "addParticipant": "Add Person",
+      "newPersonForEvent": "Create New Person for Event",
+      "noParticipants": "No people linked to this event yet.",
+      "role": "Role",
+      "rolePlaceholder": "e.g., Organizer, Attendee, Witness...",
+      "notes": "Notes",
+      "selectPerson": "Select a person...",
+      "removeParticipant": "Remove from event",
+      "relatedEvents": "Related Events",
+      "addRelatedEvent": "Add Related Event",
+      "noRelatedEvents": "No related events linked.",
+      "relationshipType": "Relationship Type",
+      "relationshipTypePlaceholder": "e.g., Sub-event, Follow-up, Part of...",
+      "selectEvent": "Select an event...",
+      "deleteEvent": "Delete Event",
+      "confirmDelete": "Are you sure you want to delete this event?"
+    },
+    "personSection": {
+      "title": "Events",
+      "addEvent": "Add to Event",
+      "noEvents": "Not linked to any events.",
+      "coParticipants": "People in the Same Events",
+      "coParticipantsDescription": "Other people who participated in one or more events with this person:",
+      "noCoParticipants": "No other people share events with this person yet."
     }
   }
 }

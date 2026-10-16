@@ -64,7 +64,8 @@
     },
     "journal": "Diario",
     "createJournal": "Nuova voce",
-    "map": "Mappa"
+    "map": "Mappa",
+    "events": "Eventi"
   },
   "notifications": {
     "push": {
@@ -1339,7 +1340,10 @@
           "home": "Casa",
           "work": "Lavoro",
           "other": "Altro"
-        }
+        },
+        "latitudePlaceholder": "Latitudine (-90 a 90)",
+        "longitudePlaceholder": "Longitudine (-180 a 180)",
+        "coordinatesHelp": "Latitudine: -90 a 90, Longitudine: -180 a 180"
       },
       "urls": {
         "label": "URL",
@@ -1401,7 +1405,12 @@
           "github": "Profilo GitHub",
           "custom": "Campo personalizzato"
         }
-      }
+      },
+      "connectedEventLabel": "Connected Event (Optional)",
+      "connectedEventHelp": "Attach this person to an event they participated in or are associated with",
+      "selectEvent": "None (no event)",
+      "connectedEventRoleLabel": "Role in Event",
+      "connectedEventRolePlaceholder": "e.g., Organizer, Speaker, Participant, Witness..."
     },
     "exportVcf": "Esporta VCF",
     "exportingVcf": "Esportazione in corso...",
@@ -2156,6 +2165,76 @@
       "iosStep3": "Tocca «Aggiungi»",
       "dismiss": "Non ora",
       "unsupported": "Il tuo browser potrebbe consentire l'installazione dal suo menu. Cerca «Aggiungi a Home», «Installa» o «Aggiungi al Dock»."
+    }
+  },
+  "events": {
+    "title": "Events",
+    "addNewEvent": "Add Event",
+    "editEvent": "Edit {title}",
+    "backToEvents": "← Back to Events",
+    "noEvents": "No events yet",
+    "noEventsDescription": "Create an event to link people who participated in or are connected to the same occasion, investigation, or milestone.",
+    "searchPlaceholder": "Search events...",
+    "filterByStatus": "Status",
+    "filterByGroup": "Group",
+    "filterByCategory": "Category",
+    "allStatuses": "All Statuses",
+    "allGroups": "All Groups",
+    "allCategories": "All Categories",
+    "participantsCount": "{count, plural, =0 {No people} =1 {1 person} other {# people}}",
+    "totalCount": "{count, plural, =0 {0 events} =1 {1 event} other {# events}}",
+    "status": {
+      "PLANNED": "Planned",
+      "ONGOING": "Ongoing",
+      "COMPLETED": "Completed",
+      "CANCELLED": "Cancelled"
+    },
+    "form": {
+      "titleRequired": "Event Title *",
+      "titlePlaceholder": "e.g., Tech Conference 2026, Project Alpha...",
+      "category": "Category",
+      "categoryPlaceholder": "e.g., Conference, Trip, Case, Milestone...",
+      "status": "Status",
+      "startDate": "Start Date",
+      "endDate": "End Date",
+      "description": "Description & Notes",
+      "descriptionPlaceholder": "Add details, context, or markdown notes about this event...",
+      "groups": "Groups / Tags",
+      "addresses": "Event Locations",
+      "noAddresses": "No locations added",
+      "urls": "Event Links / URLs",
+      "noUrls": "No links added",
+      "createButton": "Create Event",
+      "saveButton": "Save Changes",
+      "creating": "Creating...",
+      "saving": "Saving..."
+    },
+    "detail": {
+      "participants": "People Involved",
+      "addParticipant": "Add Person",
+      "newPersonForEvent": "Create New Person for Event",
+      "noParticipants": "No people linked to this event yet.",
+      "role": "Role",
+      "rolePlaceholder": "e.g., Organizer, Attendee, Witness...",
+      "notes": "Notes",
+      "selectPerson": "Select a person...",
+      "removeParticipant": "Remove from event",
+      "relatedEvents": "Related Events",
+      "addRelatedEvent": "Add Related Event",
+      "noRelatedEvents": "No related events linked.",
+      "relationshipType": "Relationship Type",
+      "relationshipTypePlaceholder": "e.g., Sub-event, Follow-up, Part of...",
+      "selectEvent": "Select an event...",
+      "deleteEvent": "Delete Event",
+      "confirmDelete": "Are you sure you want to delete this event?"
+    },
+    "personSection": {
+      "title": "Events",
+      "addEvent": "Add to Event",
+      "noEvents": "Not linked to any events.",
+      "coParticipants": "People in the Same Events",
+      "coParticipantsDescription": "Other people who participated in one or more events with this person:",
+      "noCoParticipants": "No other people share events with this person yet."
     }
   }
 }

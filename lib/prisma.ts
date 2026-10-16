@@ -3,7 +3,16 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { getEnv } from './env';
 
 // Models that support soft delete
-const SOFT_DELETE_MODELS = ['Person', 'Group', 'Relationship', 'RelationshipType', 'ImportantDate'] as const;
+const SOFT_DELETE_MODELS = [
+  'Person',
+  'Group',
+  'Relationship',
+  'RelationshipType',
+  'ImportantDate',
+  'Event',
+  'PersonEvent',
+  'EventRelationship',
+] as const;
 type SoftDeleteModel = (typeof SOFT_DELETE_MODELS)[number];
 
 function isSoftDeleteModel(model: string): model is SoftDeleteModel {

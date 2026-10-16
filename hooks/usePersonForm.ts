@@ -38,6 +38,8 @@ export interface AddressItem {
   region?: string | null;
   postalCode?: string | null;
   country?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface UrlItem {
@@ -65,6 +67,8 @@ export interface FormData {
   contactReminderInterval: number;
   contactReminderIntervalUnit: ReminderIntervalUnit;
   cardDavSyncEnabled: boolean;
+  connectedEventId: string;
+  connectedEventRole: string;
 }
 
 export interface PersonFormState {
@@ -201,6 +205,8 @@ interface PersonProp {
     region?: string | null;
     postalCode?: string | null;
     country?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
   }>;
   urls?: Array<{ id?: string; type: string; url: string }>;
   customFieldValues?: Array<{ templateId: string; value: string }>;
@@ -235,6 +241,7 @@ function buildInitialState(params: {
   initialName?: string;
   initialKnownThrough?: string;
   initialRelationshipType?: string;
+  initialConnectedEventId?: string;
   availablePeople: AvailablePerson[];
   youLabel: string;
 }): PersonFormState {
@@ -244,6 +251,7 @@ function buildInitialState(params: {
     initialName,
     initialKnownThrough,
     initialRelationshipType,
+    initialConnectedEventId,
     availablePeople,
     youLabel,
   } = params;
@@ -293,6 +301,8 @@ function buildInitialState(params: {
         'MONTHS',
       cardDavSyncEnabled:
         mode === 'edit' ? (person?.cardDavSyncEnabled ?? true) : false,
+      connectedEventId: initialConnectedEventId || '',
+      connectedEventRole: '',
     },
     importantDates:
       person?.importantDates?.map((d) => ({
@@ -328,6 +338,8 @@ function buildInitialState(params: {
         region: a.region,
         postalCode: a.postalCode,
         country: a.country,
+        latitude: a.latitude ?? null,
+        longitude: a.longitude ?? null,
       })) || [],
     urls:
       person?.urls?.map((u) => ({
@@ -349,6 +361,7 @@ export function usePersonForm(params: {
   initialName?: string;
   initialKnownThrough?: string;
   initialRelationshipType?: string;
+  initialConnectedEventId?: string;
   availablePeople: AvailablePerson[];
   youLabel: string;
 }) {

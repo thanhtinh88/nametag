@@ -38,14 +38,40 @@ function setFieldValue<T extends BaseFieldItem>(
   item: T,
   fieldKey: string,
   rawValue: string,
-  inputType: string
+  inputType: string,
+  defaultItem?: T
 ): T {
   if (inputType === 'number') {
+    const defaultVal = defaultItem
+      ? (defaultItem as Record<string, unknown>)[fieldKey]
+      : 0;
+    const emptyFallback = defaultVal === null || defaultVal === undefined ? null : 0;
+    if (rawValue.trim() === '') {
+      return { ...item, [fieldKey]: emptyFallback };
+    }
     const parsed = parseFloat(rawValue);
-    const numericValue = Number.isNaN(parsed) ? 0 : parsed;
+    const numericValue = Number.isNaN(parsed) ? emptyFallback : parsed;
     return { ...item, [fieldKey]: numericValue };
   }
   return { ...item, [fieldKey]: rawValue };
+}
+
+function tryParseCoordinatePair(text: string): { latitude: number; longitude: number } | null {
+  const match = text.trim().match(/^\(?(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\)?$/);
+  if (!match) return null;
+  const latitude = parseFloat(match[1]);
+  const longitude = parseFloat(match[2]);
+  if (
+    Number.isNaN(latitude) ||
+    Number.isNaN(longitude) ||
+    latitude < -90 ||
+    latitude > 90 ||
+    longitude < -180 ||
+    longitude > 180
+  ) {
+    return null;
+  }
+  return { latitude, longitude };
 }
 
 // ─── Shared input class ───────────────────────────────────────────────────────
@@ -211,6 +237,19 @@ export default function FieldManager<T extends BaseFieldItem>({
 
     const rows: React.ReactNode[] = [];
 
+    const handleCoordinatePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+      const text = e.clipboardData?.getData('text') || '';
+      const parsedPair = tryParseCoordinatePair(text);
+      if (parsedPair) {
+        e.preventDefault();
+        onItemChange({
+          ...item,
+          latitude: parsedPair.latitude,
+          longitude: parsedPair.longitude,
+        } as T);
+      }
+    };
+
     // Full-width fields first
     for (const field of fullWidthFields) {
       if (field.inputType === 'textarea') {
@@ -219,7 +258,15 @@ export default function FieldManager<T extends BaseFieldItem>({
             key={field.key}
             value={getFieldValue(item, field.key)}
             onChange={(e) =>
-              onItemChange(setFieldValue(item, field.key, e.target.value, field.inputType))
+              onItemChange(
+                setFieldValue(
+                  item,
+                  field.key,
+                  e.target.value,
+                  field.inputType,
+                  fieldConfig.defaultItem
+                )
+              )
             }
             placeholder={t(field.placeholderKey)}
             aria-label={t(field.placeholderKey)}
@@ -234,7 +281,15 @@ export default function FieldManager<T extends BaseFieldItem>({
             type={field.inputType}
             value={getFieldValue(item, field.key)}
             onChange={(e) =>
-              onItemChange(setFieldValue(item, field.key, e.target.value, field.inputType))
+              onItemChange(
+                setFieldValue(
+                  item,
+                  field.key,
+                  e.target.value,
+                  field.inputType,
+                  fieldConfig.defaultItem
+                )
+              )
             }
             placeholder={t(field.placeholderKey)}
             aria-label={t(field.placeholderKey)}
@@ -245,9 +300,13 @@ export default function FieldManager<T extends BaseFieldItem>({
       }
     }
 
-    // Grid-paired fields (2 per row), with the select appended to the last row
+    // Grid-paired fields (2 per row), with postal+country select before coordinate fields
+    const coordKeys = new Set(['latitude', 'longitude']);
     const postalField = gridFields.find((f) => f.key === 'postalCode');
-    const nonPostalGridFields = selectField ? gridFields.filter((f) => f.key !== 'postalCode') : gridFields;
+    const coordFields = selectField ? gridFields.filter((f) => coordKeys.has(f.key)) : [];
+    const nonPostalGridFields = selectField
+      ? gridFields.filter((f) => f.key !== 'postalCode' && !coordKeys.has(f.key))
+      : gridFields;
 
     for (let i = 0; i < nonPostalGridFields.length; i += 2) {
       const pair = nonPostalGridFields.slice(i, i + 2);
@@ -259,8 +318,17 @@ export default function FieldManager<T extends BaseFieldItem>({
               type={field.inputType}
               value={getFieldValue(item, field.key)}
               onChange={(e) =>
-                onItemChange(setFieldValue(item, field.key, e.target.value, field.inputType))
+                onItemChange(
+                  setFieldValue(
+                    item,
+                    field.key,
+                    e.target.value,
+                    field.inputType,
+                    fieldConfig.defaultItem
+                  )
+                )
               }
+              onPaste={coordKeys.has(field.key) ? handleCoordinatePaste : undefined}
               placeholder={t(field.placeholderKey)}
               aria-label={t(field.placeholderKey)}
               className={INPUT_BASE}
@@ -271,7 +339,7 @@ export default function FieldManager<T extends BaseFieldItem>({
       );
     }
 
-    // Last row: postalCode + country select (or remaining grid fields + select)
+    // PostalCode + country select row
     if (selectField) {
       rows.push(
         <div key="postal-country" className="grid grid-cols-2 gap-2">
@@ -281,7 +349,13 @@ export default function FieldManager<T extends BaseFieldItem>({
               value={getFieldValue(item, postalField.key)}
               onChange={(e) =>
                 onItemChange(
-                  setFieldValue(item, postalField.key, e.target.value, postalField.inputType)
+                  setFieldValue(
+                    item,
+                    postalField.key,
+                    e.target.value,
+                    postalField.inputType,
+                    fieldConfig.defaultItem
+                  )
                 )
               }
               placeholder={t(postalField.placeholderKey)}
@@ -292,7 +366,15 @@ export default function FieldManager<T extends BaseFieldItem>({
           <select
             value={getFieldValue(item, selectField.key)}
             onChange={(e) =>
-              onItemChange(setFieldValue(item, selectField.key, e.target.value, selectField.inputType))
+              onItemChange(
+                setFieldValue(
+                  item,
+                  selectField.key,
+                  e.target.value,
+                  selectField.inputType,
+                  fieldConfig.defaultItem
+                )
+              )
             }
             aria-label={t(selectField.placeholderKey)}
             className={INPUT_BASE}
@@ -308,6 +390,37 @@ export default function FieldManager<T extends BaseFieldItem>({
       );
     } else if (gridFields.length % 2 !== 0) {
       // Odd remaining grid fields — already handled above; just ensure no dangling field
+    }
+
+    // Coordinate fields row for addresses (latitude + longitude)
+    if (coordFields.length > 0) {
+      rows.push(
+        <div key="coordinates-row" className="grid grid-cols-2 gap-2">
+          {coordFields.map((field) => (
+            <input
+              key={field.key}
+              type={field.inputType}
+              value={getFieldValue(item, field.key)}
+              onChange={(e) =>
+                onItemChange(
+                  setFieldValue(
+                    item,
+                    field.key,
+                    e.target.value,
+                    field.inputType,
+                    fieldConfig.defaultItem
+                  )
+                )
+              }
+              onPaste={handleCoordinatePaste}
+              placeholder={t(field.placeholderKey)}
+              aria-label={t(field.placeholderKey)}
+              className={INPUT_BASE}
+              {...(field.inputAttrs as React.InputHTMLAttributes<HTMLInputElement>)}
+            />
+          ))}
+        </div>
+      );
     }
 
     return <>{rows}</>;
@@ -344,7 +457,15 @@ export default function FieldManager<T extends BaseFieldItem>({
           type={field.inputType}
           value={getFieldValue(item, field.key)}
           onChange={(e) =>
-            onItemChange(setFieldValue(item, field.key, e.target.value, field.inputType))
+            onItemChange(
+              setFieldValue(
+                item,
+                field.key,
+                e.target.value,
+                field.inputType,
+                fieldConfig.defaultItem
+              )
+            )
           }
           placeholder={t(field.placeholderKey)}
           aria-label={t(field.placeholderKey)}
@@ -464,7 +585,7 @@ export default function FieldManager<T extends BaseFieldItem>({
             {t('cancel')}
           </button>
         </div>
-        {fieldConfig.namespace === 'locations' && (
+        {(fieldConfig.namespace === 'locations' || fieldConfig.namespace === 'addresses') && (
           <p className="text-xs text-muted">{t('coordinatesHelp')}</p>
         )}
       </div>
@@ -492,7 +613,15 @@ export default function FieldManager<T extends BaseFieldItem>({
             type={field.inputType}
             value={getFieldValue(item, field.key)}
             onChange={(e) =>
-              onItemChange(setFieldValue(item, field.key, e.target.value, field.inputType))
+              onItemChange(
+                setFieldValue(
+                  item,
+                  field.key,
+                  e.target.value,
+                  field.inputType,
+                  fieldConfig.defaultItem
+                )
+              )
             }
             placeholder={t(field.placeholderKey)}
             aria-label={t(field.placeholderKey)}

@@ -2,9 +2,9 @@
 
 /** One plottable point: a geocoded address or a vCard GEO location. */
 export interface MapMarker {
-  /** "addr_<addressId>" or "loc_<locationId>", used by /map?focus= deep links */
+  /** "addr_<addressId>", "loc_<locationId>", or "evaddr_<eventAddressId>", used by /map?focus= deep links */
   id: string;
-  source: 'address' | 'location';
+  source: 'address' | 'location' | 'event_address';
   personId: string;
   personName: string;
   latitude: number;

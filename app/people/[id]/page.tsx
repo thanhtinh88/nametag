@@ -21,6 +21,7 @@ import { getTranslations } from 'next-intl/server';
 import { getDateDisplayTitle } from '@/lib/important-date-types';
 import JournalSection from '@/components/JournalSection';
 import MessagingLinks from '@/components/MessagingLinks';
+import PersonEventsManager from '@/components/PersonEventsManager';
 import { customFieldValuesInclude } from '@/lib/prisma-queries';
 
 function isSafeUrl(url: string): boolean {
@@ -121,7 +122,7 @@ export default async function PersonDetailsPage({
   const nameOrder = user?.nameOrder;
   const nameDisplayFormat: NameDisplayFormat = user?.nameDisplayFormat || 'FULL';
 
-  const [person, allPeople, relationshipTypes, cardDavConnection, latestJournalEntry] = await Promise.all([
+  const [person, allPeople, relationshipTypes, cardDavConnection, latestJournalEntry, allEvents] = await Promise.all([
     prisma.person.findUnique({
       where: {
         id,
@@ -193,6 +194,43 @@ export default async function PersonDetailsPage({
             relatedPerson: true,
           },
         },
+        events: {
+          where: {
+            deletedAt: null,
+            event: {
+              deletedAt: null,
+            },
+          },
+          include: {
+            event: {
+              include: {
+                people: {
+                  where: {
+                    deletedAt: null,
+                    person: {
+                      deletedAt: null,
+                    },
+                  },
+                  include: {
+                    person: {
+                      select: {
+                        id: true,
+                        name: true,
+                        surname: true,
+                        nickname: true,
+                        displayNameOverride: true,
+                        photo: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
+        },
         cardDavMapping: true,
       },
     }),
@@ -254,6 +292,17 @@ export default async function PersonDetailsPage({
         },
       },
       orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+    }),
+    prisma.event.findMany({
+      where: {
+        userId: session.user.id,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        title: true,
+      },
+      orderBy: [{ startDate: 'desc' }, { title: 'asc' }],
     }),
   ]);
 
@@ -569,6 +618,11 @@ export default async function PersonDetailsPage({
                                     .join(', ')}
                                 </div>
                                 {address.country && <div>{getCountryName(address.country) || address.country}</div>}
+                                {address.latitude !== null && address.longitude !== null && (
+                                  <div className="text-xs text-muted font-mono pt-0.5">
+                                    {Number(address.latitude).toFixed(6)}, {Number(address.longitude).toFixed(6)}
+                                  </div>
+                                )}
                               </div>
                               {address.geocodeStatus === 'success' && address.latitude !== null && address.longitude !== null && (
                                 <Link
@@ -857,6 +911,15 @@ export default async function PersonDetailsPage({
                   nameDisplayFormat={nameDisplayFormat}
                 />
               </div>
+
+              {/* Events & Co-participants Section */}
+              <PersonEventsManager
+                personId={person.id}
+                personEvents={person.events}
+                availableEvents={allEvents}
+                nameOrder={nameOrder}
+                nameDisplayFormat={nameDisplayFormat}
+              />
 
             </div>
           </div>

@@ -12,7 +12,12 @@ import { getUserDisplayPreferences } from '@/lib/user-preferences';
 export default async function NewPersonPage({
   searchParams,
 }: {
-  searchParams: Promise<{ name?: string; knownThrough?: string; relationshipType?: string }>;
+  searchParams: Promise<{
+    name?: string;
+    knownThrough?: string;
+    relationshipType?: string;
+    connectedEventId?: string;
+  }>;
 }) {
   const session = await auth();
   const t = await getTranslations('people');
@@ -43,7 +48,7 @@ export default async function NewPersonPage({
 
   const { dateFormat, nameOrder } = preferences;
 
-  const [groups, relationshipTypes, people, customFieldTemplates] = await Promise.all([
+  const [groups, relationshipTypes, people, events, customFieldTemplates] = await Promise.all([
     prisma.group.findMany({
       where: {
         userId: session.user.id,
@@ -85,6 +90,17 @@ export default async function NewPersonPage({
         name: 'asc',
       },
     }),
+    prisma.event.findMany({
+      where: {
+        userId: session.user.id,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        title: true,
+      },
+      orderBy: [{ startDate: 'desc' }, { title: 'asc' }],
+    }),
     prisma.customFieldTemplate.findMany({
       where: { userId: session.user.id, deletedAt: null },
       orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
@@ -123,12 +139,14 @@ export default async function NewPersonPage({
                 customFieldTemplates={customFieldTemplates}
                 relationshipTypes={relationshipTypes}
                 availablePeople={people}
+                availableEvents={events}
                 userName={session.user.name || session.user.email || 'You'}
                 mode="create"
                 dateFormat={dateFormat}
                 initialName={params.name}
                 initialKnownThrough={params.knownThrough}
                 initialRelationshipType={params.relationshipType}
+                initialConnectedEventId={params.connectedEventId}
                 hasCardDavConnection={!!cardDavConnection}
                 nameOrder={nameOrder}
                 defaultReminderLeadDays={notificationPreferences?.defaultReminderLeadDays ?? 0}

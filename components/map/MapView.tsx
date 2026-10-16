@@ -664,7 +664,10 @@ function openPopup(
   links.className = 'flex gap-3 pt-1 text-xs';
 
   const contactLink = document.createElement('a');
-  contactLink.href = `/people/${encodeURIComponent(props.personId)}`;
+  const isEventMarker = props.id.startsWith('evaddr_');
+  contactLink.href = isEventMarker
+    ? `/events/${encodeURIComponent(props.personId)}`
+    : `/people/${encodeURIComponent(props.personId)}`;
   contactLink.textContent = labels.viewContact;
   contactLink.className = 'underline text-blue-700';
   links.appendChild(contactLink);
@@ -721,7 +724,9 @@ function openColocatedPopup(
     row.appendChild(nameEl);
 
     const link = document.createElement('a');
-    link.href = `/people/${encodeURIComponent(m.personId)}`;
+    link.href = m.id.startsWith('evaddr_')
+      ? `/events/${encodeURIComponent(m.personId)}`
+      : `/people/${encodeURIComponent(m.personId)}`;
     link.textContent = labels.viewContact;
     link.className = 'text-xs underline text-blue-700 whitespace-nowrap';
     row.appendChild(link);

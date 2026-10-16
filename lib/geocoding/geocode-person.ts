@@ -15,6 +15,15 @@ export type GeocodeOutcome = 'success' | 'failed' | 'pending' | 'skipped' | 'rat
  * row may vanish mid-flight; updateMany makes that a harmless no-op.
  */
 export async function geocodeSingleAddress(address: PersonAddress): Promise<GeocodeOutcome> {
+  if (
+    address.geocodeStatus === 'success' &&
+    address.latitude !== null &&
+    address.longitude !== null &&
+    address.geocodeHash === 'manual'
+  ) {
+    return 'skipped';
+  }
+
   const hash = buildAddressHash(address);
 
   if (!hasGeocodableContent(address)) {

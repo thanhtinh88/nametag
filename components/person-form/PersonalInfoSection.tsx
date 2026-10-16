@@ -20,6 +20,11 @@ interface RelationshipType {
   color: string | null;
 }
 
+interface AvailableEvent {
+  id: string;
+  title: string;
+}
+
 interface PersonalInfoSectionProps {
   mode: 'create' | 'edit';
   formData: FormData;
@@ -29,6 +34,7 @@ interface PersonalInfoSectionProps {
   onKnownThroughChange: (id: string, name: string) => void;
   peopleWithUser: AvailablePerson[];
   relationshipTypes: RelationshipType[];
+  availableEvents?: AvailableEvent[];
   nameOrder?: 'WESTERN' | 'EASTERN';
 }
 
@@ -46,6 +52,7 @@ export default function PersonalInfoSection({
   onKnownThroughChange,
   peopleWithUser,
   relationshipTypes,
+  availableEvents = [],
   nameOrder,
 }: PersonalInfoSectionProps) {
   const t = useTranslations('people.form');
@@ -309,6 +316,56 @@ export default function PersonalInfoSection({
           <p className="text-xs text-muted mt-1">
             {t('willBeConnectedTo', { name: knownThroughName })}
           </p>
+        </div>
+      )}
+
+      {mode === 'create' && availableEvents.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-border">
+          <div>
+            <label
+              htmlFor="connectedEventId"
+              className="block text-sm font-medium text-muted mb-1"
+            >
+              {t('connectedEventLabel')}
+            </label>
+            <select
+              id="connectedEventId"
+              value={formData.connectedEventId}
+              onChange={(e) =>
+                onFormDataChange({ connectedEventId: e.target.value })
+              }
+              className={inputClass}
+            >
+              <option value="">{t('selectEvent')}</option>
+              {availableEvents.map((ev) => (
+                <option key={ev.id} value={ev.id}>
+                  {ev.title}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted mt-1">{t('connectedEventHelp')}</p>
+          </div>
+
+          {formData.connectedEventId && (
+            <div>
+              <label
+                htmlFor="connectedEventRole"
+                className="block text-sm font-medium text-muted mb-1"
+              >
+                {t('connectedEventRoleLabel')}
+              </label>
+              <input
+                type="text"
+                id="connectedEventRole"
+                value={formData.connectedEventRole}
+                onChange={(e) =>
+                  onFormDataChange({ connectedEventRole: e.target.value })
+                }
+                placeholder={t('connectedEventRolePlaceholder')}
+                className={inputClass}
+              />
+            </div>
+          )}
         </div>
       )}
     </div>

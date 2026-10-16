@@ -245,15 +245,31 @@ export async function createPerson(userId: string, data: PersonInput) {
       addresses:
         addresses && addresses.length > 0
           ? {
-              create: addresses.map((a) => ({
-                type: a.type,
-                streetLine1: a.streetLine1 ?? null,
-                streetLine2: a.streetLine2 ?? null,
-                locality: a.locality ?? null,
-                region: a.region ?? null,
-                postalCode: a.postalCode ?? null,
-                country: a.country ?? null,
-              })),
+              create: addresses.map((a) => {
+                const hasManualCoords =
+                  a.latitude !== null &&
+                  a.latitude !== undefined &&
+                  a.longitude !== null &&
+                  a.longitude !== undefined;
+                return {
+                  type: a.type,
+                  streetLine1: a.streetLine1 ?? null,
+                  streetLine2: a.streetLine2 ?? null,
+                  locality: a.locality ?? null,
+                  region: a.region ?? null,
+                  postalCode: a.postalCode ?? null,
+                  country: a.country ?? null,
+                  ...(hasManualCoords
+                    ? {
+                        latitude: a.latitude,
+                        longitude: a.longitude,
+                        geocodeStatus: 'success',
+                        geocodedAt: new Date(),
+                        geocodeHash: 'manual',
+                      }
+                    : {}),
+                };
+              }),
             }
           : undefined,
       urls:
@@ -493,15 +509,31 @@ export async function updatePerson(id: string, userId: string, data: PersonUpdat
   if (addresses !== undefined) {
     updateData.addresses = {
       deleteMany: {},
-      create: addresses.map((a) => ({
-        type: a.type,
-        streetLine1: a.streetLine1 ?? null,
-        streetLine2: a.streetLine2 ?? null,
-        locality: a.locality ?? null,
-        region: a.region ?? null,
-        postalCode: a.postalCode ?? null,
-        country: a.country ?? null,
-      })),
+      create: addresses.map((a) => {
+        const hasManualCoords =
+          a.latitude !== null &&
+          a.latitude !== undefined &&
+          a.longitude !== null &&
+          a.longitude !== undefined;
+        return {
+          type: a.type,
+          streetLine1: a.streetLine1 ?? null,
+          streetLine2: a.streetLine2 ?? null,
+          locality: a.locality ?? null,
+          region: a.region ?? null,
+          postalCode: a.postalCode ?? null,
+          country: a.country ?? null,
+          ...(hasManualCoords
+            ? {
+                latitude: a.latitude,
+                longitude: a.longitude,
+                geocodeStatus: 'success',
+                geocodedAt: new Date(),
+                geocodeHash: 'manual',
+              }
+            : {}),
+        };
+      }),
     };
   }
 

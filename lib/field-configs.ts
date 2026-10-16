@@ -157,6 +157,8 @@ export interface PersonAddress extends BaseFieldItem {
   region?: string | null;
   postalCode?: string | null;
   country?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export const addressFieldConfig: FieldConfig<PersonAddress> = {
@@ -171,6 +173,8 @@ export const addressFieldConfig: FieldConfig<PersonAddress> = {
     region: '',
     postalCode: '',
     country: '',
+    latitude: null,
+    longitude: null,
   },
   fields: [
     {
@@ -210,6 +214,20 @@ export const addressFieldConfig: FieldConfig<PersonAddress> = {
       fullWidth: false,
       selectOptions: countries,
     },
+    {
+      key: 'latitude',
+      inputType: 'number',
+      placeholderKey: 'latitudePlaceholder',
+      fullWidth: false,
+      inputAttrs: { step: 'any', min: '-90', max: '90' },
+    },
+    {
+      key: 'longitude',
+      inputType: 'number',
+      placeholderKey: 'longitudePlaceholder',
+      fullWidth: false,
+      inputAttrs: { step: 'any', min: '-180', max: '180' },
+    },
   ],
   typeOptions: [
     { value: 'Home', labelKey: 'types.home' },
@@ -225,17 +243,56 @@ export const addressFieldConfig: FieldConfig<PersonAddress> = {
       item.postalCode,
       getCountryName(item.country) || item.country,
     ].filter(Boolean);
-    return parts.join(', ') || t('noAddressData');
+    const hasCoords =
+      item.latitude !== null &&
+      item.latitude !== undefined &&
+      item.longitude !== null &&
+      item.longitude !== undefined &&
+      !Number.isNaN(Number(item.latitude)) &&
+      !Number.isNaN(Number(item.longitude));
+    const coords = hasCoords
+      ? `(${Number(item.latitude).toFixed(6)}, ${Number(item.longitude).toFixed(6)})`
+      : null;
+    if (parts.length > 0 && coords) {
+      return `${parts.join(', ')} ${coords}`;
+    }
+    if (parts.length > 0) {
+      return parts.join(', ');
+    }
+    if (coords) {
+      return coords;
+    }
+    return t('noAddressData');
   },
-  validate: (item) =>
-    Boolean(
+  validate: (item) => {
+    const hasLat =
+      item.latitude !== null &&
+      item.latitude !== undefined &&
+      !Number.isNaN(Number(item.latitude));
+    const hasLng =
+      item.longitude !== null &&
+      item.longitude !== undefined &&
+      !Number.isNaN(Number(item.longitude));
+    if (hasLat !== hasLng) {
+      return false;
+    }
+    if (hasLat && hasLng) {
+      const lat = Number(item.latitude);
+      const lng = Number(item.longitude);
+      if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        return false;
+      }
+      return true;
+    }
+    return Boolean(
       item.streetLine1 ||
         item.streetLine2 ||
         item.locality ||
         item.region ||
         item.postalCode ||
         item.country
-    ),
+    );
+  },
 };
 
 // ─── URL ─────────────────────────────────────────────────────────────────────

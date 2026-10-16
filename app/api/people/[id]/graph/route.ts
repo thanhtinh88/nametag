@@ -104,6 +104,86 @@ export const GET = withAuth(async (_request, session, context) => {
 
     edges.push(...dedupedEdges.values());
 
+    if (prisma.personEvent?.findMany) {
+      const personEvents = await prisma.personEvent.findMany({
+        where: {
+          personId: person.id,
+          deletedAt: null,
+          event: { userId: session.user.id, deletedAt: null },
+        },
+        include: {
+          event: {
+            include: {
+              groups: {
+                where: { group: { deletedAt: null } },
+                include: { group: { select: { id: true, name: true, color: true } } },
+              },
+              people: {
+                where: { deletedAt: null, person: { deletedAt: null } },
+                include: {
+                  person: {
+                    include: {
+                      groups: {
+                        where: { group: { deletedAt: null } },
+                        include: { group: { select: { id: true, name: true, color: true } } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      for (const pe of personEvents) {
+        const ev = pe.event;
+        const eventNodeId = `event-${ev.id}`;
+        if (!nodeIds.has(eventNodeId)) {
+          nodes.push({
+            id: eventNodeId,
+            label: `📅 ${ev.title}`,
+            groups: ev.groups.map((eg) => eg.group.id),
+            colors:
+              ev.groups.length > 0
+                ? ev.groups.map((eg) => eg.group.color || '#F59E0B')
+                : ['#F59E0B'],
+            isCenter: false,
+            photo: ev.photo,
+          });
+          nodeIds.add(eventNodeId);
+        }
+
+        edges.push({
+          source: person.id,
+          target: eventNodeId,
+          type: pe.role || 'Event',
+          color: '#F59E0B',
+        });
+
+        for (const otherPe of ev.people) {
+          if (otherPe.personId === person.id) continue;
+          if (!nodeIds.has(otherPe.personId)) {
+            nodes.push(
+              personToGraphNode(
+                otherPe.person,
+                false,
+                nameOrder,
+                nameDisplayFormat
+              )
+            );
+            nodeIds.add(otherPe.personId);
+          }
+          edges.push({
+            source: otherPe.personId,
+            target: eventNodeId,
+            type: otherPe.role || 'Event',
+            color: '#F59E0B',
+          });
+        }
+      }
+    }
+
     // Enrich edges with source and target labels for tooltip display
     const nodeLabels = new Map<string, string>();
     nodes.forEach((n) => nodeLabels.set(n.id, n.label));

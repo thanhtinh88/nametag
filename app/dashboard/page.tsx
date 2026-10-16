@@ -22,8 +22,10 @@ export default async function DashboardPage() {
 
   const { dateFormat, graphMode } = await getUserDisplayPreferences(session.user.id);
 
-  // Fetch groups, upcoming events, and people count
-  const [groups, upcomingEvents, peopleCount] = await Promise.all([
+  const tEvents = await getTranslations('events');
+
+  // Fetch groups, upcoming events, people count, and recent/upcoming custom events
+  const [groups, upcomingEvents, peopleCount, customEvents] = await Promise.all([
     prisma.group.findMany({
       where: { userId: session.user.id, deletedAt: null },
       orderBy: { name: 'asc' },
@@ -31,6 +33,17 @@ export default async function DashboardPage() {
     getUpcomingEvents(session.user.id),
     prisma.person.count({
       where: { userId: session.user.id, deletedAt: null },
+    }),
+    prisma.event.findMany({
+      where: { userId: session.user.id, deletedAt: null },
+      orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
+      take: 5,
+      include: {
+        people: {
+          where: { deletedAt: null, person: { deletedAt: null } },
+          select: { id: true },
+        },
+      },
     }),
   ]);
 
@@ -67,6 +80,55 @@ export default async function DashboardPage() {
           </div>
 
           <InstallPrompt />
+
+          {/* Custom Events Summary */}
+          {customEvents.length > 0 && (
+            <div className="bg-surface rounded-lg p-6 mb-8 border border-border">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-foreground">
+                  {tEvents('title')}
+                </h2>
+                <Link
+                  href="/events"
+                  className="text-sm text-primary hover:underline"
+                >
+                  {tEvents('title')} →
+                </Link>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {customEvents.map((ev) => (
+                  <Link
+                    key={ev.id}
+                    href={`/events/${ev.id}`}
+                    className="p-4 bg-surface-elevated hover:bg-surface-elevated/80 rounded-lg transition-colors flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="font-semibold text-foreground truncate">
+                        📅 {ev.title}
+                      </div>
+                      {ev.category && (
+                        <div className="text-xs text-muted mt-0.5">
+                          {ev.category}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between mt-3 text-xs text-muted">
+                      <span>
+                        {ev.startDate
+                          ? formatDate(new Date(ev.startDate), dateFormat)
+                          : tEvents(`status.${ev.status}`)}
+                      </span>
+                      <span>
+                        {tEvents('participantsCount', {
+                          count: ev.people.length,
+                        })}
+                      </span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Upcoming Events */}
           {upcomingEvents.length > 0 && (
@@ -118,7 +180,7 @@ export default async function DashboardPage() {
       </main>
 
       {/* Network Graph - wider container for large screens */}
-      {peopleCount > 0 ? (
+      {(peopleCount > 0 || customEvents.length > 0) ? (
         <div className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 pb-8">
           <div className="bg-surface rounded-lg p-6 border border-border">
             <div className="mb-4 flex items-center gap-3">

@@ -624,6 +624,7 @@ export default function UnifiedNetworkGraph({
       }
       if (centerNodeNonClickable && node.isCenter) return;
       if (node.id.startsWith('user-')) router.push('/dashboard');
+      else if (node.id.startsWith('event-')) router.push(`/events/${node.id.slice('event-'.length)}`);
       else router.push(`/people/${node.id}`);
     };
 

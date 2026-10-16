@@ -164,13 +164,15 @@ export const POST = withAuth(async (request, session) => {
       photo,
       relationshipToUserId,
       connectedThroughId,
+      connectedEventId,
+      connectedEventRole,
       importantDates,
       contactReminderEnabled,
       cardDavSyncEnabled: _cardDavSyncEnabled,
     } = validation.data;
 
-    // Relationship type is always required when creating a person
-    if (!relationshipToUserId) {
+    // Relationship type is required when creating a person unless connected via an event
+    if (!relationshipToUserId && !connectedEventId) {
       if (connectedThroughId) {
         return apiResponse.error('Relationship type is required for person-to-person connections');
       } else {
@@ -186,6 +188,16 @@ export const POST = withAuth(async (request, session) => {
 
       if (!basePerson) {
         return apiResponse.notFound('Base connection person not found');
+      }
+    }
+
+    if (connectedEventId) {
+      const baseEvent = await prisma.event.findUnique({
+        where: { id: connectedEventId, userId: session.user.id, deletedAt: null },
+      });
+
+      if (!baseEvent) {
+        return apiResponse.notFound('Connected event not found');
       }
     }
 
@@ -249,7 +261,7 @@ export const POST = withAuth(async (request, session) => {
     }
 
     // If connected through another person, create bidirectional relationship
-    if (connectedThroughId) {
+    if (connectedThroughId && relationshipToUserId) {
       // Find the relationshipType and its inverse
       const relationshipType = await prisma.relationshipType.findUnique({
         where: { id: relationshipToUserId, deletedAt: null },
@@ -272,6 +284,17 @@ export const POST = withAuth(async (request, session) => {
           personId: connectedThroughId,
           relatedPersonId: person.id,
           relationshipTypeId: relationshipType?.inverseId || relationshipToUserId,
+        },
+      });
+    }
+
+    // If connected to an event, create PersonEvent link
+    if (connectedEventId) {
+      await prisma.personEvent.create({
+        data: {
+          personId: person.id,
+          eventId: connectedEventId,
+          role: connectedEventRole || null,
         },
       });
     }
