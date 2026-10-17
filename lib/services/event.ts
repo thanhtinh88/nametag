@@ -159,6 +159,9 @@ export async function createEvent(userId: string, data: EventInput) {
               create: participants.map((p) => ({
                 personId: p.personId,
                 role: p.role ? sanitizeName(p.role) : null,
+                involvementType: p.involvementType ?? 'SUSPECT',
+                verificationStatus: p.verificationStatus ?? 'HYPOTHESIS',
+                confidence: p.confidence ?? null,
                 notes: p.notes ? sanitizeNotes(p.notes) : null,
               })),
             }
@@ -280,6 +283,9 @@ export async function updateEvent(id: string, userId: string, data: EventUpdateI
       create: participants.map((p) => ({
         personId: p.personId,
         role: p.role ? sanitizeName(p.role) : null,
+        involvementType: p.involvementType ?? 'SUSPECT',
+        verificationStatus: p.verificationStatus ?? 'HYPOTHESIS',
+        confidence: p.confidence ?? null,
         notes: p.notes ? sanitizeNotes(p.notes) : null,
       })),
     };

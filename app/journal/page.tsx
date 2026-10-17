@@ -11,7 +11,7 @@ import { getUserDisplayPreferences } from '@/lib/user-preferences';
 export default async function JournalPage({
   searchParams,
 }: {
-  searchParams: Promise<{ person?: string; q?: string }>;
+  searchParams: Promise<{ person?: string; event?: string; q?: string }>;
 }) {
   const session = await auth();
   const t = await getTranslations('journal');
@@ -23,9 +23,11 @@ export default async function JournalPage({
   const params = await searchParams;
   const personFilterParam = params.person;
   const personFilterIds = personFilterParam ? personFilterParam.split(',').filter(Boolean) : [];
+  const eventFilterParam = params.event;
+  const eventFilterIds = eventFilterParam ? eventFilterParam.split(',').filter(Boolean) : [];
   const searchQuery = params.q;
 
-  const [preferences, people, entries] = await Promise.all([
+  const [preferences, people, events, entries] = await Promise.all([
     getUserDisplayPreferences(session.user.id),
     prisma.person.findMany({
       where: {
@@ -41,17 +43,29 @@ export default async function JournalPage({
       },
       orderBy: { name: 'asc' },
     }),
+    prisma.event.findMany({
+      where: {
+        userId: session.user.id,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        title: true,
+      },
+      orderBy: { title: 'asc' },
+    }),
     prisma.journalEntry.findMany({
       where: {
         userId: session.user.id,
         deletedAt: null,
-        ...(personFilterIds.length > 0
-          ? {
-              AND: personFilterIds.map((pid) => ({
-                people: { some: { personId: pid } },
-              })),
-            }
-          : {}),
+        AND: [
+          ...personFilterIds.map((pid) => ({
+            people: { some: { personId: pid } },
+          })),
+          ...eventFilterIds.map((eid) => ({
+            events: { some: { eventId: eid } },
+          })),
+        ],
         ...(searchQuery
           ? {
               OR: [
@@ -72,6 +86,18 @@ export default async function JournalPage({
                 surname: true,
                 nickname: true,
                 displayNameOverride: true,
+              },
+            },
+          },
+        },
+        events: {
+          where: { event: { deletedAt: null } },
+          include: {
+            event: {
+              select: {
+                id: true,
+                title: true,
+                status: true,
               },
             },
           },
@@ -114,7 +140,9 @@ export default async function JournalPage({
 
           <JournalFilters
             people={people}
+            events={events}
             currentPersonIds={personFilterIds}
+            currentEventIds={eventFilterIds}
             currentSearch={searchQuery}
             nameOrder={nameOrder}
             nameDisplayFormat={nameDisplayFormat}

@@ -13,6 +13,8 @@ export interface RawGraphPerson {
   colors: string[];
   isCenter: boolean;
   photo?: string | null;
+  nodeType?: 'person' | 'event' | 'user';
+  eventStatus?: string;
 }
 
 export interface BuildSimNodesArgs {

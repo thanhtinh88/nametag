@@ -146,12 +146,21 @@ export const GET = withAuth(async (request, session) => {
       }
     }
 
+    const cases: Array<{
+      id: string;
+      title: string;
+      status: string;
+      latitude: number | null;
+      longitude: number | null;
+    }> = [];
+
     if (prisma.event?.findMany) {
       const events = await prisma.event.findMany({
         where: { userId: session.user.id, deletedAt: null },
         select: {
           id: true,
           title: true,
+          status: true,
           addresses: {
             select: {
               id: true,
@@ -167,6 +176,16 @@ export const GET = withAuth(async (request, session) => {
               geocodeStatus: true,
             },
           },
+          people: {
+            where: { deletedAt: null },
+            select: {
+              personId: true,
+              role: true,
+              involvementType: true,
+              verificationStatus: true,
+              confidence: true,
+            },
+          },
           groups: {
             where: { group: { deletedAt: null } },
             select: { group: { select: { id: true, name: true, color: true } } },
@@ -174,13 +193,43 @@ export const GET = withAuth(async (request, session) => {
         },
       });
 
+      const caseLinksByPersonId = new Map<
+        string,
+        Array<{
+          eventId: string;
+          eventTitle: string;
+          eventStatus: string;
+          role: string | null;
+          involvementType: string;
+          verificationStatus: string;
+          confidence: string | null;
+        }>
+      >();
+
       for (const event of events) {
+        for (const pe of event.people ?? []) {
+          const existing = caseLinksByPersonId.get(pe.personId) ?? [];
+          existing.push({
+            eventId: event.id,
+            eventTitle: event.title,
+            eventStatus: event.status ?? 'PLANNED',
+            role: pe.role ?? null,
+            involvementType: pe.involvementType ?? 'OTHER',
+            verificationStatus: pe.verificationStatus ?? 'HYPOTHESIS',
+            confidence: pe.confidence ?? null,
+          });
+          caseLinksByPersonId.set(pe.personId, existing);
+        }
+
         const groupIds = event.groups.map((eg) => eg.group.id);
         for (const eg of event.groups) {
           groupsById.set(eg.group.id, eg.group);
         }
         const groupColor =
-          event.groups.find((eg) => eg.group.color)?.group.color ?? '#f59e0b';
+          event.groups.find((eg) => eg.group.color)?.group.color ?? '#ef4444';
+
+        let firstLat: number | null = null;
+        let firstLng: number | null = null;
 
         for (const address of event.addresses) {
           if (
@@ -189,6 +238,12 @@ export const GET = withAuth(async (request, session) => {
             address.longitude === null
           ) {
             continue;
+          }
+          const lat = Number(address.latitude);
+          const lng = Number(address.longitude);
+          if (firstLat === null) {
+            firstLat = lat;
+            firstLng = lng;
           }
           const addressText = [
             address.streetLine1,
@@ -207,10 +262,10 @@ export const GET = withAuth(async (request, session) => {
             id: `evaddr_${address.id}`,
             source: 'event_address',
             personId: event.id,
-            personName: `📅 ${event.title}`,
-            latitude: Number(address.latitude),
-            longitude: Number(address.longitude),
-            label: address.type ?? 'event',
+            personName: `🚨 ${event.title}`,
+            latitude: lat,
+            longitude: lng,
+            label: address.type ?? 'crime scene',
             city: address.locality,
             region: address.region,
             country: address.country,
@@ -218,7 +273,27 @@ export const GET = withAuth(async (request, session) => {
             groupIds,
             hasPhoto: false,
             groupColor,
+            markerType: 'crime_scene',
+            eventStatus: event.status ?? 'PLANNED',
           });
+        }
+
+        cases.push({
+          id: event.id,
+          title: event.title,
+          status: event.status ?? 'PLANNED',
+          latitude: firstLat,
+          longitude: firstLng,
+        });
+      }
+
+      // Attach caseLinks to subject markers when events exist
+      for (const marker of markers) {
+        if (marker.source !== 'event_address') {
+          const links = caseLinksByPersonId.get(marker.personId);
+          if (links && links.length > 0) {
+            marker.caseLinks = links;
+          }
         }
       }
     }
@@ -229,6 +304,7 @@ export const GET = withAuth(async (request, session) => {
     return apiResponse.ok({
       markers,
       groups,
+      ...(cases.length > 0 ? { cases } : {}),
       pendingCount,
       failedCount,
       unlocatedPeople,

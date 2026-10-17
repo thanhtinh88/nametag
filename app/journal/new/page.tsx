@@ -14,7 +14,7 @@ export default async function NewJournalEntryPage() {
     redirect('/login');
   }
 
-  const [preferences, availablePeople] = await Promise.all([
+  const [preferences, availablePeople, availableEvents] = await Promise.all([
     getUserDisplayPreferences(session.user.id),
     prisma.person.findMany({
       where: {
@@ -29,6 +29,17 @@ export default async function NewJournalEntryPage() {
         displayNameOverride: true,
       },
       orderBy: { name: 'asc' },
+    }),
+    prisma.event.findMany({
+      where: {
+        userId: session.user.id,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        title: true,
+      },
+      orderBy: { title: 'asc' },
     }),
   ]);
 
@@ -54,6 +65,7 @@ export default async function NewJournalEntryPage() {
             <JournalEntryForm
               mode="create"
               availablePeople={availablePeople}
+              availableEvents={availableEvents}
               nameOrder={nameOrder}
               dateFormat={dateFormat}
             />

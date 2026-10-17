@@ -22,7 +22,7 @@ export const POST = withAuth(async (request, session, context) => {
       return validation.response;
     }
 
-    const { personId, role, notes } = validation.data;
+    const { personId, role, involvementType, verificationStatus, confidence, notes } = validation.data;
 
     const person = await prisma.person.findUnique({
       where: { id: personId, userId: session.user.id, deletedAt: null },
@@ -36,43 +36,79 @@ export const POST = withAuth(async (request, session, context) => {
       where: {
         eventId,
         personId,
-        deletedAt: null,
       },
     });
-    if (existing) {
+    if (existing && existing.deletedAt === null) {
       return apiResponse.error('Person is already linked to this event');
     }
 
-    const personEvent = await prisma.personEvent.create({
-      data: {
-        eventId,
-        personId,
-        role: role ? sanitizeName(role) : null,
-        notes: notes ? sanitizeNotes(notes) : null,
-      },
-      include: {
-        person: {
-          select: {
-            id: true,
-            name: true,
-            surname: true,
-            nickname: true,
-            displayNameOverride: true,
-            photo: true,
+    const personEvent = existing
+      ? await prisma.personEvent.update({
+          where: { id: existing.id },
+          data: {
+            role: role ? sanitizeName(role) : null,
+            involvementType: involvementType ?? 'SUSPECT',
+            verificationStatus: verificationStatus ?? 'HYPOTHESIS',
+            confidence: confidence ?? null,
+            notes: notes ? sanitizeNotes(notes) : null,
+            deletedAt: null,
           },
-        },
-        event: {
-          select: {
-            id: true,
-            title: true,
-            category: true,
-            status: true,
-            startDate: true,
-            endDate: true,
+          include: {
+            person: {
+              select: {
+                id: true,
+                name: true,
+                surname: true,
+                nickname: true,
+                displayNameOverride: true,
+                photo: true,
+              },
+            },
+            event: {
+              select: {
+                id: true,
+                title: true,
+                category: true,
+                status: true,
+                startDate: true,
+                endDate: true,
+              },
+            },
           },
-        },
-      },
-    });
+        })
+      : await prisma.personEvent.create({
+          data: {
+            eventId,
+            personId,
+            role: role ? sanitizeName(role) : null,
+            involvementType: involvementType ?? 'SUSPECT',
+            verificationStatus: verificationStatus ?? 'HYPOTHESIS',
+            confidence: confidence ?? null,
+            notes: notes ? sanitizeNotes(notes) : null,
+          },
+          include: {
+            person: {
+              select: {
+                id: true,
+                name: true,
+                surname: true,
+                nickname: true,
+                displayNameOverride: true,
+                photo: true,
+              },
+            },
+            event: {
+              select: {
+                id: true,
+                title: true,
+                category: true,
+                status: true,
+                startDate: true,
+                endDate: true,
+              },
+            },
+          },
+        });
 
     return apiResponse.created({ personEvent });
   } catch (error) {
@@ -80,7 +116,7 @@ export const POST = withAuth(async (request, session, context) => {
   }
 });
 
-// PUT /api/events/[id]/people - Update a person's role/notes in an event
+// PUT /api/events/[id]/people - Update a person's role/involvement/status/notes in an event
 export const PUT = withAuth(async (request, session, context) => {
   try {
     const { id: eventId } = await context.params;
@@ -99,20 +135,27 @@ export const PUT = withAuth(async (request, session, context) => {
       return validation.response;
     }
 
-    const { id, role, notes } = validation.data;
+    const { id, personId, role, involvementType, verificationStatus, confidence, notes } = validation.data;
 
     const existing = await prisma.personEvent.findFirst({
-      where: { id, eventId, deletedAt: null },
+      where: {
+        eventId,
+        deletedAt: null,
+        ...(id ? { id } : { personId }),
+      },
     });
     if (!existing) {
       return apiResponse.notFound('Person-event link not found');
     }
 
     const personEvent = await prisma.personEvent.update({
-      where: { id },
+      where: { id: existing.id },
       data: {
-        role: role ? sanitizeName(role) : null,
-        notes: notes ? sanitizeNotes(notes) : null,
+        ...(role !== undefined && { role: role ? sanitizeName(role) : null }),
+        ...(involvementType !== undefined && { involvementType }),
+        ...(verificationStatus !== undefined && { verificationStatus }),
+        ...(confidence !== undefined && { confidence }),
+        ...(notes !== undefined && { notes: notes ? sanitizeNotes(notes) : null }),
       },
       include: {
         person: {
@@ -134,15 +177,16 @@ export const PUT = withAuth(async (request, session, context) => {
   }
 });
 
-// DELETE /api/events/[id]/people?linkId=... - Remove a person from an event
+// DELETE /api/events/[id]/people?linkId=... or ?personId=... - Remove a person from an event
 export const DELETE = withAuth(async (request, session, context) => {
   try {
     const { id: eventId } = await context.params;
     const { searchParams } = new URL(request.url);
     const linkId = searchParams.get('linkId');
+    const personId = searchParams.get('personId');
 
-    if (!linkId) {
-      return apiResponse.error('linkId is required');
+    if (!linkId && !personId) {
+      return apiResponse.error('linkId or personId is required');
     }
 
     const event = await prisma.event.findUnique({
@@ -154,14 +198,18 @@ export const DELETE = withAuth(async (request, session, context) => {
     }
 
     const existing = await prisma.personEvent.findFirst({
-      where: { id: linkId, eventId, deletedAt: null },
+      where: {
+        eventId,
+        deletedAt: null,
+        ...(linkId ? { id: linkId } : { personId: personId! }),
+      },
     });
     if (!existing) {
       return apiResponse.notFound('Person-event link not found');
     }
 
     await prisma.personEvent.update({
-      where: { id: linkId },
+      where: { id: existing.id },
       data: { deletedAt: new Date() },
     });
 

@@ -17,6 +17,11 @@ interface PersonOption {
   displayNameOverride?: string | null;
 }
 
+interface EventOption {
+  id: string;
+  title: string;
+}
+
 interface JournalEntryFormProps {
   mode: 'create' | 'edit';
   entryId?: string;
@@ -26,8 +31,10 @@ interface JournalEntryFormProps {
     hasTime: boolean;
     body: string;
     personIds: string[];
+    eventIds?: string[];
   };
   availablePeople: PersonOption[];
+  availableEvents?: EventOption[];
   nameOrder?: 'WESTERN' | 'EASTERN';
   dateFormat?: 'MDY' | 'DMY' | 'YMD';
 }
@@ -70,6 +77,7 @@ export default function JournalEntryForm({
   entryId,
   initialData,
   availablePeople,
+  availableEvents = [],
   nameOrder,
 }: JournalEntryFormProps) {
   const t = useTranslations('journal.form');
@@ -86,12 +94,25 @@ export default function JournalEntryForm({
     label: formatFullName(p, nameOrder),
   }));
 
+  const pillEvents: PillPerson[] = availableEvents.map((ev) => ({
+    id: ev.id,
+    label: ev.title,
+  }));
+
   // Resolve initial selected people
   const resolveInitialSelected = (): PillPerson[] => {
     if (!initialData?.personIds?.length) return [];
     return initialData.personIds
       .map((id) => pillPeople.find((p) => p.id === id))
       .filter((p): p is PillPerson => p !== undefined);
+  };
+
+  // Resolve initial selected events
+  const resolveInitialEvents = (): PillPerson[] => {
+    if (!initialData?.eventIds?.length) return [];
+    return initialData.eventIds
+      .map((id) => pillEvents.find((ev) => ev.id === id))
+      .filter((ev): ev is PillPerson => ev !== undefined);
   };
 
   const initialIso = initialData?.dateIso;
@@ -111,6 +132,7 @@ export default function JournalEntryForm({
   const [hasTime, setHasTime] = useState(initialHasTime);
   const [body, setBody] = useState(initialData?.body ?? '');
   const [selectedPeople, setSelectedPeople] = useState<PillPerson[]>(resolveInitialSelected);
+  const [selectedEvents, setSelectedEvents] = useState<PillPerson[]>(resolveInitialEvents);
   const [updateLastContact, setUpdateLastContact] = useState(mode === 'create');
 
   // Warn on unsaved changes
@@ -130,16 +152,27 @@ export default function JournalEntryForm({
     return () => window.removeEventListener('beforeunload', handler);
   }, [isDirty]);
 
-  // Pre-populate person from ?person=id query param
+  // Pre-populate person from ?person=id and event from ?event=id query params
   useEffect(() => {
     const personId = searchParams.get('person');
-    if (!personId) return;
-    const match = pillPeople.find((p) => p.id === personId);
-    if (match) {
-      setSelectedPeople((prev) => {
-        if (prev.some((p) => p.id === personId)) return prev;
-        return [...prev, match];
-      });
+    if (personId) {
+      const match = pillPeople.find((p) => p.id === personId);
+      if (match) {
+        setSelectedPeople((prev) => {
+          if (prev.some((p) => p.id === personId)) return prev;
+          return [...prev, match];
+        });
+      }
+    }
+    const eventId = searchParams.get('event');
+    if (eventId) {
+      const matchEv = pillEvents.find((ev) => ev.id === eventId);
+      if (matchEv) {
+        setSelectedEvents((prev) => {
+          if (prev.some((ev) => ev.id === eventId)) return prev;
+          return [...prev, matchEv];
+        });
+      }
     }
     // Only run on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -164,6 +197,7 @@ export default function JournalEntryForm({
         hasTime,
         body,
         personIds: selectedPeople.map((p) => p.id),
+        eventIds: selectedEvents.map((ev) => ev.id),
         updateLastContact: selectedPeople.length > 0 ? updateLastContact : false,
       };
 
@@ -288,6 +322,24 @@ export default function JournalEntryForm({
           isLoading={isLoading}
         />
       </div>
+
+      {/* Cases / Events */}
+      {pillEvents.length > 0 && (
+        <div>
+          <PillSelector<PillPerson>
+            label="Related Cases (Vụ án liên quan)"
+            selectedItems={selectedEvents}
+            availableItems={pillEvents}
+            onAdd={(item) => setSelectedEvents((prev) => [...prev, item])}
+            onRemove={(itemId) =>
+              setSelectedEvents((prev) => prev.filter((ev) => ev.id !== itemId))
+            }
+            placeholder="Tag cases..."
+            showAllOnFocus
+            isLoading={isLoading}
+          />
+        </div>
+      )}
 
       {/* Body */}
       <div>

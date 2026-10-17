@@ -38,6 +38,8 @@ export interface SerializedEventItem {
     id: string;
     personId: string;
     role: string | null;
+    involvementType?: string;
+    verificationStatus?: string;
     person: {
       id: string;
       name: string;
@@ -96,36 +98,84 @@ export default function EventsListClient({
     return Array.from(set).sort();
   }, [events]);
 
-  // Statistics
-  const stats = useMemo(() => {
+  // Statistics & Cross-Case Suspect Analysis
+  const { stats, crossCaseSuspects } = useMemo(() => {
     const totalEvents = events.length;
     const plannedCount = events.filter((e) => e.status === 'PLANNED').length;
     const ongoingCount = events.filter((e) => e.status === 'ONGOING').length;
     const uniquePeopleIds = new Set<string>();
     let topEvent: { title: string; count: number; id: string } | null = null;
 
-    for (const ev of events) {
-      for (const p of ev.people) {
-        uniquePeopleIds.add(p.personId);
+    const personCasesMap = new Map<
+      string,
+      {
+        person: SerializedEventItem['people'][number]['person'];
+        cases: Array<{
+          id: string;
+          title: string;
+          status: SerializedEventItem['status'];
+          involvementType: string;
+          verificationStatus: string;
+        }>;
       }
-      if (!topEvent || ev.people.length > topEvent.count) {
-        if (ev.people.length > 0) {
-          topEvent = { id: ev.id, title: ev.title, count: ev.people.length };
+    >();
+
+    for (const ev of events) {
+      const activeParticipants = ev.people.filter(
+        (p) => p.verificationStatus !== 'RULED_OUT'
+      );
+      for (const p of activeParticipants) {
+        uniquePeopleIds.add(p.personId);
+        const existing = personCasesMap.get(p.personId);
+        const caseInfo = {
+          id: ev.id,
+          title: ev.title,
+          status: ev.status,
+          involvementType: p.involvementType || 'SUSPECT',
+          verificationStatus: p.verificationStatus || 'HYPOTHESIS',
+        };
+        if (existing) {
+          existing.cases.push(caseInfo);
+        } else {
+          personCasesMap.set(p.personId, {
+            person: p.person,
+            cases: [caseInfo],
+          });
+        }
+      }
+      if (!topEvent || activeParticipants.length > topEvent.count) {
+        if (activeParticipants.length > 0) {
+          topEvent = {
+            id: ev.id,
+            title: ev.title,
+            count: activeParticipants.length,
+          };
         }
       }
     }
 
+    const crossCaseList = Array.from(personCasesMap.values())
+      .filter((entry) => entry.cases.length >= 2)
+      .sort((a, b) => b.cases.length - a.cases.length);
+
     return {
-      totalEvents,
-      activeCount: plannedCount + ongoingCount,
-      uniquePeopleCount: uniquePeopleIds.size,
-      topEvent,
+      stats: {
+        totalEvents,
+        activeCount: plannedCount + ongoingCount,
+        uniquePeopleCount: uniquePeopleIds.size,
+        topEvent,
+      },
+      crossCaseSuspects: crossCaseList,
     };
   }, [events]);
 
   const filteredEvents = useMemo(() => {
     return events.filter((ev) => {
-      if (statusFilter !== 'ALL' && ev.status !== statusFilter) return false;
+      if (statusFilter === 'ACTIVE_ONLY') {
+        if (ev.status !== 'PLANNED' && ev.status !== 'ONGOING') return false;
+      } else if (statusFilter !== 'ALL' && ev.status !== statusFilter) {
+        return false;
+      }
       if (categoryFilter !== 'ALL' && ev.category !== categoryFilter) return false;
       if (groupFilter !== 'ALL' && !ev.groups.some((g) => g.groupId === groupFilter)) {
         return false;
@@ -187,6 +237,85 @@ export default function EventsListClient({
         </div>
       </div>
 
+      {/* Cross-Case Suspect Analysis Panel */}
+      {crossCaseSuspects.length > 0 && (
+        <div className="bg-amber-500/5 border border-amber-500/30 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h3 className="text-sm font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                ⚠️ Cross-Case Subjects Analysis (Đối tượng nghi vấn giao thoa nhiều vụ án) ({crossCaseSuspects.length})
+              </h3>
+              <p className="text-xs text-muted mt-0.5">
+                Subjects linked to 2 or more cases (excluding ruled-out hypotheses). Click a subject to filter cases.
+              </p>
+            </div>
+            {personFilter !== 'ALL' && (
+              <button
+                type="button"
+                onClick={() => setPersonFilter('ALL')}
+                className="text-xs text-primary hover:underline"
+              >
+                Clear Subject Filter
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {crossCaseSuspects.map(({ person, cases }) => {
+              const displayName = formatGraphName(person, nameOrder, nameDisplayFormat);
+              const isSelected = personFilter === person.id;
+              return (
+                <div
+                  key={person.id}
+                  onClick={() =>
+                    setPersonFilter(isSelected ? 'ALL' : person.id)
+                  }
+                  className={`cursor-pointer p-3 rounded-lg border transition-all ${
+                    isSelected
+                      ? 'bg-primary/10 border-primary shadow-sm'
+                      : 'bg-surface border-border hover:border-amber-500/50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <PersonAvatar
+                        personId={person.id}
+                        name={displayName}
+                        photo={person.photo}
+                        size={32}
+                      />
+                      <div className="min-w-0">
+                        <Link
+                          href={`/people/${person.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-sm font-semibold text-primary hover:underline truncate block"
+                        >
+                          {displayName}
+                        </Link>
+                        <span className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                          Linked to {cases.length} cases
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {cases.map((c) => (
+                      <Link
+                        key={c.id}
+                        href={`/events/${c.id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-surface-elevated border border-border text-foreground hover:border-primary"
+                      >
+                        <span>📁 {c.title}</span>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Filters */}
       <div className="bg-surface border border-border rounded-lg p-4 space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
@@ -205,6 +334,7 @@ export default function EventsListClient({
             aria-label={t('statusLabel')}
           >
             <option value="ALL">{t('allStatuses')}</option>
+            <option value="ACTIVE_ONLY">🔥 Active Cases Only (Đang điều tra)</option>
             <option value="PLANNED">{t('statuses.PLANNED')}</option>
             <option value="ONGOING">{t('statuses.ONGOING')}</option>
             <option value="COMPLETED">{t('statuses.COMPLETED')}</option>

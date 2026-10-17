@@ -105,6 +105,8 @@ export default async function EventsPage() {
       id: p.id,
       personId: p.personId,
       role: p.role,
+      involvementType: p.involvementType,
+      verificationStatus: p.verificationStatus,
       person: p.person,
     })),
     relatedEventsCount: ev.relationshipsFrom.length,

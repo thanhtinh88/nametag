@@ -20,7 +20,7 @@ export default async function EditJournalEntryPage({
 
   const { id } = await params;
 
-  const [entry, preferences, availablePeople] = await Promise.all([
+  const [entry, preferences, availablePeople, availableEvents] = await Promise.all([
     prisma.journalEntry.findUnique({
       where: {
         id,
@@ -31,6 +31,10 @@ export default async function EditJournalEntryPage({
         people: {
           where: { person: { deletedAt: null } },
           select: { personId: true },
+        },
+        events: {
+          where: { event: { deletedAt: null } },
+          select: { eventId: true },
         },
       },
     }),
@@ -49,6 +53,17 @@ export default async function EditJournalEntryPage({
       },
       orderBy: { name: 'asc' },
     }),
+    prisma.event.findMany({
+      where: {
+        userId: session.user.id,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        title: true,
+      },
+      orderBy: { title: 'asc' },
+    }),
   ]);
 
   if (!entry) {
@@ -63,6 +78,7 @@ export default async function EditJournalEntryPage({
     hasTime: entry.hasTime,
     body: entry.body,
     personIds: entry.people.map((p) => p.personId),
+    eventIds: entry.events.map((ev) => ev.eventId),
   };
 
   return (
@@ -87,6 +103,7 @@ export default async function EditJournalEntryPage({
               entryId={entry.id}
               initialData={initialData}
               availablePeople={availablePeople}
+              availableEvents={availableEvents}
               nameOrder={nameOrder}
               dateFormat={dateFormat}
             />

@@ -166,19 +166,13 @@ export const POST = withAuth(async (request, session) => {
       connectedThroughId,
       connectedEventId,
       connectedEventRole,
+      connectedEventInvolvementType,
+      connectedEventVerificationStatus,
+      connectedEventConfidence,
       importantDates,
       contactReminderEnabled,
       cardDavSyncEnabled: _cardDavSyncEnabled,
     } = validation.data;
-
-    // Relationship type is required when creating a person unless connected via an event
-    if (!relationshipToUserId && !connectedEventId) {
-      if (connectedThroughId) {
-        return apiResponse.error('Relationship type is required for person-to-person connections');
-      } else {
-        return apiResponse.error('Relationship to user is required');
-      }
-    }
 
     // If connectedThroughId is provided, verify the person exists and belongs to user
     if (connectedThroughId) {
@@ -261,19 +255,21 @@ export const POST = withAuth(async (request, session) => {
     }
 
     // If connected through another person, create bidirectional relationship
-    if (connectedThroughId && relationshipToUserId) {
-      // Find the relationshipType and its inverse
-      const relationshipType = await prisma.relationshipType.findUnique({
-        where: { id: relationshipToUserId, deletedAt: null },
-        select: { inverseId: true },
-      });
+    if (connectedThroughId) {
+      // Find the relationshipType and its inverse if provided
+      const relationshipType = relationshipToUserId
+        ? await prisma.relationshipType.findUnique({
+            where: { id: relationshipToUserId, deletedAt: null },
+            select: { inverseId: true },
+          })
+        : null;
 
       // Create primary relationship (new person -> base person)
       await prisma.relationship.create({
         data: {
           personId: person.id,
           relatedPersonId: connectedThroughId,
-          relationshipTypeId: relationshipToUserId,
+          relationshipTypeId: relationshipToUserId || null,
         },
       });
 
@@ -283,7 +279,7 @@ export const POST = withAuth(async (request, session) => {
         data: {
           personId: connectedThroughId,
           relatedPersonId: person.id,
-          relationshipTypeId: relationshipType?.inverseId || relationshipToUserId,
+          relationshipTypeId: relationshipType?.inverseId || relationshipToUserId || null,
         },
       });
     }
@@ -295,6 +291,9 @@ export const POST = withAuth(async (request, session) => {
           personId: person.id,
           eventId: connectedEventId,
           role: connectedEventRole || null,
+          involvementType: connectedEventInvolvementType || 'SUSPECT',
+          verificationStatus: connectedEventVerificationStatus || 'HYPOTHESIS',
+          confidence: connectedEventConfidence || null,
         },
       });
     }

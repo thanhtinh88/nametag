@@ -47,6 +47,18 @@ export default async function JournalEntryDetailPage({
             },
           },
         },
+        events: {
+          where: { event: { deletedAt: null } },
+          include: {
+            event: {
+              select: {
+                id: true,
+                title: true,
+                status: true,
+              },
+            },
+          },
+        },
       },
     }),
     getUserDisplayPreferences(session.user.id),
@@ -94,6 +106,25 @@ export default async function JournalEntryDetailPage({
                 <DeleteJournalEntryButton entryId={entry.id} />
               </div>
             </div>
+
+            {entry.events.length > 0 && (
+              <div className="mb-4">
+                <p className="text-xs font-medium text-muted uppercase tracking-wide mb-2">
+                  Related Cases (Vụ án liên quan)
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {entry.events.map(({ event }) => (
+                    <Link
+                      key={event.id}
+                      href={`/events/${event.id}`}
+                      className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 text-xs font-medium hover:bg-amber-500/25 transition-colors"
+                    >
+                      📁 {event.title}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {entry.people.length > 0 && (
               <div className="mb-6">

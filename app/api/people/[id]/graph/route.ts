@@ -10,9 +10,13 @@ import {
   inverseRelationshipToGraphEdge,
 } from '@/lib/graph-utils';
 
-export const GET = withAuth(async (_request, session, context) => {
+export const GET = withAuth(async (request, session, context) => {
   try {
     const { id } = await context.params;
+    const { searchParams } = new URL(request.url);
+    const hideUserNode = searchParams.get('hideUserNode') === 'true';
+    const includeSolvedCases = searchParams.get('includeSolvedCases') !== 'false';
+    const includeRuledOut = searchParams.get('includeRuledOut') !== 'false';
 
     // Fetch the person with all their relationships
     const person = await findPersonForGraph(id, session.user.id);
@@ -38,13 +42,15 @@ export const GET = withAuth(async (_request, session, context) => {
     nodes.push(personToGraphNode(person, true, nameOrder, nameDisplayFormat));
     nodeIds.add(person.id);
 
-    // Add user as a node
     const userId = `user-${session.user.id}`;
-    nodes.push(userToGraphNode(userId, false, user?.photo));
-    nodeIds.add(userId);
+    if (!hideUserNode) {
+      // Add user as a node
+      nodes.push(userToGraphNode(userId, false, user?.photo));
+      nodeIds.add(userId);
 
-    // if person has direct relationship to user, add them
-    edges.push(...relationshipsWithUserToGraphEdges(person, userId));
+      // if person has direct relationship to user, add them
+      edges.push(...relationshipsWithUserToGraphEdges(person, userId));
+    }
 
     // Add related people as nodes
     person.relationshipsFrom.forEach((rel) => {
@@ -52,9 +58,11 @@ export const GET = withAuth(async (_request, session, context) => {
       nodeIds.add(rel.relatedPersonId);
 
       // If the related person has direct relationship to the user, add them
-      edges.push(
-        ...relationshipsWithUserToGraphEdges(rel.relatedPerson, userId),
-      );
+      if (!hideUserNode) {
+        edges.push(
+          ...relationshipsWithUserToGraphEdges(rel.relatedPerson, userId),
+        );
+      }
     });
 
     // Build edges with deduplication
@@ -105,11 +113,31 @@ export const GET = withAuth(async (_request, session, context) => {
     edges.push(...dedupedEdges.values());
 
     if (prisma.personEvent?.findMany) {
+      const getVerificationStyle = (status?: string): { color: string; lineStyle?: 'solid' | 'dashed' | 'dotted' } => {
+        switch (status) {
+          case 'CONFIRMED':
+            return { color: '#EF4444', lineStyle: 'solid' };
+          case 'INVESTIGATING':
+            return { color: '#F97316', lineStyle: 'dashed' };
+          case 'HYPOTHESIS':
+            return { color: '#EAB308', lineStyle: 'dashed' };
+          case 'RULED_OUT':
+            return { color: '#6B7280', lineStyle: 'dotted' };
+          default:
+            return { color: '#F59E0B' };
+        }
+      };
+
       const personEvents = await prisma.personEvent.findMany({
         where: {
           personId: person.id,
           deletedAt: null,
-          event: { userId: session.user.id, deletedAt: null },
+          ...(!includeRuledOut ? { verificationStatus: { not: 'RULED_OUT' } } : {}),
+          event: {
+            userId: session.user.id,
+            deletedAt: null,
+            ...(!includeSolvedCases ? { status: { in: ['PLANNED', 'ONGOING'] } } : {}),
+          },
         },
         include: {
           event: {
@@ -119,7 +147,11 @@ export const GET = withAuth(async (_request, session, context) => {
                 include: { group: { select: { id: true, name: true, color: true } } },
               },
               people: {
-                where: { deletedAt: null, person: { deletedAt: null } },
+                where: {
+                  deletedAt: null,
+                  person: { deletedAt: null },
+                  ...(!includeRuledOut ? { verificationStatus: { not: 'RULED_OUT' } } : {}),
+                },
                 include: {
                   person: {
                     include: {
@@ -150,15 +182,26 @@ export const GET = withAuth(async (_request, session, context) => {
                 : ['#F59E0B'],
             isCenter: false,
             photo: ev.photo,
+            nodeType: 'event',
+            eventStatus: ev.status,
           });
           nodeIds.add(eventNodeId);
         }
 
+        const peStyle = getVerificationStyle(pe.verificationStatus);
+        const peLabelParts: string[] = [];
+        if (pe.role) peLabelParts.push(pe.role);
+        if (pe.involvementType && pe.involvementType !== 'OTHER') {
+          peLabelParts.push(pe.involvementType);
+        }
         edges.push({
           source: person.id,
           target: eventNodeId,
-          type: pe.role || 'Event',
-          color: '#F59E0B',
+          type: peLabelParts.length > 0 ? peLabelParts.join(' · ') : 'Event',
+          color: peStyle.color,
+          ...(peStyle.lineStyle ? { lineStyle: peStyle.lineStyle } : {}),
+          ...(pe.verificationStatus ? { verificationStatus: pe.verificationStatus } : {}),
+          ...(pe.involvementType ? { involvementType: pe.involvementType } : {}),
         });
 
         for (const otherPe of ev.people) {
@@ -174,11 +217,20 @@ export const GET = withAuth(async (_request, session, context) => {
             );
             nodeIds.add(otherPe.personId);
           }
+          const otherStyle = getVerificationStyle(otherPe.verificationStatus);
+          const otherLabelParts: string[] = [];
+          if (otherPe.role) otherLabelParts.push(otherPe.role);
+          if (otherPe.involvementType && otherPe.involvementType !== 'OTHER') {
+            otherLabelParts.push(otherPe.involvementType);
+          }
           edges.push({
             source: otherPe.personId,
             target: eventNodeId,
-            type: otherPe.role || 'Event',
-            color: '#F59E0B',
+            type: otherLabelParts.length > 0 ? otherLabelParts.join(' · ') : 'Event',
+            color: otherStyle.color,
+            ...(otherStyle.lineStyle ? { lineStyle: otherStyle.lineStyle } : {}),
+            ...(otherPe.verificationStatus ? { verificationStatus: otherPe.verificationStatus } : {}),
+            ...(otherPe.involvementType ? { involvementType: otherPe.involvementType } : {}),
           });
         }
       }

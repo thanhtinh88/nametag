@@ -29,6 +29,11 @@ function MapPageInner() {
       city: searchParams.get('city') ?? '',
       region: searchParams.get('region') ?? '',
       country: searchParams.get('country') ?? '',
+      caseId: searchParams.get('case') ?? '',
+      radiusKm: Number(searchParams.get('radius') ?? '0') || 0,
+      onlyWithinRadius: searchParams.get('within') === '1',
+      activeCasesOnly: searchParams.get('activeCases') === '1',
+      showRuledOut: searchParams.get('ruledOut') !== '0',
     }),
     [searchParams]
   );
@@ -60,6 +65,11 @@ function MapPageInner() {
       if (next.city) params.set('city', next.city);
       if (next.region) params.set('region', next.region);
       if (next.country) params.set('country', next.country);
+      if (next.caseId) params.set('case', next.caseId);
+      if (next.radiusKm && next.radiusKm > 0) params.set('radius', String(next.radiusKm));
+      if (next.onlyWithinRadius) params.set('within', '1');
+      if (next.activeCasesOnly) params.set('activeCases', '1');
+      if (next.showRuledOut === false) params.set('ruledOut', '0');
       // Changing filters drops the focus deep link on purpose
       const qs = params.toString();
       router.replace(qs ? `/map?${qs}` : '/map', { scroll: false });
@@ -70,6 +80,14 @@ function MapPageInner() {
   const visibleMarkers = useMemo(
     () => (data ? filterMarkers(data.markers, filters) : []),
     [data, filters]
+  );
+
+  const selectedCase = useMemo(
+    () =>
+      filters.caseId && data?.cases
+        ? data.cases.find((c) => c.id === filters.caseId) ?? null
+        : null,
+    [data, filters.caseId]
   );
 
   if (loadError) {
@@ -97,6 +115,7 @@ function MapPageInner() {
         resultCount={visibleMarkers.length}
         markers={data.markers}
         groups={data.groups}
+        cases={data.cases ?? []}
         onChange={handleFiltersChange}
       />
 
@@ -140,7 +159,9 @@ function MapPageInner() {
             <MapView
               markers={visibleMarkers}
               focusId={focusId}
-              filtersKey={`${filters.query}|${filters.groupId}|${filters.city}|${filters.region}|${filters.country}`}
+              filtersKey={`${filters.query}|${filters.groupId}|${filters.city}|${filters.region}|${filters.country}|${filters.caseId ?? ''}|${filters.radiusKm ?? 0}|${filters.onlyWithinRadius ? '1' : ''}|${filters.activeCasesOnly ? '1' : ''}|${filters.showRuledOut === false ? '0' : ''}`}
+              selectedCase={selectedCase}
+              radiusKm={filters.radiusKm ?? 0}
             />
             {visibleMarkers.length === 0 && (
               <div className="absolute inset-0 z-10 flex items-center justify-center p-8 pointer-events-none">

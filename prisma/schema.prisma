@@ -195,6 +195,7 @@ model JournalEntry {
   // Relations
   user   User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   people JournalEntryPerson[]
+  events JournalEntryEvent[]
 
   @@index([userId, date])
   @@index([userId, deletedAt])
@@ -214,6 +215,21 @@ model JournalEntryPerson {
   @@unique([journalEntryId, personId])
   @@index([personId])
   @@map("journal_entry_people")
+}
+
+// JournalEntryEvent - Many-to-many join between JournalEntry and Event (Case)
+model JournalEntryEvent {
+  id             String @id @default(cuid())
+  journalEntryId String
+  eventId        String
+
+  // Relations
+  journalEntry JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  event        Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([journalEntryId, eventId])
+  @@index([eventId])
+  @@map("journal_entry_events")
 }
 
 // Relationship Model - Connections between people
@@ -1045,6 +1061,7 @@ model Event {
   urls              EventUrl[]
   customFields      EventCustomField[]
   people            PersonEvent[]
+  journalEntries    JournalEntryEvent[]
   relationshipsFrom EventRelationship[] @relation("EventRelationshipsFrom")
   relationshipsTo   EventRelationship[] @relation("EventRelationshipsTo")
 
@@ -1128,16 +1145,19 @@ model EventCustomField {
   @@map("event_custom_fields")
 }
 
-// PersonEvent - Relationship between a Person and an Event
+// PersonEvent - Hypothesis / Investigation link between a Person (Subject) and an Event (Case)
 model PersonEvent {
-  id        String    @id @default(cuid())
-  personId  String
-  eventId   String
-  role      String?   // e.g., "Organizer", "Participant", "Speaker", "Guest", "Related"
-  notes     String?   @db.Text
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  id                 String    @id @default(cuid())
+  personId           String
+  eventId            String
+  involvementType    String    @default("SUSPECT")    // "SUSPECT" | "PERSON_OF_INTEREST" | "ACCOMPLICE" | "WITNESS" | "VICTIM" | "INFORMANT"
+  verificationStatus String    @default("HYPOTHESIS") // "HYPOTHESIS" | "INVESTIGATING" | "CONFIRMED" | "RULED_OUT"
+  confidence         String?                          // "HIGH" | "MEDIUM" | "LOW"
+  role               String?   // Specific role description
+  notes              String?   @db.Text // Evidence or alibi notes
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  deletedAt          DateTime?
 
   // Relations
   person Person @relation(fields: [personId], references: [id], onDelete: Cascade)

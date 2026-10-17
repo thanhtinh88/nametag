@@ -24,8 +24,8 @@ export default async function DashboardPage() {
 
   const tEvents = await getTranslations('events');
 
-  // Fetch groups, upcoming events, people count, and recent/upcoming custom events
-  const [groups, upcomingEvents, peopleCount, customEvents] = await Promise.all([
+  // Fetch groups, upcoming events, people count, recent/upcoming custom events, all cases for graph filter, and custom field templates
+  const [groups, upcomingEvents, peopleCount, customEvents, allCases, customFieldTemplates] = await Promise.all([
     prisma.group.findMany({
       where: { userId: session.user.id, deletedAt: null },
       orderBy: { name: 'asc' },
@@ -44,6 +44,16 @@ export default async function DashboardPage() {
           select: { id: true },
         },
       },
+    }),
+    prisma.event.findMany({
+      where: { userId: session.user.id, deletedAt: null },
+      orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
+      select: { id: true, title: true, status: true },
+    }),
+    prisma.customFieldTemplate.findMany({
+      where: { userId: session.user.id, deletedAt: null },
+      orderBy: { order: 'asc' },
+      select: { id: true, name: true, slug: true },
     }),
   ]);
 
@@ -192,6 +202,8 @@ export default async function DashboardPage() {
             <UnifiedNetworkGraph
               apiEndpoint="/api/dashboard/graph"
               groups={groups}
+              events={allCases}
+              customFieldTemplates={customFieldTemplates}
               centerNodeNonClickable={true}
               graphMode={graphMode}
             />

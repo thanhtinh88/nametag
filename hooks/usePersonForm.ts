@@ -69,6 +69,8 @@ export interface FormData {
   cardDavSyncEnabled: boolean;
   connectedEventId: string;
   connectedEventRole: string;
+  connectedEventInvolvementType: string;
+  connectedEventVerificationStatus: string;
 }
 
 export interface PersonFormState {
@@ -303,6 +305,8 @@ function buildInitialState(params: {
         mode === 'edit' ? (person?.cardDavSyncEnabled ?? true) : false,
       connectedEventId: initialConnectedEventId || '',
       connectedEventRole: '',
+      connectedEventInvolvementType: 'SUSPECT',
+      connectedEventVerificationStatus: 'HYPOTHESIS',
     },
     importantDates:
       person?.importantDates?.map((d) => ({

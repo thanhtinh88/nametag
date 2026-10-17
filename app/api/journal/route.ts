@@ -12,6 +12,7 @@ export const GET = withAuth(async (request, session) => {
     const url = new URL(request.url);
     const page = Math.max(1, Number(url.searchParams.get('page')) || 1);
     const personId = url.searchParams.get('person');
+    const eventId = url.searchParams.get('event');
     const search = url.searchParams.get('q');
 
     const where: Prisma.JournalEntryWhereInput = {
@@ -19,6 +20,9 @@ export const GET = withAuth(async (request, session) => {
       deletedAt: null,
       ...(personId && {
         people: { some: { personId } },
+      }),
+      ...(eventId && {
+        events: { some: { eventId } },
       }),
       ...(search && {
         OR: [
@@ -42,6 +46,19 @@ export const GET = withAuth(async (request, session) => {
                   surname: true,
                   nickname: true,
                   displayNameOverride: true,
+                },
+              },
+            },
+          },
+          events: {
+            where: { event: { deletedAt: null } },
+            include: {
+              event: {
+                select: {
+                  id: true,
+                  title: true,
+                  status: true,
+                  category: true,
                 },
               },
             },
@@ -78,7 +95,7 @@ export const POST = withAuth(async (request, session) => {
       return validation.response;
     }
 
-    const { title, date, hasTime, body: entryBody, personIds, updateLastContact } = validation.data;
+    const { title, date, hasTime, body: entryBody, personIds, eventIds, updateLastContact } = validation.data;
 
     // Validate personIds belong to the current user
     if (personIds && personIds.length > 0) {
@@ -87,6 +104,16 @@ export const POST = withAuth(async (request, session) => {
       });
       if (validCount !== personIds.length) {
         return apiResponse.error('One or more person IDs are invalid');
+      }
+    }
+
+    // Validate eventIds belong to the current user
+    if (eventIds && eventIds.length > 0 && prisma.event?.count) {
+      const validEventCount = await prisma.event.count({
+        where: { id: { in: eventIds }, userId: session.user.id, deletedAt: null },
+      });
+      if (validEventCount !== eventIds.length) {
+        return apiResponse.error('One or more event IDs are invalid');
       }
     }
 
@@ -110,6 +137,13 @@ export const POST = withAuth(async (request, session) => {
             })),
           },
         }),
+        ...(eventIds && eventIds.length > 0 && {
+          events: {
+            create: eventIds.map((eventId) => ({
+              event: { connect: { id: eventId } },
+            })),
+          },
+        }),
       },
       include: {
         people: {
@@ -121,6 +155,18 @@ export const POST = withAuth(async (request, session) => {
                 surname: true,
                 nickname: true,
                 displayNameOverride: true,
+              },
+            },
+          },
+        },
+        events: {
+          include: {
+            event: {
+              select: {
+                id: true,
+                title: true,
+                status: true,
+                category: true,
               },
             },
           },

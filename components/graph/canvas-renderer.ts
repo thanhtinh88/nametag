@@ -67,12 +67,25 @@ function drawEdge(rc: RenderContext, edge: SimulationEdge, highlighted: boolean)
   if (src.x === undefined || tgt.x === undefined) return;
 
   rc.ctx.beginPath();
+  if (edge.lineStyle === 'dashed') {
+    rc.ctx.setLineDash([6, 4]);
+  } else if (edge.lineStyle === 'dotted') {
+    rc.ctx.setLineDash([2, 4]);
+  } else {
+    rc.ctx.setLineDash([]);
+  }
   rc.ctx.moveTo(src.x, src.y ?? 0);
   rc.ctx.lineTo(tgt.x, tgt.y ?? 0);
   rc.ctx.strokeStyle = edge.color || '#999';
-  rc.ctx.globalAlpha = highlighted ? 0.8 : 0.15;
-  rc.ctx.lineWidth = 2;
+  const baseAlpha = edge.verificationStatus
+    ? edge.verificationStatus === 'RULED_OUT'
+      ? 0.2
+      : 0.45
+    : 0.15;
+  rc.ctx.globalAlpha = highlighted ? 0.9 : baseAlpha;
+  rc.ctx.lineWidth = edge.verificationStatus === 'CONFIRMED' ? (highlighted ? 3.5 : 2.75) : 2;
   rc.ctx.stroke();
+  rc.ctx.setLineDash([]);
   rc.ctx.globalAlpha = 1;
 
   if (highlighted) drawArrowMarker(rc, src, tgt, edge.color || '#999');
@@ -91,8 +104,9 @@ function drawArrowMarker(
   if (len === 0) return;
   const ux = dx / len;
   const uy = dy / len;
-  // Back off by exactly the target node radius so the arrow tip touches the node.
-  const r = nodeRadius(tgt, rc.isMobile);
+  // Back off by target node radius so the arrow tip touches the node.
+  const isEventNode = tgt.kind === 'person' && (tgt.nodeType === 'event' || tgt.id.startsWith('event-'));
+  const r = nodeRadius(tgt, rc.isMobile) * (isEventNode ? 1.35 : 1);
   const tipX = (tgt.x ?? 0) - ux * r;
   const tipY = (tgt.y ?? 0) - uy * r;
   const size = 6;
@@ -111,9 +125,49 @@ function drawArrowMarker(
   rc.ctx.globalAlpha = 1;
 }
 
+function drawRoundedRectPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  radius: number,
+): void {
+  const r = Math.min(radius, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
 function drawNode(rc: RenderContext, node: SimulationNode): void {
   if (node.x === undefined || node.y === undefined) return;
   const r = nodeRadius(node, rc.isMobile);
+  const isEventNode =
+    node.kind === 'person' && (node.nodeType === 'event' || node.id.startsWith('event-'));
+
+  if (isEventNode) {
+    const w = r * 2.6;
+    const h = r * 2.0;
+    const x = node.x - w / 2;
+    const y = node.y - h / 2;
+    drawRoundedRectPath(rc.ctx, x, y, w, h, 4);
+    rc.ctx.fillStyle = getNodeFill(node, rc.isDark);
+    rc.ctx.fill();
+    if (rc.lod !== 'dots') {
+      rc.ctx.lineWidth = 2.5;
+      rc.ctx.strokeStyle = rc.isDark ? '#FDE68A' : '#92400E';
+      rc.ctx.stroke();
+    }
+    return;
+  }
 
   // Resolve a loaded photo (if any) before painting the fill, so we can use
   // a contrast background only when an image will actually be drawn over it.
@@ -150,12 +204,13 @@ function drawNode(rc: RenderContext, node: SimulationNode): void {
 function drawLabel(rc: RenderContext, node: SimulationNode, color: string): void {
   if (node.kind !== 'person') return;  // bubble labels are drawn inside drawBubble
   if (node.x === undefined || node.y === undefined) return;
+  const isEventNode = node.nodeType === 'event' || node.id.startsWith('event-');
   const fontSize = nodeFontSize(node, rc.isMobile);
-  rc.ctx.font = `${node.isCenter ? '600 ' : ''}${fontSize}px system-ui, -apple-system, sans-serif`;
+  rc.ctx.font = `${node.isCenter || isEventNode ? '600 ' : ''}${fontSize}px system-ui, -apple-system, sans-serif`;
   rc.ctx.fillStyle = color;
   rc.ctx.textAlign = 'center';
   rc.ctx.textBaseline = 'top';
-  const dy = node.isCenter ? (rc.isMobile ? 14 : 17) : (rc.isMobile ? 12 : 14);
+  const dy = node.isCenter || isEventNode ? (rc.isMobile ? 14 : 17) : (rc.isMobile ? 12 : 14);
   rc.ctx.fillText(node.label, node.x, node.y + dy);
 }
 

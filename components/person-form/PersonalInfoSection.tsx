@@ -266,12 +266,11 @@ export default function PersonalInfoSection({
             htmlFor="relationshipToUserId"
             className="flex items-center gap-1.5 text-sm font-medium text-muted mb-1"
           >
-            {t('relationshipToYouDirect')} *
+            {t('relationshipToYouDirect')}
             <TooltipIcon tooltip={t('relationshipToYouTooltip')} />
           </label>
           <select
             id="relationshipToUserId"
-            required
             value={formData.relationshipToUserId}
             onChange={(e) =>
               onFormDataChange({ relationshipToUserId: e.target.value })
@@ -320,50 +319,108 @@ export default function PersonalInfoSection({
       )}
 
       {mode === 'create' && availableEvents.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-border">
-          <div>
-            <label
-              htmlFor="connectedEventId"
-              className="block text-sm font-medium text-muted mb-1"
-            >
-              {t('connectedEventLabel')}
-            </label>
-            <select
-              id="connectedEventId"
-              value={formData.connectedEventId}
-              onChange={(e) =>
-                onFormDataChange({ connectedEventId: e.target.value })
-              }
-              className={inputClass}
-            >
-              <option value="">{t('selectEvent')}</option>
-              {availableEvents.map((ev) => (
-                <option key={ev.id} value={ev.id}>
-                  {ev.title}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-muted mt-1">{t('connectedEventHelp')}</p>
+        <div className="space-y-4 pt-2 border-t border-border">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label
+                htmlFor="connectedEventId"
+                className="block text-sm font-medium text-muted mb-1"
+              >
+                {t('connectedEventLabel')}
+              </label>
+              <select
+                id="connectedEventId"
+                value={formData.connectedEventId}
+                onChange={(e) =>
+                  onFormDataChange({ connectedEventId: e.target.value })
+                }
+                className={inputClass}
+              >
+                <option value="">{t('selectEvent')}</option>
+                {availableEvents.map((ev) => (
+                  <option key={ev.id} value={ev.id}>
+                    {ev.title}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted mt-1">{t('connectedEventHelp')}</p>
+            </div>
+
+            {formData.connectedEventId && (
+              <div>
+                <label
+                  htmlFor="connectedEventRole"
+                  className="block text-sm font-medium text-muted mb-1"
+                >
+                  {t('connectedEventRoleLabel')}
+                </label>
+                <input
+                  type="text"
+                  id="connectedEventRole"
+                  value={formData.connectedEventRole}
+                  onChange={(e) =>
+                    onFormDataChange({ connectedEventRole: e.target.value })
+                  }
+                  placeholder={t('connectedEventRolePlaceholder')}
+                  className={inputClass}
+                />
+              </div>
+            )}
           </div>
 
           {formData.connectedEventId && (
-            <div>
-              <label
-                htmlFor="connectedEventRole"
-                className="block text-sm font-medium text-muted mb-1"
-              >
-                {t('connectedEventRoleLabel')}
-              </label>
-              <input
-                type="text"
-                id="connectedEventRole"
-                value={formData.connectedEventRole}
-                onChange={(e) =>
-                  onFormDataChange({ connectedEventRole: e.target.value })
-                }
-                placeholder={t('connectedEventRolePlaceholder')}
-                className={inputClass}
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label
+                  htmlFor="connectedEventInvolvementType"
+                  className="block text-sm font-medium text-muted mb-1"
+                >
+                  Involvement Type
+                </label>
+                <select
+                  id="connectedEventInvolvementType"
+                  value={formData.connectedEventInvolvementType || 'SUSPECT'}
+                  onChange={(e) =>
+                    onFormDataChange({
+                      connectedEventInvolvementType: e.target.value,
+                    })
+                  }
+                  className={inputClass}
+                >
+                  <option value="SUSPECT">Suspect (Nghi phạm)</option>
+                  <option value="PERSON_OF_INTEREST">Person of Interest (Đối tượng nghi vấn)</option>
+                  <option value="ACCOMPLICE">Accomplice (Đồng phạm)</option>
+                  <option value="WITNESS">Witness (Nhân chứng)</option>
+                  <option value="VICTIM">Victim (Nạn nhân)</option>
+                  <option value="INFORMANT">Informant (Người cung cấp tin)</option>
+                </select>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="connectedEventVerificationStatus"
+                  className="block text-sm font-medium text-muted mb-1"
+                >
+                  Verification Status
+                </label>
+                <select
+                  id="connectedEventVerificationStatus"
+                  value={
+                    formData.connectedEventVerificationStatus || 'HYPOTHESIS'
+                  }
+                  onChange={(e) =>
+                    onFormDataChange({
+                      connectedEventVerificationStatus: e.target.value,
+                    })
+                  }
+                  className={inputClass}
+                >
+                  <option value="HYPOTHESIS">Hypothesis (Giả thuyết)</option>
+                  <option value="INVESTIGATING">Investigating (Đang xác minh)</option>
+                  <option value="CONFIRMED">Confirmed (Đã xác nhận)</option>
+                  <option value="RULED_OUT">Ruled Out (Đã loại trừ)</option>
+                </select>
+              </div>
             </div>
           )}
         </div>

@@ -25,12 +25,16 @@ import type { SimulationNode, SimulationEdge } from './graph/simulation-types';
 
 // Props interface — unchanged from pre-rewrite file
 interface Group { id: string; name: string; color: string | null; }
+interface CaseOption { id: string; title: string; status: string; }
+interface CustomFieldTemplateOption { id: string; name: string; slug: string; }
 type IncludeMode = 'or' | 'and';
 type GroupFilterItem = { id: string; label: string; color: string | null; isNegative: boolean; };
 
 interface UnifiedNetworkGraphProps {
   apiEndpoint?: string;
   groups?: Group[];
+  events?: CaseOption[];
+  customFieldTemplates?: CustomFieldTemplateOption[];
   centerNodeNonClickable?: boolean;
   linkDistance?: number;
   chargeStrength?: number;
@@ -42,6 +46,8 @@ interface UnifiedNetworkGraphProps {
 export default function UnifiedNetworkGraph({
   apiEndpoint,
   groups,
+  events,
+  customFieldTemplates,
   centerNodeNonClickable = false,
   linkDistance = 160,
   chargeStrength = -400,
@@ -71,6 +77,13 @@ export default function UnifiedNetworkGraph({
   // Filter state
   const [selectedGroupFilters, setSelectedGroupFilters] = useState<GroupFilterItem[]>([]);
   const [includeMode, setIncludeMode] = useState<IncludeMode>('or');
+  const [selectedCaseId, setSelectedCaseId] = useState<string>('');
+  const [includeHop, setIncludeHop] = useState<boolean>(true);
+  const [activeCasesOnly, setActiveCasesOnly] = useState<boolean>(Boolean(events));
+  const [showRuledOut, setShowRuledOut] = useState<boolean>(!events);
+  const [hideUserNode, setHideUserNode] = useState<boolean>(Boolean(events));
+  const [customFieldSlug, setCustomFieldSlug] = useState<string>('');
+  const [customFieldValue, setCustomFieldValue] = useState<string>('');
   const [isMobile, setIsMobile] = useState(false);
   const capitalizeType = useLocale().startsWith('de');
 
@@ -473,6 +486,19 @@ export default function UnifiedNetworkGraph({
       url.searchParams.set('groupMatchOperator', includeMode);
       if (includeGroupIds.length > 0) url.searchParams.set('includeGroupIds', includeGroupIds.join(','));
       if (excludeGroupIds.length > 0) url.searchParams.set('excludeGroupIds', excludeGroupIds.join(','));
+      if (selectedCaseId) {
+        url.searchParams.set('caseId', selectedCaseId);
+        url.searchParams.set('includeHop', includeHop ? 'true' : 'false');
+      }
+      if (activeCasesOnly) url.searchParams.set('includeSolvedCases', 'false');
+      if (!showRuledOut) url.searchParams.set('includeRuledOut', 'false');
+      if (hideUserNode) url.searchParams.set('hideUserNode', 'true');
+      if (customFieldSlug) {
+        const cfQuery = customFieldValue.trim()
+          ? `${customFieldSlug}:${customFieldValue.trim()}`
+          : customFieldSlug;
+        url.searchParams.set('cf', cfQuery);
+      }
 
       const response = await fetch(url.toString());
       const data = await response.json() as { nodes: RawGraphPerson[]; edges: SimulationEdge[] };
@@ -489,7 +515,20 @@ export default function UnifiedNetworkGraph({
     // (expandedBubbles, localGraphMode) which are handled by the Step 5 effect
     // from the cached raw data — no need to re-fetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiEndpoint, refreshKey, includeMode, includeGroupIds, excludeGroupIds]);
+  }, [
+    apiEndpoint,
+    refreshKey,
+    includeMode,
+    includeGroupIds,
+    excludeGroupIds,
+    selectedCaseId,
+    includeHop,
+    activeCasesOnly,
+    showRuledOut,
+    hideUserNode,
+    customFieldSlug,
+    customFieldValue,
+  ]);
 
   // Step 5: Recompose when bubble state changes (mode toggle, expand/collapse)
   useEffect(() => {
@@ -799,6 +838,118 @@ export default function UnifiedNetworkGraph({
               />
             </div>
           </div>
+
+          {/* Smart Investigation Filter Bar */}
+          {events && (
+            <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-border/60 text-xs">
+              <div className="flex items-center gap-1.5">
+                <label className="font-medium text-muted">Case Focus:</label>
+                <select
+                  value={selectedCaseId}
+                  onChange={(e) => setSelectedCaseId(e.target.value)}
+                  className="px-2.5 py-1.5 rounded border border-border bg-surface-elevated text-foreground"
+                >
+                  <option value="">All Cases</option>
+                  {events.map((ev) => (
+                    <option key={ev.id} value={ev.id}>
+                      📅 {ev.title} ({ev.status})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {selectedCaseId && (
+                <label className="inline-flex items-center gap-1.5 text-foreground cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={includeHop}
+                    onChange={(e) => setIncludeHop(e.target.checked)}
+                    className="rounded border-border text-primary focus:ring-primary"
+                  />
+                  <span>+ 1-Hop Associates</span>
+                </label>
+              )}
+
+              <label className="inline-flex items-center gap-1.5 text-foreground cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={activeCasesOnly}
+                  onChange={(e) => setActiveCasesOnly(e.target.checked)}
+                  className="rounded border-border text-primary focus:ring-primary"
+                />
+                <span>Active Cases Only</span>
+              </label>
+
+              <label className="inline-flex items-center gap-1.5 text-foreground cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={showRuledOut}
+                  onChange={(e) => setShowRuledOut(e.target.checked)}
+                  className="rounded border-border text-primary focus:ring-primary"
+                />
+                <span>Show Ruled-Out</span>
+              </label>
+
+              <label className="inline-flex items-center gap-1.5 text-foreground cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={hideUserNode}
+                  onChange={(e) => setHideUserNode(e.target.checked)}
+                  className="rounded border-border text-primary focus:ring-primary"
+                />
+                <span>Hide &quot;You&quot; Node</span>
+              </label>
+
+              {customFieldTemplates && customFieldTemplates.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <label className="font-medium text-muted">Custom Field:</label>
+                  <select
+                    value={customFieldSlug}
+                    onChange={(e) => {
+                      setCustomFieldSlug(e.target.value);
+                      if (!e.target.value) setCustomFieldValue('');
+                    }}
+                    className="px-2 py-1.5 rounded border border-border bg-surface-elevated text-foreground"
+                  >
+                    <option value="">Any</option>
+                    {customFieldTemplates.map((cf) => (
+                      <option key={cf.id} value={cf.slug}>
+                        {cf.name}
+                      </option>
+                    ))}
+                  </select>
+                  {customFieldSlug && (
+                    <input
+                      type="text"
+                      value={customFieldValue}
+                      onChange={(e) => setCustomFieldValue(e.target.value)}
+                      placeholder="Value contains..."
+                      className="px-2 py-1 rounded border border-border bg-surface-elevated text-foreground w-32"
+                    />
+                  )}
+                </div>
+              )}
+
+              <div className="ml-auto flex flex-wrap items-center gap-3 text-[11px] text-muted">
+                <span className="inline-flex items-center gap-1">
+                  <span className="inline-block w-3 h-2.5 rounded-sm bg-amber-500 border border-amber-800 dark:border-amber-200" />
+                  Case
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="inline-block w-4 h-0.5 bg-red-500" />
+                  Confirmed
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="inline-block w-4 border-t-2 border-dashed border-orange-500" />
+                  Investigating / Hypothesis
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="inline-block w-4 border-t-2 border-dotted border-gray-500" />
+                  Ruled Out
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       )}
       <div className="relative">

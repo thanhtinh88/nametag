@@ -11,6 +11,8 @@ export interface PersonSimNode extends SimulationNodeDatum {
   colors: string[];
   isCenter: boolean;
   photo?: string | null;
+  nodeType?: 'person' | 'event' | 'user';
+  eventStatus?: string;
 }
 
 export interface BubbleSimNode extends SimulationNodeDatum {
@@ -33,6 +35,9 @@ export interface SimulationEdge {
   color: string;
   sourceLabel?: string;
   targetLabel?: string;
+  lineStyle?: 'solid' | 'dashed' | 'dotted';
+  verificationStatus?: string;
+  involvementType?: string;
 }
 
 export type PhotoCacheEntry = HTMLImageElement | 'loading' | 'error';

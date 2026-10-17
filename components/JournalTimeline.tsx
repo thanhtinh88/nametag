@@ -20,6 +20,13 @@ interface TimelineEntry {
       displayNameOverride?: string | null;
     };
   }>;
+  events?: Array<{
+    event: {
+      id: string;
+      title: string;
+      status?: string;
+    };
+  }>;
 }
 
 interface JournalTimelineProps {
@@ -193,8 +200,16 @@ export default function JournalTimeline({ entries, nameOrder, nameDisplayFormat,
                           </p>
                         )}
 
-                        {entry.people.length > 0 && (
+                        {(entry.people.length > 0 || (entry.events && entry.events.length > 0)) && (
                           <div className="flex flex-wrap gap-1.5 mt-2">
+                            {entry.events?.map(({ event }) => (
+                              <span
+                                key={event.id}
+                                className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                              >
+                                📁 {event.title}
+                              </span>
+                            ))}
                             {entry.people.map(({ person }) => (
                               <span
                                 key={person.id}

@@ -221,6 +221,12 @@ export const createPersonSchema = z.object({
     .describe('If set, links this person to an event upon creation/update'),
   connectedEventRole: z.string().max(100).nullable().optional()
     .describe('Role of this person in the connected event'),
+  connectedEventInvolvementType: z.enum(['SUSPECT', 'PERSON_OF_INTEREST', 'ACCOMPLICE', 'WITNESS', 'VICTIM', 'INFORMANT']).optional()
+    .describe('Involvement type in the connected event/case'),
+  connectedEventVerificationStatus: z.enum(['HYPOTHESIS', 'INVESTIGATING', 'CONFIRMED', 'RULED_OUT']).optional()
+    .describe('Verification status in the connected event/case'),
+  connectedEventConfidence: z.enum(['HIGH', 'MEDIUM', 'LOW']).nullable().optional()
+    .describe('Confidence level of the hypothesis'),
   importantDates: z.array(importantDateSchema).optional(),
   contactReminderEnabled: z.boolean().optional(),
   contactReminderInterval: z.number().int().min(1).max(99).nullable().optional(),
@@ -350,6 +356,7 @@ export const createJournalEntrySchema = z.object({
   hasTime: z.boolean().optional().default(false),
   body: z.string().min(1, 'Entry body is required').max(50000),
   personIds: z.array(z.string()).optional().default([]),
+  eventIds: z.array(z.string()).optional().default([]),
   updateLastContact: z.boolean().optional().default(true),
 });
 
@@ -359,6 +366,7 @@ export const updateJournalEntrySchema = z.object({
   hasTime: z.boolean().optional().default(false),
   body: z.string().min(1, 'Entry body is required').max(50000),
   personIds: z.array(z.string()).optional().default([]),
+  eventIds: z.array(z.string()).optional().default([]),
   updateLastContact: z.boolean().optional().default(false),
 });
 
@@ -729,9 +737,30 @@ export const updateEndpointSchema = z.object({
 
 export const eventStatusSchema = z.enum(['PLANNED', 'ONGOING', 'COMPLETED', 'CANCELLED']);
 
+export const involvementTypeSchema = z.enum([
+  'SUSPECT',
+  'PERSON_OF_INTEREST',
+  'ACCOMPLICE',
+  'WITNESS',
+  'VICTIM',
+  'INFORMANT',
+]);
+
+export const verificationStatusSchema = z.enum([
+  'HYPOTHESIS',
+  'INVESTIGATING',
+  'CONFIRMED',
+  'RULED_OUT',
+]);
+
+export const confidenceLevelSchema = z.enum(['HIGH', 'MEDIUM', 'LOW']);
+
 export const eventPersonInputSchema = z.object({
   personId: z.string().min(1, 'Person ID is required'),
   role: z.string().max(100).nullable().optional(),
+  involvementType: involvementTypeSchema.optional().default('SUSPECT'),
+  verificationStatus: verificationStatusSchema.optional().default('HYPOTHESIS'),
+  confidence: confidenceLevelSchema.nullable().optional(),
   notes: z.string().max(2000).nullable().optional(),
 });
 
@@ -762,13 +791,22 @@ export const updateEventSchema = createEventSchema.partial();
 export const createPersonEventSchema = z.object({
   personId: z.string().min(1, 'Person ID is required'),
   role: z.string().max(100).nullable().optional(),
+  involvementType: involvementTypeSchema.optional().default('SUSPECT'),
+  verificationStatus: verificationStatusSchema.optional().default('HYPOTHESIS'),
+  confidence: confidenceLevelSchema.nullable().optional(),
   notes: z.string().max(2000).nullable().optional(),
 });
 
 export const updatePersonEventSchema = z.object({
-  id: z.string().min(1, 'ID is required'),
+  id: z.string().min(1).optional(),
+  personId: z.string().min(1).optional(),
   role: z.string().max(100).nullable().optional(),
+  involvementType: involvementTypeSchema.optional(),
+  verificationStatus: verificationStatusSchema.optional(),
+  confidence: confidenceLevelSchema.nullable().optional(),
   notes: z.string().max(2000).nullable().optional(),
+}).refine((data) => Boolean(data.id || data.personId), {
+  message: 'Either id or personId is required',
 });
 
 export const createEventRelationshipSchema = z.object({

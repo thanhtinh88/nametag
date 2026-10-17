@@ -63,6 +63,13 @@ export const GET = withAuth(async (request, session) => {
     const includeGroupIds = parseGroupIds(searchParams.get('includeGroupIds'));
     const excludeGroupIds = parseGroupIds(searchParams.get('excludeGroupIds'));
     const limit = searchParams.get('limit');
+    const hideUserNode = searchParams.get('hideUserNode') === 'true';
+    const caseId = searchParams.get('caseId')?.trim() || '';
+    const includeHop = searchParams.get('includeHop') !== 'false';
+    const includeSolvedCases = searchParams.get('includeSolvedCases') !== 'false';
+    const includeRuledOut = searchParams.get('includeRuledOut') !== 'false';
+    const customFieldFilter = searchParams.get('cf')?.trim() || '';
+
     const includePredicates: Array<Record<string, unknown>> = [];
     const excludePredicates: Array<Record<string, unknown>> = [];
 
@@ -106,6 +113,23 @@ export const GET = withAuth(async (request, session) => {
     }
     filterPredicates.push(...excludePredicates);
 
+    if (customFieldFilter) {
+      const colonIdx = customFieldFilter.indexOf(':');
+      const cfSlug = colonIdx >= 0 ? customFieldFilter.slice(0, colonIdx).trim() : customFieldFilter;
+      const cfVal = colonIdx >= 0 ? customFieldFilter.slice(colonIdx + 1).trim() : '';
+      if (cfSlug) {
+        filterPredicates.push({
+          customFields: {
+            some: {
+              deletedAt: null,
+              customFieldTemplate: { slug: cfSlug, deletedAt: null },
+              ...(cfVal ? { value: { contains: cfVal, mode: 'insensitive' } } : {}),
+            },
+          },
+        });
+      }
+    }
+
     const whereClause = {
       userId: session.user.id,
       deletedAt: null,
@@ -113,7 +137,7 @@ export const GET = withAuth(async (request, session) => {
     };
 
     // Fetch people with optimized select to minimize payload
-    const people = (await prisma.person.findMany({
+    const allPeople = (await prisma.person.findMany({
       where: whereClause,
       select: {
         id: true,
@@ -193,6 +217,97 @@ export const GET = withAuth(async (request, session) => {
       ...(limit ? { take: parseInt(limit) } : {}),
     })) as unknown as DashboardGraphPerson[];
 
+    // Pre-fetch events if prisma.event is available so we can filter people by caseId if requested
+    type DashboardGraphEvent = {
+      id: string;
+      title: string;
+      status?: string;
+      photo: string | null;
+      groups: Array<{ group: { id: string; name: string; color: string | null } }>;
+      people: Array<{
+        personId: string;
+        role: string | null;
+        involvementType?: string;
+        verificationStatus?: string;
+        confidence?: string | null;
+      }>;
+      relationshipsFrom: Array<{ toEventId: string; relationshipType: string | null }>;
+    };
+
+    let events: DashboardGraphEvent[] = [];
+    if (prisma.event?.findMany) {
+      const eventWhere: Record<string, unknown> = {
+        userId: session.user.id,
+        deletedAt: null,
+        ...(includeGroupClause ? { AND: [includeGroupClause, ...excludePredicates] } : excludePredicates.length > 0 ? { AND: excludePredicates } : {}),
+      };
+      if (caseId) {
+        eventWhere.id = caseId;
+      } else if (!includeSolvedCases) {
+        eventWhere.status = { in: ['PLANNED', 'ONGOING'] };
+      }
+
+      events = (await prisma.event.findMany({
+        where: eventWhere,
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          photo: true,
+          groups: {
+            where: { group: { deletedAt: null } },
+            select: { group: { select: { id: true, name: true, color: true } } },
+          },
+          people: {
+            where: {
+              deletedAt: null,
+              person: { deletedAt: null },
+              ...(!includeRuledOut ? { verificationStatus: { not: 'RULED_OUT' } } : {}),
+            },
+            select: {
+              personId: true,
+              role: true,
+              involvementType: true,
+              verificationStatus: true,
+              confidence: true,
+            },
+          },
+          relationshipsFrom: {
+            where: { deletedAt: null, toEvent: { deletedAt: null } },
+            select: { toEventId: true, relationshipType: true },
+          },
+        },
+      })) as unknown as DashboardGraphEvent[];
+    }
+
+    // Filter people when a specific caseId is focused
+    let people = allPeople;
+    if (caseId && events.length > 0) {
+      const directPersonIds = new Set<string>();
+      for (const ev of events) {
+        for (const pe of ev.people) {
+          directPersonIds.add(pe.personId);
+        }
+      }
+      const allowedPersonIds = new Set<string>(directPersonIds);
+      if (includeHop) {
+        for (const p of allPeople) {
+          if (directPersonIds.has(p.id)) {
+            for (const rel of p.relationshipsFrom) {
+              allowedPersonIds.add(rel.relatedPersonId);
+            }
+          } else {
+            for (const rel of p.relationshipsFrom) {
+              if (directPersonIds.has(rel.relatedPersonId)) {
+                allowedPersonIds.add(p.id);
+              }
+            }
+          }
+        }
+      }
+      people = allPeople.filter((p) => allowedPersonIds.has(p.id));
+    }
+
     // Build graph data
     const nodes: GraphNode[] = [];
     const edges: GraphEdge[] = [];
@@ -206,10 +321,12 @@ export const GET = withAuth(async (request, session) => {
     const nameOrder = user?.nameOrder;
     const nameDisplayFormat = user?.nameDisplayFormat;
 
-    // Add user as the center node
     const userId = `user-${session.user.id}`;
-    nodes.push(userToGraphNode(userId, true, user?.photo));
-    nodeIds.add(userId);
+    if (!hideUserNode) {
+      // Add user as the center node
+      nodes.push(userToGraphNode(userId, true, user?.photo));
+      nodeIds.add(userId);
+    }
 
     // Add all people as nodes
     people.forEach((person) => {
@@ -217,7 +334,9 @@ export const GET = withAuth(async (request, session) => {
       nodeIds.add(person.id);
 
       // Connect each person to the user with their specific relationship (if they have a direct one)
-      edges.push(...relationshipsWithUserToGraphEdges(person, userId));
+      if (!hideUserNode) {
+        edges.push(...relationshipsWithUserToGraphEdges(person, userId));
+      }
     });
 
     // Add all relationships between people as edges (deduplicated)
@@ -245,27 +364,21 @@ export const GET = withAuth(async (request, session) => {
 
     edges.push(...dedupedEdges.values());
 
-    if (prisma.event?.findMany) {
-      const events = await prisma.event.findMany({
-        where: whereClause,
-        select: {
-          id: true,
-          title: true,
-          photo: true,
-          groups: {
-            where: { group: { deletedAt: null } },
-            select: { group: { select: { id: true, name: true, color: true } } },
-          },
-          people: {
-            where: { deletedAt: null, person: { deletedAt: null } },
-            select: { personId: true, role: true },
-          },
-          relationshipsFrom: {
-            where: { deletedAt: null, toEvent: { deletedAt: null } },
-            select: { toEventId: true, relationshipType: true },
-          },
-        },
-      });
+    if (events.length > 0) {
+      const getVerificationStyle = (status?: string): { color: string; lineStyle?: 'solid' | 'dashed' | 'dotted' } => {
+        switch (status) {
+          case 'CONFIRMED':
+            return { color: '#EF4444', lineStyle: 'solid' };
+          case 'INVESTIGATING':
+            return { color: '#F97316', lineStyle: 'dashed' };
+          case 'HYPOTHESIS':
+            return { color: '#EAB308', lineStyle: 'dashed' };
+          case 'RULED_OUT':
+            return { color: '#6B7280', lineStyle: 'dotted' };
+          default:
+            return { color: '#F59E0B' };
+        }
+      };
 
       const eventNodeIds = new Set<string>();
       for (const ev of events) {
@@ -278,19 +391,31 @@ export const GET = withAuth(async (request, session) => {
             ev.groups.length > 0
               ? ev.groups.map((eg) => eg.group.color || '#F59E0B')
               : ['#F59E0B'],
-          isCenter: false,
+          isCenter: caseId === ev.id,
           photo: ev.photo,
+          nodeType: 'event',
+          eventStatus: ev.status,
         });
         eventNodeIds.add(eventNodeId);
         nodeIds.add(eventNodeId);
 
         for (const pe of ev.people) {
           if (nodeIds.has(pe.personId)) {
+            const style = getVerificationStyle(pe.verificationStatus);
+            const labelParts: string[] = [];
+            if (pe.role) labelParts.push(pe.role);
+            if (pe.involvementType && pe.involvementType !== 'OTHER') {
+              labelParts.push(pe.involvementType);
+            }
+            const edgeLabel = labelParts.length > 0 ? labelParts.join(' · ') : 'Event';
             edges.push({
               source: pe.personId,
               target: eventNodeId,
-              type: pe.role || 'Event',
-              color: '#F59E0B',
+              type: edgeLabel,
+              color: style.color,
+              ...(style.lineStyle ? { lineStyle: style.lineStyle } : {}),
+              ...(pe.verificationStatus ? { verificationStatus: pe.verificationStatus } : {}),
+              ...(pe.involvementType ? { involvementType: pe.involvementType } : {}),
             });
           }
         }
@@ -308,7 +433,7 @@ export const GET = withAuth(async (request, session) => {
           edges.push({
             source: sourceId,
             target: targetId,
-            type: rel.relationshipType || 'Related Event',
+            type: rel.relationshipType || 'Related Case',
             color: '#D97706',
           });
         }

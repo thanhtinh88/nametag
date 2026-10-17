@@ -4,14 +4,16 @@ import { useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useTranslations } from 'next-intl';
-import type { MapMarker } from '@/lib/map/types';
+import type { MapCase, MapMarker } from '@/lib/map/types';
 import { groupByCoordinates } from '@/lib/map/colocation';
+import { haversineDistanceKm } from '@/lib/map/filter-markers';
 
 // OpenFreeMap hosted styles: free, no API key, commercial use permitted.
 const DARK_STYLE = 'https://tiles.openfreemap.org/styles/dark';
 const LIGHT_STYLE = 'https://tiles.openfreemap.org/styles/positron';
 
 const SOURCE_ID = 'people';
+const RADIUS_SOURCE_ID = 'crime-scene-radius';
 const FOCUS_ZOOM = 15;
 // MapLibre scales animation time with camera distance, so long jumps (world
 // view to one city) can run for several seconds. Cap all camera animations.
@@ -38,6 +40,50 @@ function iconIdFor(personId: string): string {
 
 function ringColorFor(marker: MapMarker, isDark: boolean): string {
   return marker.groupColor ?? (isDark ? RING_FALLBACK_DARK : RING_FALLBACK_LIGHT);
+}
+
+/** Builds a 64-vertex GeoJSON polygon approximating a circle of `radiusKm` around `[lng, lat]`. */
+function buildRadiusGeoJSON(
+  selectedCase: MapCase | null | undefined,
+  radiusKm: number | undefined,
+): GeoJSON.FeatureCollection<GeoJSON.Polygon> {
+  if (
+    !selectedCase ||
+    selectedCase.latitude === null ||
+    selectedCase.longitude === null ||
+    !radiusKm ||
+    radiusKm <= 0
+  ) {
+    return { type: 'FeatureCollection', features: [] };
+  }
+
+  const centerLat = selectedCase.latitude;
+  const centerLng = selectedCase.longitude;
+  const points = 64;
+  const coords: [number, number][] = [];
+  const distanceX = radiusKm / (111.32 * Math.cos((centerLat * Math.PI) / 180));
+  const distanceY = radiusKm / 110.574;
+
+  for (let i = 0; i <= points; i++) {
+    const theta = (i / points) * (2 * Math.PI);
+    const x = distanceX * Math.cos(theta);
+    const y = distanceY * Math.sin(theta);
+    coords.push([centerLng + x, centerLat + y]);
+  }
+
+  return {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        geometry: {
+          type: 'Polygon',
+          coordinates: [coords],
+        },
+        properties: {},
+      },
+    ],
+  };
 }
 
 /** Draws a circle-clipped photo with a colored ring onto an offscreen canvas, like the network graph's person nodes. */
@@ -84,11 +130,13 @@ interface MapViewProps {
    * filter state keeps the world view.
    */
   filtersKey: string;
+  selectedCase?: MapCase | null;
+  radiusKm?: number;
 }
 
 /** True when every segment of the "|"-joined filter key is empty. */
 function isEmptyFiltersKey(key: string): boolean {
-  return key.split('|').every((part) => part === '');
+  return key.split('|').every((part) => part === '' || part === '0');
 }
 
 interface MarkerProperties {
@@ -101,6 +149,7 @@ interface MarkerProperties {
   iconId?: string;
   /** First group's color, used for the plain dot when there is no photo icon yet */
   dotColor?: string;
+  isCrimeScene?: boolean;
   colocatedCount: number;
 }
 
@@ -143,6 +192,7 @@ function toGeoJSON(
     const representative = groupMarkers[0];
     const count = groupMarkers.length;
     const isSolo = count === 1;
+    const isCrimeScene = representative.source === 'event_address';
 
     features.push({
       type: 'Feature',
@@ -159,6 +209,7 @@ function toGeoJSON(
           ? { iconId: iconIdFor(representative.personId) }
           : {}),
         ...(representative.groupColor ? { dotColor: representative.groupColor } : {}),
+        ...(isCrimeScene ? { isCrimeScene: true } : {}),
         colocatedCount: count,
       },
     });
@@ -167,12 +218,20 @@ function toGeoJSON(
   return { type: 'FeatureCollection', features };
 }
 
-export default function MapView({ markers, focusId, filtersKey }: MapViewProps) {
+export default function MapView({
+  markers,
+  focusId,
+  filtersKey,
+  selectedCase = null,
+  radiusKm = 0,
+}: MapViewProps) {
   const t = useTranslations('map');
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const currentStyleRef = useRef<string | null>(null);
   const markersRef = useRef<MapMarker[]>(markers);
+  const selectedCaseRef = useRef<MapCase | null>(selectedCase);
+  const radiusKmRef = useRef<number>(radiusKm);
   const focusHandledRef = useRef<string | null>(null);
   const appliedFiltersKeyRef = useRef<string | null>(null);
   const isDark = useIsDarkTheme();
@@ -202,6 +261,17 @@ export default function MapView({ markers, focusId, filtersKey }: MapViewProps) 
   useEffect(() => {
     markersRef.current = markers;
   }, [markers]);
+
+  useEffect(() => {
+    selectedCaseRef.current = selectedCase;
+    radiusKmRef.current = radiusKm;
+    const map = mapRef.current;
+    if (!map) return;
+    const radiusSource = map.getSource(RADIUS_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+    if (radiusSource) {
+      radiusSource.setData(buildRadiusGeoJSON(selectedCase, radiusKm));
+    }
+  }, [selectedCase, radiusKm]);
 
   useEffect(() => {
     translationsRef.current = {
@@ -353,6 +423,32 @@ export default function MapView({ markers, focusId, filtersKey }: MapViewProps) 
 
       ensureIcons();
 
+      map.addSource(RADIUS_SOURCE_ID, {
+        type: 'geojson',
+        data: buildRadiusGeoJSON(selectedCaseRef.current, radiusKmRef.current),
+      });
+
+      map.addLayer({
+        id: 'crime-scene-radius-fill',
+        type: 'fill',
+        source: RADIUS_SOURCE_ID,
+        paint: {
+          'fill-color': '#ef4444',
+          'fill-opacity': 0.1,
+        },
+      });
+
+      map.addLayer({
+        id: 'crime-scene-radius-line',
+        type: 'line',
+        source: RADIUS_SOURCE_ID,
+        paint: {
+          'line-color': '#ef4444',
+          'line-width': 2,
+          'line-dasharray': [3, 2],
+        },
+      });
+
       map.addSource(SOURCE_ID, {
         type: 'geojson',
         data: toGeoJSON(markersRef.current, new Set(registeredColorRef.current.keys())),
@@ -394,9 +490,9 @@ export default function MapView({ markers, focusId, filtersKey }: MapViewProps) 
         filter: ['all', ['!', ['has', 'point_count']], ['!', ['has', 'iconId']], ['==', ['get', 'colocatedCount'], 1]],
         paint: {
           'circle-color': ['coalesce', ['get', 'dotColor'], primary],
-          'circle-radius': 7,
-          'circle-stroke-width': 2,
-          'circle-stroke-color': '#ffffff',
+          'circle-radius': ['case', ['==', ['get', 'isCrimeScene'], true], 10, 7],
+          'circle-stroke-width': ['case', ['==', ['get', 'isCrimeScene'], true], 3, 2],
+          'circle-stroke-color': ['case', ['==', ['get', 'isCrimeScene'], true], '#fde047', '#ffffff'],
         },
       });
 
@@ -472,7 +568,13 @@ export default function MapView({ markers, focusId, filtersKey }: MapViewProps) 
       if (!feature) return;
       const props = feature.properties as unknown as MarkerProperties;
       const geometry = feature.geometry as GeoJSON.Point;
-      openPopup(map, geometry.coordinates as [number, number], props, translationsRef.current);
+      openPopup(
+        map,
+        geometry.coordinates as [number, number],
+        props,
+        translationsRef.current,
+        selectedCaseRef.current,
+      );
     };
 
     map.on('click', 'unclustered-point', handleUnclusteredClick);
@@ -577,7 +679,8 @@ export default function MapView({ markers, focusId, filtersKey }: MapViewProps) 
         ...(target.addressText ? { addressText: target.addressText } : {}),
         colocatedCount: 1,
       },
-      translationsRef.current
+      translationsRef.current,
+      selectedCaseRef.current,
     );
   }, [focusId, markers]);
 
@@ -635,7 +738,8 @@ function openPopup(
   map: maplibregl.Map,
   coordinates: [number, number],
   props: MarkerProperties,
-  labels: { viewContact: string; directions: string }
+  labels: { viewContact: string; directions: string },
+  selectedCase?: MapCase | null,
 ): void {
   const container = document.createElement('div');
   // MapLibre popups have a white background regardless of app theme, so the
@@ -660,11 +764,33 @@ function openPopup(
     container.appendChild(addressLine);
   }
 
+  const isEventMarker = props.id.startsWith('evaddr_');
+
+  if (
+    !isEventMarker &&
+    selectedCase &&
+    selectedCase.latitude !== null &&
+    selectedCase.longitude !== null
+  ) {
+    const distKm = haversineDistanceKm(
+      selectedCase.latitude,
+      selectedCase.longitude,
+      coordinates[1],
+      coordinates[0],
+    );
+    const distLine = document.createElement('div');
+    distLine.className = 'text-xs font-medium text-red-700 pt-0.5';
+    distLine.textContent =
+      distKm < 1
+        ? `📍 ${Math.round(distKm * 1000)} m from crime scene`
+        : `📍 ${distKm.toFixed(2)} km from crime scene`;
+    container.appendChild(distLine);
+  }
+
   const links = document.createElement('div');
   links.className = 'flex gap-3 pt-1 text-xs';
 
   const contactLink = document.createElement('a');
-  const isEventMarker = props.id.startsWith('evaddr_');
   contactLink.href = isEventMarker
     ? `/events/${encodeURIComponent(props.personId)}`
     : `/people/${encodeURIComponent(props.personId)}`;
@@ -681,6 +807,46 @@ function openPopup(
   links.appendChild(directionsLink);
 
   container.appendChild(links);
+
+  if (!isEventMarker && selectedCase) {
+    const actionWrap = document.createElement('div');
+    actionWrap.className = 'pt-1.5 border-t border-gray-200 mt-1';
+    const flagBtn = document.createElement('button');
+    flagBtn.type = 'button';
+    flagBtn.className =
+      'w-full px-2 py-1 text-xs font-medium rounded bg-amber-100 hover:bg-amber-200 text-amber-900 transition-colors';
+    flagBtn.textContent = `+ Flag as Suspect in "${selectedCase.title}"`;
+    flagBtn.onclick = async () => {
+      flagBtn.disabled = true;
+      flagBtn.textContent = 'Saving...';
+      try {
+        const res = await fetch(`/api/events/${encodeURIComponent(selectedCase.id)}/people`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            personId: props.personId,
+            role: 'Proximity Subject',
+            involvementType: 'SUSPECT',
+            verificationStatus: 'HYPOTHESIS',
+            confidence: 'MEDIUM',
+          }),
+        });
+        if (res.ok || res.status === 409) {
+          flagBtn.textContent = '✓ Flagged in Case';
+          flagBtn.className =
+            'w-full px-2 py-1 text-xs font-medium rounded bg-emerald-100 text-emerald-900';
+        } else {
+          flagBtn.textContent = 'Failed — try again';
+          flagBtn.disabled = false;
+        }
+      } catch {
+        flagBtn.textContent = 'Failed — try again';
+        flagBtn.disabled = false;
+      }
+    };
+    actionWrap.appendChild(flagBtn);
+    container.appendChild(actionWrap);
+  }
 
   new maplibregl.Popup({ closeButton: true, offset: 12 }).setLngLat(coordinates).setDOMContent(container).addTo(map);
 }

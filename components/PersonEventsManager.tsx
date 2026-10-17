@@ -35,6 +35,9 @@ interface PersonEventEntry {
   id: string;
   eventId: string;
   role: string | null;
+  involvementType?: string;
+  verificationStatus?: string;
+  confidence?: string | null;
   notes: string | null;
   event: EventItem;
 }
@@ -51,6 +54,38 @@ interface PersonEventsManagerProps {
   nameOrder?: 'WESTERN' | 'EASTERN';
   nameDisplayFormat?: NameDisplayFormat;
 }
+
+const INVOLVEMENT_LABELS: Record<string, string> = {
+  SUSPECT: 'Suspect (Nghi phạm)',
+  PERSON_OF_INTEREST: 'Person of Interest (Nghi vấn)',
+  ACCOMPLICE: 'Accomplice (Đồng phạm)',
+  WITNESS: 'Witness (Nhân chứng)',
+  VICTIM: 'Victim (Nạn nhân)',
+  INFORMANT: 'Informant (Nguồn tin)',
+};
+
+const INVOLVEMENT_BADGE_CLASSES: Record<string, string> = {
+  SUSPECT: 'bg-red-500/15 text-red-700 dark:text-red-300 border border-red-500/30',
+  PERSON_OF_INTEREST: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30',
+  ACCOMPLICE: 'bg-orange-500/15 text-orange-700 dark:text-orange-300 border border-orange-500/30',
+  WITNESS: 'bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30',
+  VICTIM: 'bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30',
+  INFORMANT: 'bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/30',
+};
+
+const VERIFICATION_LABELS: Record<string, string> = {
+  HYPOTHESIS: '❓ Hypothesis',
+  INVESTIGATING: '🔍 Investigating',
+  CONFIRMED: '🚨 Confirmed',
+  RULED_OUT: '✓ Ruled Out',
+};
+
+const VERIFICATION_BADGE_CLASSES: Record<string, string> = {
+  HYPOTHESIS: 'bg-yellow-500/15 text-yellow-800 dark:text-yellow-300 border border-dashed border-yellow-500/60',
+  INVESTIGATING: 'bg-orange-500/15 text-orange-800 dark:text-orange-300 border border-dashed border-orange-500/60',
+  CONFIRMED: 'bg-red-600 text-white font-semibold shadow-sm',
+  RULED_OUT: 'bg-muted/40 text-muted-foreground line-through border border-border',
+};
 
 const inputClass =
   'block w-full rounded-md border border-input bg-surface text-foreground shadow-sm focus:border-primary focus:ring-primary sm:text-sm px-3 py-2';
@@ -69,11 +104,15 @@ export default function PersonEventsManager({
   const router = useRouter();
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showRuledOut, setShowRuledOut] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [formData, setFormData] = useState({
     eventId: '',
     role: '',
+    involvementType: 'SUSPECT',
+    verificationStatus: 'HYPOTHESIS',
+    confidence: '',
     notes: '',
   });
 
@@ -81,6 +120,13 @@ export default function PersonEventsManager({
   const unlinkedEvents = availableEvents.filter(
     (ev) => !existingEventIds.has(ev.id)
   );
+
+  const ruledOutCount = personEvents.filter(
+    (pe) => pe.verificationStatus === 'RULED_OUT'
+  ).length;
+  const visiblePersonEvents = showRuledOut
+    ? personEvents
+    : personEvents.filter((pe) => pe.verificationStatus !== 'RULED_OUT');
 
   // Compute co-participants across all events this person is part of
   const coParticipantsMap = new Map<
@@ -92,6 +138,7 @@ export default function PersonEventsManager({
   >();
 
   for (const pe of personEvents) {
+    if (pe.verificationStatus === 'RULED_OUT' && !showRuledOut) continue;
     for (const participant of pe.event.people) {
       if (participant.personId === personId) continue;
       const existing = coParticipantsMap.get(participant.personId);
@@ -132,6 +179,9 @@ export default function PersonEventsManager({
         body: JSON.stringify({
           personId,
           role: formData.role.trim() || null,
+          involvementType: formData.involvementType || 'SUSPECT',
+          verificationStatus: formData.verificationStatus || 'HYPOTHESIS',
+          confidence: formData.confidence || null,
           notes: formData.notes.trim() || null,
         }),
       });
@@ -145,12 +195,42 @@ export default function PersonEventsManager({
 
       toast.success(t('addEvent'));
       setShowAddModal(false);
-      setFormData({ eventId: '', role: '', notes: '' });
+      setFormData({
+        eventId: '',
+        role: '',
+        involvementType: 'SUSPECT',
+        verificationStatus: 'HYPOTHESIS',
+        confidence: '',
+        notes: '',
+      });
       router.refresh();
     } catch {
       setError('Unable to connect to server.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleQuickStatusChange = async (
+    pe: PersonEventEntry,
+    newStatus: string
+  ) => {
+    try {
+      const response = await fetch(`/api/events/${pe.event.id}/people`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: pe.id,
+          personId,
+          verificationStatus: newStatus,
+        }),
+      });
+      if (response.ok) {
+        toast.success(`Updated status: ${VERIFICATION_LABELS[newStatus] || newStatus}`);
+        router.refresh();
+      }
+    } catch {
+      toast.error('Failed to update status');
     }
   };
 
@@ -173,10 +253,28 @@ export default function PersonEventsManager({
   return (
     <div className="border border-border rounded-lg p-4 space-y-6">
       <div>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-foreground">
-            {t('title')} ({personEvents.length})
-          </h3>
+        <div className="flex items-center justify-between gap-2 flex-wrap mb-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-lg font-semibold text-foreground">
+              {t('title')} ({visiblePersonEvents.length}
+              {ruledOutCount > 0 && !showRuledOut ? ` / ${personEvents.length}` : ''})
+            </h3>
+            {ruledOutCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowRuledOut((prev) => !prev)}
+                className={`text-xs px-2.5 py-0.5 rounded-full border transition-colors ${
+                  showRuledOut
+                    ? 'bg-primary/15 text-primary border-primary/40 font-medium'
+                    : 'bg-muted/20 text-muted-foreground border-border hover:text-foreground'
+                }`}
+              >
+                {showRuledOut
+                  ? `Hide Ruled-Out (${ruledOutCount})`
+                  : `Show Ruled-Out (${ruledOutCount})`}
+              </button>
+            )}
+          </div>
           {unlinkedEvents.length > 0 && (
             <Button
               type="button"
@@ -186,6 +284,9 @@ export default function PersonEventsManager({
                 setFormData({
                   eventId: unlinkedEvents[0]?.id || '',
                   role: '',
+                  involvementType: 'SUSPECT',
+                  verificationStatus: 'HYPOTHESIS',
+                  confidence: '',
                   notes: '',
                 });
                 setError('');
@@ -197,45 +298,95 @@ export default function PersonEventsManager({
           )}
         </div>
 
-        {personEvents.length === 0 ? (
+        {visiblePersonEvents.length === 0 ? (
           <p className="text-sm text-muted">{t('noEvents')}</p>
         ) : (
           <div className="space-y-2">
-            {personEvents.map((pe) => (
-              <div
-                key={pe.id}
-                className="flex items-start justify-between p-3 bg-surface-elevated rounded-lg"
-              >
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Link
-                      href={`/events/${pe.event.id}`}
-                      className="text-sm font-medium text-primary hover:underline"
-                    >
-                      {pe.event.title}
-                    </Link>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-surface text-muted">
-                      {tStatus(pe.event.status)}
-                    </span>
-                    {pe.role && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary">
-                        {pe.role}
+            {visiblePersonEvents.map((pe) => {
+              const invType = pe.involvementType || 'SUSPECT';
+              const verStatus = pe.verificationStatus || 'HYPOTHESIS';
+              return (
+                <div
+                  key={pe.id}
+                  className={`flex flex-col sm:flex-row sm:items-start justify-between gap-2 p-3 rounded-lg border ${
+                    verStatus === 'RULED_OUT'
+                      ? 'bg-muted/10 border-border opacity-65'
+                      : verStatus === 'CONFIRMED'
+                      ? 'bg-red-500/5 border-red-500/40'
+                      : 'bg-surface-elevated border-border'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Link
+                        href={`/events/${pe.event.id}`}
+                        className={`text-sm font-semibold hover:underline ${
+                          verStatus === 'RULED_OUT'
+                            ? 'text-muted-foreground line-through'
+                            : 'text-primary'
+                        }`}
+                      >
+                        {pe.event.title}
+                      </Link>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-surface text-muted">
+                        {tStatus(pe.event.status)}
                       </span>
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                          INVOLVEMENT_BADGE_CLASSES[invType] ||
+                          INVOLVEMENT_BADGE_CLASSES.SUSPECT
+                        }`}
+                      >
+                        {INVOLVEMENT_LABELS[invType] || invType}
+                      </span>
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded text-xs ${
+                          VERIFICATION_BADGE_CLASSES[verStatus] ||
+                          VERIFICATION_BADGE_CLASSES.HYPOTHESIS
+                        }`}
+                      >
+                        {VERIFICATION_LABELS[verStatus] || verStatus}
+                      </span>
+                      {pe.confidence && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-surface border border-border text-muted-foreground">
+                          {pe.confidence}
+                        </span>
+                      )}
+                      {pe.role && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary">
+                          {pe.role}
+                        </span>
+                      )}
+                    </div>
+                    {pe.notes && (
+                      <p className="text-xs text-muted mt-1">📋 {pe.notes}</p>
                     )}
                   </div>
-                  {pe.notes && (
-                    <p className="text-xs text-muted mt-1">{pe.notes}</p>
-                  )}
+                  <div className="flex items-center gap-2 self-end sm:self-center">
+                    <select
+                      aria-label="Verification status"
+                      value={verStatus}
+                      onChange={(e) =>
+                        handleQuickStatusChange(pe, e.target.value)
+                      }
+                      className="text-xs rounded border border-border bg-surface px-2 py-1 text-foreground"
+                    >
+                      <option value="HYPOTHESIS">❓ Hypothesis</option>
+                      <option value="INVESTIGATING">🔍 Investigating</option>
+                      <option value="CONFIRMED">🚨 Confirmed</option>
+                      <option value="RULED_OUT">✓ Ruled Out</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => handleRemove(pe.event.id)}
+                      className="text-xs text-error hover:underline"
+                    >
+                      {tCommon('delete')}
+                    </button>
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleRemove(pe.event.id)}
-                  className="text-xs text-error hover:underline"
-                >
-                  {tCommon('delete')}
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -334,24 +485,93 @@ export default function PersonEventsManager({
                 </select>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1">
-                  {tDetail('role')}
-                </label>
-                <input
-                  type="text"
-                  value={formData.role}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, role: e.target.value }))
-                  }
-                  placeholder={tDetail('rolePlaceholder')}
-                  className={inputClass}
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">
+                    Involvement Type
+                  </label>
+                  <select
+                    value={formData.involvementType}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        involvementType: e.target.value,
+                      }))
+                    }
+                    className={inputClass}
+                  >
+                    <option value="SUSPECT">Suspect (Nghi phạm)</option>
+                    <option value="PERSON_OF_INTEREST">Person of Interest (Nghi vấn)</option>
+                    <option value="ACCOMPLICE">Accomplice (Đồng phạm)</option>
+                    <option value="WITNESS">Witness (Nhân chứng)</option>
+                    <option value="VICTIM">Victim (Nạn nhân)</option>
+                    <option value="INFORMANT">Informant (Nguồn tin)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">
+                    Verification Status
+                  </label>
+                  <select
+                    value={formData.verificationStatus}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        verificationStatus: e.target.value,
+                      }))
+                    }
+                    className={inputClass}
+                  >
+                    <option value="HYPOTHESIS">Hypothesis (Giả thuyết)</option>
+                    <option value="INVESTIGATING">Investigating (Đang xác minh)</option>
+                    <option value="CONFIRMED">Confirmed (Đã xác nhận)</option>
+                    <option value="RULED_OUT">Ruled Out (Đã loại trừ)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">
+                    Confidence Level
+                  </label>
+                  <select
+                    value={formData.confidence}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        confidence: e.target.value,
+                      }))
+                    }
+                    className={inputClass}
+                  >
+                    <option value="">— Optional —</option>
+                    <option value="HIGH">High (Cao)</option>
+                    <option value="MEDIUM">Medium (Trung bình)</option>
+                    <option value="LOW">Low (Thấp)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">
+                    {tDetail('role')}
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.role}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, role: e.target.value }))
+                    }
+                    placeholder={tDetail('rolePlaceholder')}
+                    className={inputClass}
+                  />
+                </div>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">
-                  {tDetail('notes')}
+                  {tDetail('notes')} (Evidence / Alibi)
                 </label>
                 <textarea
                   rows={2}

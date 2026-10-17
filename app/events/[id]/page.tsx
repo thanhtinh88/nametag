@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { getTranslations } from 'next-intl/server';
 import { getUserDisplayPreferences } from '@/lib/user-preferences';
 import { formatDate } from '@/lib/date-format';
+import { formatGraphName } from '@/lib/nameUtils';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
 import EventPeopleManager from '@/components/EventPeopleManager';
 import EventRelationshipManager from '@/components/EventRelationshipManager';
@@ -71,6 +72,31 @@ export default async function EventDetailPage({
               },
             },
           },
+        },
+        journalEntries: {
+          where: { journalEntry: { deletedAt: null } },
+          include: {
+            journalEntry: {
+              include: {
+                people: {
+                  where: { person: { deletedAt: null } },
+                  include: {
+                    person: {
+                      select: {
+                        id: true,
+                        name: true,
+                        surname: true,
+                        nickname: true,
+                        displayNameOverride: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          orderBy: { journalEntry: { date: 'desc' } },
+          take: 5,
         },
       },
     }),
@@ -319,7 +345,7 @@ export default async function EventDetailPage({
             )}
           </div>
 
-          {/* Participants Manager */}
+          {/* Participants / Suspects Manager */}
           <EventPeopleManager
             eventId={event.id}
             participants={event.people}
@@ -327,6 +353,74 @@ export default async function EventDetailPage({
             nameOrder={nameOrder}
             nameDisplayFormat={nameDisplayFormat}
           />
+
+          {/* Case Investigation Log (Journal) */}
+          <div className="bg-surface shadow rounded-lg p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">
+                  Investigation Log (Nhật ký điều tra vụ án)
+                </h2>
+                <p className="text-xs text-muted-foreground">
+                  Chronological field notes, witness interviews, and evidence updates linked to this case
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Link
+                  href={`/journal?event=${event.id}`}
+                  className="text-xs text-primary border border-primary/30 rounded-md px-3 py-1.5 hover:bg-primary/10 transition-colors"
+                >
+                  View All ({event.journalEntries.length})
+                </Link>
+                <Link
+                  href={`/journal/new?event=${event.id}`}
+                  className="text-xs font-medium bg-primary text-on-primary rounded-md px-3 py-1.5 hover:opacity-90 transition-opacity"
+                >
+                  + Add Log Entry
+                </Link>
+              </div>
+            </div>
+
+            {event.journalEntries.length > 0 ? (
+              <div className="space-y-3">
+                {event.journalEntries.map(({ journalEntry }) => (
+                  <Link
+                    key={journalEntry.id}
+                    href={`/journal/${journalEntry.id}`}
+                    className="block p-3 rounded-lg border border-border bg-muted/10 hover:border-primary/40 hover:bg-muted/20 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <span className="text-sm font-semibold text-foreground">
+                        {journalEntry.title}
+                      </span>
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
+                        {formatDate(new Date(journalEntry.date), dateFormat)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground line-clamp-2">
+                      {journalEntry.body.replace(/[#*_`~>-]/g, '').trim()}
+                    </p>
+                    {journalEntry.people.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {journalEntry.people.map(({ person }) => (
+                          <span
+                            key={person.id}
+                            className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary"
+                          >
+                            {formatGraphName(person, nameOrder, nameDisplayFormat)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No investigation log entries recorded for this case yet.
+              </p>
+            )}
+          </div>
 
           {/* Related Events Manager */}
           <EventRelationshipManager

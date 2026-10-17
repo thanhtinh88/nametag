@@ -1,5 +1,23 @@
 // lib/map/types.ts
 
+export interface MapCaseLink {
+  eventId: string;
+  eventTitle: string;
+  eventStatus: string;
+  role: string | null;
+  involvementType: string;
+  verificationStatus: string;
+  confidence: string | null;
+}
+
+export interface MapCase {
+  id: string;
+  title: string;
+  status: string;
+  latitude: number | null;
+  longitude: number | null;
+}
+
 /** One plottable point: a geocoded address or a vCard GEO location. */
 export interface MapMarker {
   /** "addr_<addressId>", "loc_<locationId>", or "evaddr_<eventAddressId>", used by /map?focus= deep links */
@@ -22,6 +40,10 @@ export interface MapMarker {
   hasPhoto: boolean;
   /** First group's color (in returned order), like the network graph; null falls back to the default dot color */
   groupColor: string | null;
+  /** Optional investigation metadata when events are loaded */
+  markerType?: 'subject' | 'crime_scene';
+  eventStatus?: string;
+  caseLinks?: MapCaseLink[];
 }
 
 export interface MapGroup {
@@ -40,6 +62,7 @@ export interface UnlocatedPerson {
 export interface MapMarkersResponse {
   markers: MapMarker[];
   groups: MapGroup[];
+  cases?: MapCase[];
   pendingCount: number;
   failedCount: number;
   /** Contacts with failed addresses, name-sorted, for the map's unlocated drawer */

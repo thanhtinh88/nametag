@@ -29,6 +29,19 @@ export const GET = withAuth(async (_request, session, context) => {
             },
           },
         },
+        events: {
+          where: { event: { deletedAt: null } },
+          include: {
+            event: {
+              select: {
+                id: true,
+                title: true,
+                status: true,
+                category: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -54,7 +67,7 @@ export const PUT = withAuth(async (request, session, context) => {
       return validation.response;
     }
 
-    const { title, date, hasTime, body: entryBody, personIds, updateLastContact } = validation.data;
+    const { title, date, hasTime, body: entryBody, personIds, eventIds, updateLastContact } = validation.data;
 
     const existingEntry = await prisma.journalEntry.findUnique({
       where: {
@@ -78,17 +91,33 @@ export const PUT = withAuth(async (request, session, context) => {
       }
     }
 
+    // Validate eventIds belong to the current user
+    if (eventIds && eventIds.length > 0 && prisma.event?.count) {
+      const validEventCount = await prisma.event.count({
+        where: { id: { in: eventIds }, userId: session.user.id, deletedAt: null },
+      });
+      if (validEventCount !== eventIds.length) {
+        return apiResponse.error('One or more event IDs are invalid');
+      }
+    }
+
     const sanitizedTitle = sanitizeName(title) || title;
     const sanitizedBody = sanitizeNotes(entryBody) || entryBody;
     const entryDate = hasTime
       ? new Date(date)
       : new Date(`${date.slice(0, 10)}T00:00:00.000Z`);
 
-    // Remove existing people associations and recreate atomically
+    // Remove existing people and event associations and recreate atomically
     const entry = await prisma.$transaction(async (tx) => {
       await tx.journalEntryPerson.deleteMany({
         where: { journalEntryId: id },
       });
+
+      if (tx.journalEntryEvent?.deleteMany) {
+        await tx.journalEntryEvent.deleteMany({
+          where: { journalEntryId: id },
+        });
+      }
 
       return tx.journalEntry.update({
         where: { id },
@@ -104,6 +133,13 @@ export const PUT = withAuth(async (request, session, context) => {
               })),
             },
           }),
+          ...(eventIds && eventIds.length > 0 && {
+            events: {
+              create: eventIds.map((eventId) => ({
+                event: { connect: { id: eventId } },
+              })),
+            },
+          }),
         },
         include: {
           people: {
@@ -116,6 +152,19 @@ export const PUT = withAuth(async (request, session, context) => {
                   surname: true,
                   nickname: true,
                   displayNameOverride: true,
+                },
+              },
+            },
+          },
+          events: {
+            where: { event: { deletedAt: null } },
+            include: {
+              event: {
+                select: {
+                  id: true,
+                  title: true,
+                  status: true,
+                  category: true,
                 },
               },
             },

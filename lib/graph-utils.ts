@@ -8,6 +8,8 @@ export interface GraphNode {
   colors: string[];
   isCenter: boolean;
   photo?: string | null;
+  nodeType?: 'person' | 'event' | 'user';
+  eventStatus?: string;
 }
 
 export interface GraphEdge {
@@ -17,6 +19,9 @@ export interface GraphEdge {
   color: string;
   sourceLabel?: string;
   targetLabel?: string;
+  lineStyle?: 'solid' | 'dashed' | 'dotted';
+  verificationStatus?: string;
+  involvementType?: string;
 }
 
 type PersonId = Prisma.PersonGetPayload<{
