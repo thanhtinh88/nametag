@@ -345,6 +345,65 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         session.user.nickname = token.nickname as string | null;
         session.user.email = token.email as string;
         session.user.photo = token.photo as string | null;
+
+        // If the database was reset/re-seeded while the browser still holds an old JWT cookie,
+        // token.id may no longer match the current User row in the database.
+        // Re-resolve by email (or fallback to demo@nametag.one in dev) so the active session
+        // immediately sees the newly seeded data without showing an empty database.
+        if (process.env.NODE_ENV !== 'test' && session.user.id) {
+          try {
+            const { prisma } = await import('@/lib/prisma');
+            const existingById = await prisma.user.findUnique({
+              where: { id: session.user.id },
+              select: { id: true },
+            });
+            if (!existingById) {
+              const fallbackUser =
+                (session.user.email
+                  ? await prisma.user.findUnique({
+                      where: { email: session.user.email.toLowerCase() },
+                      select: {
+                        id: true,
+                        email: true,
+                        name: true,
+                        surname: true,
+                        nickname: true,
+                        photo: true,
+                      },
+                    })
+                  : null) ||
+                (process.env.NODE_ENV !== 'production'
+                  ? await prisma.user.findUnique({
+                      where: { email: 'demo@nametag.one' },
+                      select: {
+                        id: true,
+                        email: true,
+                        name: true,
+                        surname: true,
+                        nickname: true,
+                        photo: true,
+                      },
+                    })
+                  : null);
+
+              if (fallbackUser) {
+                session.user.id = fallbackUser.id;
+                session.user.email = fallbackUser.email;
+                session.user.name = fallbackUser.name;
+                session.user.surname = fallbackUser.surname;
+                session.user.nickname = fallbackUser.nickname;
+                session.user.photo = fallbackUser.photo;
+              } else {
+                return {
+                  ...session,
+                  user: undefined as unknown as typeof session.user,
+                };
+              }
+            }
+          } catch {
+            // Ignore DB lookup errors during session resolution
+          }
+        }
       }
       return session;
     },

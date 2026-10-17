@@ -38,12 +38,22 @@ async function main() {
   await prisma.personGroup.deleteMany();
   await prisma.person.deleteMany();
   await prisma.group.deleteMany();
-  await prisma.user.deleteMany();
 
-  // 1. Create Demo Investigator User (Vietnamese locale & Eastern name order by default)
+  // 1. Upsert Demo Investigator User (preserving user.id so active browser sessions stay valid)
   const hashedPassword = await bcrypt.hash('password123', 10);
-  const user = await prisma.user.create({
-    data: {
+  await prisma.user.upsert({
+    where: { email: 'demo@nametag.one' },
+    update: {
+      password: hashedPassword,
+      name: 'Minh',
+      surname: 'Trần',
+      nickname: 'Điều tra viên',
+      language: 'vi-VN',
+      nameOrder: 'EASTERN',
+      dateFormat: 'DMY',
+      emailVerified: true,
+    },
+    create: {
       email: 'demo@nametag.one',
       password: hashedPassword,
       name: 'Minh',
@@ -57,7 +67,10 @@ async function main() {
     },
   });
 
-  console.log('✓ Đã tạo tài khoản Điều tra viên: demo@nametag.one (mật khẩu: password123)');
+  // Seed investigation data for ALL existing users (including demo@nametag.one and any custom account)
+  const allUsers = await prisma.user.findMany();
+  for (const user of allUsers) {
+    console.log(`\n👤 Đang nạp dữ liệu điều tra mẫu cho tài khoản: ${user.email} (ID: ${user.id})...`);
 
   // 2. Create Investigation Relationship Types
   const bossType = await prisma.relationshipType.create({
@@ -1290,6 +1303,7 @@ async function main() {
   console.log(
     `✓ Đã tạo 3 biên bản Nhật ký điều tra (${logEntry1.id}, ${logEntry2.id}, ${logEntry3.id}) gắn kết cả Vụ án và Đối tượng`
   );
+  }
 
   console.log('\n🎉 Khởi tạo cơ sở dữ liệu mẫu điều tra thành công!');
   console.log('\nThông tin đăng nhập Demo:');
