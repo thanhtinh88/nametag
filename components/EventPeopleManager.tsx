@@ -39,15 +39,6 @@ interface EventPeopleManagerProps {
   nameDisplayFormat?: NameDisplayFormat;
 }
 
-const INVOLVEMENT_LABELS: Record<string, string> = {
-  SUSPECT: 'Suspect (Nghi phạm)',
-  PERSON_OF_INTEREST: 'Person of Interest (Nghi vấn)',
-  ACCOMPLICE: 'Accomplice (Đồng phạm)',
-  WITNESS: 'Witness (Nhân chứng)',
-  VICTIM: 'Victim (Nạn nhân)',
-  INFORMANT: 'Informant (Nguồn tin)',
-};
-
 const INVOLVEMENT_BADGE_CLASSES: Record<string, string> = {
   SUSPECT: 'bg-red-500/15 text-red-700 dark:text-red-300 border border-red-500/30',
   PERSON_OF_INTEREST: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30',
@@ -55,13 +46,6 @@ const INVOLVEMENT_BADGE_CLASSES: Record<string, string> = {
   WITNESS: 'bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30',
   VICTIM: 'bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30',
   INFORMANT: 'bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/30',
-};
-
-const VERIFICATION_LABELS: Record<string, string> = {
-  HYPOTHESIS: '❓ Hypothesis (Giả thuyết)',
-  INVESTIGATING: '🔍 Investigating (Đang xác minh)',
-  CONFIRMED: '🚨 Confirmed (Đã xác nhận)',
-  RULED_OUT: '✓ Ruled Out (Đã loại trừ)',
 };
 
 const VERIFICATION_BADGE_CLASSES: Record<string, string> = {
@@ -82,9 +66,32 @@ export default function EventPeopleManager({
   nameDisplayFormat,
 }: EventPeopleManagerProps) {
   const t = useTranslations('events.detail');
+  const tEvents = useTranslations('events');
   const tCommon = useTranslations('common');
   const router = useRouter();
   const { refreshIndex } = useSearchIndex();
+
+  const involvementLabels: Record<string, string> = {
+    SUSPECT: tEvents('involvementTypes.SUSPECT'),
+    PERSON_OF_INTEREST: tEvents('involvementTypes.PERSON_OF_INTEREST'),
+    ACCOMPLICE: tEvents('involvementTypes.ACCOMPLICE'),
+    WITNESS: tEvents('involvementTypes.WITNESS'),
+    VICTIM: tEvents('involvementTypes.VICTIM'),
+    INFORMANT: tEvents('involvementTypes.INFORMANT'),
+  };
+
+  const verificationLabels: Record<string, string> = {
+    HYPOTHESIS: tEvents('verificationStatuses.HYPOTHESIS'),
+    INVESTIGATING: tEvents('verificationStatuses.INVESTIGATING'),
+    CONFIRMED: tEvents('verificationStatuses.CONFIRMED'),
+    RULED_OUT: tEvents('verificationStatuses.RULED_OUT'),
+  };
+
+  const confidenceLabels: Record<string, string> = {
+    HIGH: tEvents('confidenceLevels.HIGH'),
+    MEDIUM: tEvents('confidenceLevels.MEDIUM'),
+    LOW: tEvents('confidenceLevels.LOW'),
+  };
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -116,7 +123,7 @@ export default function EventPeopleManager({
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.personId) {
-      setError('Please select a person');
+      setError(t('selectPerson'));
       return;
     }
 
@@ -140,7 +147,7 @@ export default function EventPeopleManager({
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.error || 'Failed to add person to event');
+        setError(data.error || tEvents('errorSaving'));
         setIsLoading(false);
         return;
       }
@@ -158,7 +165,7 @@ export default function EventPeopleManager({
       router.refresh();
       refreshIndex();
     } catch {
-      setError('Unable to connect to server. Please check your connection and try again.');
+      setError(tEvents('errorSaving'));
     } finally {
       setIsLoading(false);
     }
@@ -189,7 +196,7 @@ export default function EventPeopleManager({
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.error || 'Failed to update participant');
+        setError(data.error || tEvents('errorSaving'));
         setIsLoading(false);
         return;
       }
@@ -199,7 +206,7 @@ export default function EventPeopleManager({
       setSelectedParticipant(null);
       router.refresh();
     } catch {
-      setError('Unable to connect to server. Please check your connection and try again.');
+      setError(tEvents('errorSaving'));
     } finally {
       setIsLoading(false);
     }
@@ -220,11 +227,15 @@ export default function EventPeopleManager({
         }),
       });
       if (response.ok) {
-        toast.success(`Updated status: ${VERIFICATION_LABELS[newStatus] || newStatus}`);
+        toast.success(
+          tEvents('statusUpdatedToast', {
+            status: verificationLabels[newStatus] || newStatus,
+          })
+        );
         router.refresh();
       }
     } catch {
-      toast.error('Failed to update status');
+      toast.error(tEvents('errorSaving'));
     }
   };
 
@@ -244,7 +255,7 @@ export default function EventPeopleManager({
 
       if (!response.ok) {
         const data = await response.json();
-        setError(data.error || 'Failed to remove participant.');
+        setError(data.error || tEvents('errorSaving'));
         return;
       }
 
@@ -253,7 +264,7 @@ export default function EventPeopleManager({
       router.refresh();
       refreshIndex();
     } catch {
-      setError('Unable to connect to server. Please check your connection and try again.');
+      setError(tEvents('errorSaving'));
     } finally {
       setIsLoading(false);
     }
@@ -298,8 +309,8 @@ export default function EventPeopleManager({
               }`}
             >
               {showRuledOut
-                ? `Hide Ruled-Out (${ruledOutCount})`
-                : `Show Ruled-Out (${ruledOutCount})`}
+                ? tEvents('hideRuledOutCount', { count: ruledOutCount })
+                : tEvents('showRuledOutCount', { count: ruledOutCount })}
             </button>
           )}
         </div>
@@ -380,7 +391,7 @@ export default function EventPeopleManager({
                           INVOLVEMENT_BADGE_CLASSES.SUSPECT
                         }`}
                       >
-                        {INVOLVEMENT_LABELS[invType] || invType}
+                        {involvementLabels[invType] || invType}
                       </span>
                       <span
                         className={`inline-flex items-center px-2 py-0.5 rounded text-xs ${
@@ -388,11 +399,13 @@ export default function EventPeopleManager({
                           VERIFICATION_BADGE_CLASSES.HYPOTHESIS
                         }`}
                       >
-                        {VERIFICATION_LABELS[verStatus] || verStatus}
+                        {verificationLabels[verStatus] || verStatus}
                       </span>
                       {participant.confidence && (
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-surface-elevated border border-border text-muted-foreground">
-                          Confidence: {participant.confidence}
+                          {tEvents('confidencePrefix', {
+                            level: confidenceLabels[participant.confidence] || participant.confidence,
+                          })}
                         </span>
                       )}
                       {participant.role && (
@@ -411,17 +424,17 @@ export default function EventPeopleManager({
 
                 <div className="flex items-center gap-2 self-end sm:self-center flex-wrap">
                   <select
-                    aria-label="Verification status"
+                    aria-label={tEvents('verificationStatusLabel')}
                     value={verStatus}
                     onChange={(e) =>
                       handleQuickStatusChange(participant, e.target.value)
                     }
                     className="text-xs rounded border border-border bg-surface px-2 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                   >
-                    <option value="HYPOTHESIS">❓ Hypothesis</option>
-                    <option value="INVESTIGATING">🔍 Investigating</option>
-                    <option value="CONFIRMED">🚨 Confirmed</option>
-                    <option value="RULED_OUT">✓ Ruled Out</option>
+                    <option value="HYPOTHESIS">{verificationLabels.HYPOTHESIS}</option>
+                    <option value="INVESTIGATING">{verificationLabels.INVESTIGATING}</option>
+                    <option value="CONFIRMED">{verificationLabels.CONFIRMED}</option>
+                    <option value="RULED_OUT">{verificationLabels.RULED_OUT}</option>
                   </select>
                   <button
                     type="button"
@@ -475,7 +488,7 @@ export default function EventPeopleManager({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-1">
-                    Involvement Type
+                    {tEvents('involvementTypeLabel')}
                   </label>
                   <select
                     value={formData.involvementType}
@@ -487,18 +500,18 @@ export default function EventPeopleManager({
                     }
                     className={inputClass}
                   >
-                    <option value="SUSPECT">Suspect (Nghi phạm)</option>
-                    <option value="PERSON_OF_INTEREST">Person of Interest (Nghi vấn)</option>
-                    <option value="ACCOMPLICE">Accomplice (Đồng phạm)</option>
-                    <option value="WITNESS">Witness (Nhân chứng)</option>
-                    <option value="VICTIM">Victim (Nạn nhân)</option>
-                    <option value="INFORMANT">Informant (Nguồn tin)</option>
+                    <option value="SUSPECT">{involvementLabels.SUSPECT}</option>
+                    <option value="PERSON_OF_INTEREST">{involvementLabels.PERSON_OF_INTEREST}</option>
+                    <option value="ACCOMPLICE">{involvementLabels.ACCOMPLICE}</option>
+                    <option value="WITNESS">{involvementLabels.WITNESS}</option>
+                    <option value="VICTIM">{involvementLabels.VICTIM}</option>
+                    <option value="INFORMANT">{involvementLabels.INFORMANT}</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-1">
-                    Verification Status
+                    {tEvents('verificationStatusLabel')}
                   </label>
                   <select
                     value={formData.verificationStatus}
@@ -510,10 +523,10 @@ export default function EventPeopleManager({
                     }
                     className={inputClass}
                   >
-                    <option value="HYPOTHESIS">Hypothesis (Giả thuyết)</option>
-                    <option value="INVESTIGATING">Investigating (Đang xác minh)</option>
-                    <option value="CONFIRMED">Confirmed (Đã xác nhận)</option>
-                    <option value="RULED_OUT">Ruled Out (Đã loại trừ)</option>
+                    <option value="HYPOTHESIS">{verificationLabels.HYPOTHESIS}</option>
+                    <option value="INVESTIGATING">{verificationLabels.INVESTIGATING}</option>
+                    <option value="CONFIRMED">{verificationLabels.CONFIRMED}</option>
+                    <option value="RULED_OUT">{verificationLabels.RULED_OUT}</option>
                   </select>
                 </div>
               </div>
@@ -521,7 +534,7 @@ export default function EventPeopleManager({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-1">
-                    Confidence Level
+                    {tEvents('confidenceLevelLabel')}
                   </label>
                   <select
                     value={formData.confidence}
@@ -533,10 +546,10 @@ export default function EventPeopleManager({
                     }
                     className={inputClass}
                   >
-                    <option value="">— Optional —</option>
-                    <option value="HIGH">High (Cao)</option>
-                    <option value="MEDIUM">Medium (Trung bình)</option>
-                    <option value="LOW">Low (Thấp)</option>
+                    <option value="">{tEvents('confidenceOptional')}</option>
+                    <option value="HIGH">{confidenceLabels.HIGH}</option>
+                    <option value="MEDIUM">{confidenceLabels.MEDIUM}</option>
+                    <option value="LOW">{confidenceLabels.LOW}</option>
                   </select>
                 </div>
 
@@ -558,7 +571,7 @@ export default function EventPeopleManager({
 
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">
-                  {t('notes')} (Evidence / Alibi / Lý do nghi vấn hoặc loại trừ)
+                  {tEvents('evidenceNotesLabel')}
                 </label>
                 <textarea
                   rows={3}
@@ -566,7 +579,7 @@ export default function EventPeopleManager({
                   onChange={(e) =>
                     setFormData((prev) => ({ ...prev, notes: e.target.value }))
                   }
-                  placeholder="Enter evidence, alibi, witness testimony, or reason for hypothesis..."
+                  placeholder={tEvents('evidenceNotesPlaceholder')}
                   className={inputClass}
                 />
               </div>
@@ -610,7 +623,7 @@ export default function EventPeopleManager({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-1">
-                    Involvement Type
+                    {tEvents('involvementTypeLabel')}
                   </label>
                   <select
                     value={formData.involvementType}
@@ -622,18 +635,18 @@ export default function EventPeopleManager({
                     }
                     className={inputClass}
                   >
-                    <option value="SUSPECT">Suspect (Nghi phạm)</option>
-                    <option value="PERSON_OF_INTEREST">Person of Interest (Nghi vấn)</option>
-                    <option value="ACCOMPLICE">Accomplice (Đồng phạm)</option>
-                    <option value="WITNESS">Witness (Nhân chứng)</option>
-                    <option value="VICTIM">Victim (Nạn nhân)</option>
-                    <option value="INFORMANT">Informant (Nguồn tin)</option>
+                    <option value="SUSPECT">{involvementLabels.SUSPECT}</option>
+                    <option value="PERSON_OF_INTEREST">{involvementLabels.PERSON_OF_INTEREST}</option>
+                    <option value="ACCOMPLICE">{involvementLabels.ACCOMPLICE}</option>
+                    <option value="WITNESS">{involvementLabels.WITNESS}</option>
+                    <option value="VICTIM">{involvementLabels.VICTIM}</option>
+                    <option value="INFORMANT">{involvementLabels.INFORMANT}</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-1">
-                    Verification Status
+                    {tEvents('verificationStatusLabel')}
                   </label>
                   <select
                     value={formData.verificationStatus}
@@ -645,10 +658,10 @@ export default function EventPeopleManager({
                     }
                     className={inputClass}
                   >
-                    <option value="HYPOTHESIS">Hypothesis (Giả thuyết)</option>
-                    <option value="INVESTIGATING">Investigating (Đang xác minh)</option>
-                    <option value="CONFIRMED">Confirmed (Đã xác nhận)</option>
-                    <option value="RULED_OUT">Ruled Out (Đã loại trừ)</option>
+                    <option value="HYPOTHESIS">{verificationLabels.HYPOTHESIS}</option>
+                    <option value="INVESTIGATING">{verificationLabels.INVESTIGATING}</option>
+                    <option value="CONFIRMED">{verificationLabels.CONFIRMED}</option>
+                    <option value="RULED_OUT">{verificationLabels.RULED_OUT}</option>
                   </select>
                 </div>
               </div>
@@ -656,7 +669,7 @@ export default function EventPeopleManager({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-1">
-                    Confidence Level
+                    {tEvents('confidenceLevelLabel')}
                   </label>
                   <select
                     value={formData.confidence}
@@ -668,10 +681,10 @@ export default function EventPeopleManager({
                     }
                     className={inputClass}
                   >
-                    <option value="">— Optional —</option>
-                    <option value="HIGH">High (Cao)</option>
-                    <option value="MEDIUM">Medium (Trung bình)</option>
-                    <option value="LOW">Low (Thấp)</option>
+                    <option value="">{tEvents('confidenceOptional')}</option>
+                    <option value="HIGH">{confidenceLabels.HIGH}</option>
+                    <option value="MEDIUM">{confidenceLabels.MEDIUM}</option>
+                    <option value="LOW">{confidenceLabels.LOW}</option>
                   </select>
                 </div>
 
@@ -693,7 +706,7 @@ export default function EventPeopleManager({
 
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">
-                  {t('notes')} (Evidence / Alibi / Lý do nghi vấn hoặc loại trừ)
+                  {tEvents('evidenceNotesLabel')}
                 </label>
                 <textarea
                   rows={3}
@@ -701,7 +714,7 @@ export default function EventPeopleManager({
                   onChange={(e) =>
                     setFormData((prev) => ({ ...prev, notes: e.target.value }))
                   }
-                  placeholder="Enter evidence, alibi, witness testimony, or reason for hypothesis..."
+                  placeholder={tEvents('evidenceNotesPlaceholder')}
                   className={inputClass}
                 />
               </div>

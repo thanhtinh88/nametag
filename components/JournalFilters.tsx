@@ -156,7 +156,7 @@ export default function JournalFilters({
             availableItems={pillEvents.filter((ev) => !selectedEvents.some((s) => s.id === ev.id))}
             onAdd={handleAddEvent}
             onRemove={handleRemoveEvent}
-            placeholder="Filter by Case (Vụ án)..."
+            placeholder={t('filterByCase')}
             showAllOnFocus
           />
         )}

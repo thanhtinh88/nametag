@@ -359,10 +359,10 @@ export default async function EventDetailPage({
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-lg font-semibold text-foreground">
-                  Investigation Log (Nhật ký điều tra vụ án)
+                  {t('journalTitle', { count: event.journalEntries.length })}
                 </h2>
                 <p className="text-xs text-muted-foreground">
-                  Chronological field notes, witness interviews, and evidence updates linked to this case
+                  {t('journalDescription')}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -370,13 +370,13 @@ export default async function EventDetailPage({
                   href={`/journal?event=${event.id}`}
                   className="text-xs text-primary border border-primary/30 rounded-md px-3 py-1.5 hover:bg-primary/10 transition-colors"
                 >
-                  View All ({event.journalEntries.length})
+                  {t('viewAllJournalEntries', { count: event.journalEntries.length })}
                 </Link>
                 <Link
                   href={`/journal/new?event=${event.id}`}
                   className="text-xs font-medium bg-primary text-on-primary rounded-md px-3 py-1.5 hover:opacity-90 transition-opacity"
                 >
-                  + Add Log Entry
+                  {t('addJournalEntry')}
                 </Link>
               </div>
             </div>
@@ -417,7 +417,7 @@ export default async function EventDetailPage({
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">
-                No investigation log entries recorded for this case yet.
+                {t('noJournalEntries')}
               </p>
             )}
           </div>

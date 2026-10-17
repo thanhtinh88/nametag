@@ -56,6 +56,7 @@ export default function PersonalInfoSection({
   nameOrder,
 }: PersonalInfoSectionProps) {
   const t = useTranslations('people.form');
+  const tEvents = useTranslations('events');
 
   return (
     <div className="space-y-4">
@@ -375,7 +376,7 @@ export default function PersonalInfoSection({
                   htmlFor="connectedEventInvolvementType"
                   className="block text-sm font-medium text-muted mb-1"
                 >
-                  Involvement Type
+                  {tEvents('involvementTypeLabel')}
                 </label>
                 <select
                   id="connectedEventInvolvementType"
@@ -387,12 +388,12 @@ export default function PersonalInfoSection({
                   }
                   className={inputClass}
                 >
-                  <option value="SUSPECT">Suspect (Nghi phạm)</option>
-                  <option value="PERSON_OF_INTEREST">Person of Interest (Đối tượng nghi vấn)</option>
-                  <option value="ACCOMPLICE">Accomplice (Đồng phạm)</option>
-                  <option value="WITNESS">Witness (Nhân chứng)</option>
-                  <option value="VICTIM">Victim (Nạn nhân)</option>
-                  <option value="INFORMANT">Informant (Người cung cấp tin)</option>
+                  <option value="SUSPECT">{tEvents('involvementTypes.SUSPECT')}</option>
+                  <option value="PERSON_OF_INTEREST">{tEvents('involvementTypes.PERSON_OF_INTEREST')}</option>
+                  <option value="ACCOMPLICE">{tEvents('involvementTypes.ACCOMPLICE')}</option>
+                  <option value="WITNESS">{tEvents('involvementTypes.WITNESS')}</option>
+                  <option value="VICTIM">{tEvents('involvementTypes.VICTIM')}</option>
+                  <option value="INFORMANT">{tEvents('involvementTypes.INFORMANT')}</option>
                 </select>
               </div>
 
@@ -401,7 +402,7 @@ export default function PersonalInfoSection({
                   htmlFor="connectedEventVerificationStatus"
                   className="block text-sm font-medium text-muted mb-1"
                 >
-                  Verification Status
+                  {tEvents('verificationStatusLabel')}
                 </label>
                 <select
                   id="connectedEventVerificationStatus"
@@ -415,10 +416,10 @@ export default function PersonalInfoSection({
                   }
                   className={inputClass}
                 >
-                  <option value="HYPOTHESIS">Hypothesis (Giả thuyết)</option>
-                  <option value="INVESTIGATING">Investigating (Đang xác minh)</option>
-                  <option value="CONFIRMED">Confirmed (Đã xác nhận)</option>
-                  <option value="RULED_OUT">Ruled Out (Đã loại trừ)</option>
+                  <option value="HYPOTHESIS">{tEvents('verificationStatuses.HYPOTHESIS')}</option>
+                  <option value="INVESTIGATING">{tEvents('verificationStatuses.INVESTIGATING')}</option>
+                  <option value="CONFIRMED">{tEvents('verificationStatuses.CONFIRMED')}</option>
+                  <option value="RULED_OUT">{tEvents('verificationStatuses.RULED_OUT')}</option>
                 </select>
               </div>
             </div>

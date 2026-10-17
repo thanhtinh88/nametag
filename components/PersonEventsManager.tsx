@@ -55,15 +55,6 @@ interface PersonEventsManagerProps {
   nameDisplayFormat?: NameDisplayFormat;
 }
 
-const INVOLVEMENT_LABELS: Record<string, string> = {
-  SUSPECT: 'Suspect (Nghi phạm)',
-  PERSON_OF_INTEREST: 'Person of Interest (Nghi vấn)',
-  ACCOMPLICE: 'Accomplice (Đồng phạm)',
-  WITNESS: 'Witness (Nhân chứng)',
-  VICTIM: 'Victim (Nạn nhân)',
-  INFORMANT: 'Informant (Nguồn tin)',
-};
-
 const INVOLVEMENT_BADGE_CLASSES: Record<string, string> = {
   SUSPECT: 'bg-red-500/15 text-red-700 dark:text-red-300 border border-red-500/30',
   PERSON_OF_INTEREST: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30',
@@ -71,13 +62,6 @@ const INVOLVEMENT_BADGE_CLASSES: Record<string, string> = {
   WITNESS: 'bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30',
   VICTIM: 'bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30',
   INFORMANT: 'bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/30',
-};
-
-const VERIFICATION_LABELS: Record<string, string> = {
-  HYPOTHESIS: '❓ Hypothesis',
-  INVESTIGATING: '🔍 Investigating',
-  CONFIRMED: '🚨 Confirmed',
-  RULED_OUT: '✓ Ruled Out',
 };
 
 const VERIFICATION_BADGE_CLASSES: Record<string, string> = {
@@ -98,10 +82,33 @@ export default function PersonEventsManager({
   nameDisplayFormat,
 }: PersonEventsManagerProps) {
   const t = useTranslations('events.personSection');
+  const tEvents = useTranslations('events');
   const tStatus = useTranslations('events.status');
   const tDetail = useTranslations('events.detail');
   const tCommon = useTranslations('common');
   const router = useRouter();
+
+  const involvementLabels: Record<string, string> = {
+    SUSPECT: tEvents('involvementTypes.SUSPECT'),
+    PERSON_OF_INTEREST: tEvents('involvementTypes.PERSON_OF_INTEREST'),
+    ACCOMPLICE: tEvents('involvementTypes.ACCOMPLICE'),
+    WITNESS: tEvents('involvementTypes.WITNESS'),
+    VICTIM: tEvents('involvementTypes.VICTIM'),
+    INFORMANT: tEvents('involvementTypes.INFORMANT'),
+  };
+
+  const verificationLabels: Record<string, string> = {
+    HYPOTHESIS: tEvents('verificationStatuses.HYPOTHESIS'),
+    INVESTIGATING: tEvents('verificationStatuses.INVESTIGATING'),
+    CONFIRMED: tEvents('verificationStatuses.CONFIRMED'),
+    RULED_OUT: tEvents('verificationStatuses.RULED_OUT'),
+  };
+
+  const confidenceLabels: Record<string, string> = {
+    HIGH: tEvents('confidenceLevels.HIGH'),
+    MEDIUM: tEvents('confidenceLevels.MEDIUM'),
+    LOW: tEvents('confidenceLevels.LOW'),
+  };
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showRuledOut, setShowRuledOut] = useState(false);
@@ -188,7 +195,7 @@ export default function PersonEventsManager({
 
       const data = await response.json();
       if (!response.ok) {
-        setError(data.error || 'Failed to add to event');
+        setError(data.error || tEvents('errorSaving'));
         setIsLoading(false);
         return;
       }
@@ -205,7 +212,7 @@ export default function PersonEventsManager({
       });
       router.refresh();
     } catch {
-      setError('Unable to connect to server.');
+      setError(tEvents('errorSaving'));
     } finally {
       setIsLoading(false);
     }
@@ -226,11 +233,15 @@ export default function PersonEventsManager({
         }),
       });
       if (response.ok) {
-        toast.success(`Updated status: ${VERIFICATION_LABELS[newStatus] || newStatus}`);
+        toast.success(
+          tEvents('statusUpdatedToast', {
+            status: verificationLabels[newStatus] || newStatus,
+          })
+        );
         router.refresh();
       }
     } catch {
-      toast.error('Failed to update status');
+      toast.error(tEvents('errorSaving'));
     }
   };
 
@@ -270,8 +281,8 @@ export default function PersonEventsManager({
                 }`}
               >
                 {showRuledOut
-                  ? `Hide Ruled-Out (${ruledOutCount})`
-                  : `Show Ruled-Out (${ruledOutCount})`}
+                  ? tEvents('hideRuledOutCount', { count: ruledOutCount })
+                  : tEvents('showRuledOutCount', { count: ruledOutCount })}
               </button>
             )}
           </div>
@@ -337,7 +348,7 @@ export default function PersonEventsManager({
                           INVOLVEMENT_BADGE_CLASSES.SUSPECT
                         }`}
                       >
-                        {INVOLVEMENT_LABELS[invType] || invType}
+                        {involvementLabels[invType] || invType}
                       </span>
                       <span
                         className={`inline-flex items-center px-2 py-0.5 rounded text-xs ${
@@ -345,11 +356,11 @@ export default function PersonEventsManager({
                           VERIFICATION_BADGE_CLASSES.HYPOTHESIS
                         }`}
                       >
-                        {VERIFICATION_LABELS[verStatus] || verStatus}
+                        {verificationLabels[verStatus] || verStatus}
                       </span>
                       {pe.confidence && (
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-surface border border-border text-muted-foreground">
-                          {pe.confidence}
+                          {confidenceLabels[pe.confidence] || pe.confidence}
                         </span>
                       )}
                       {pe.role && (
@@ -364,17 +375,17 @@ export default function PersonEventsManager({
                   </div>
                   <div className="flex items-center gap-2 self-end sm:self-center">
                     <select
-                      aria-label="Verification status"
+                      aria-label={tEvents('verificationStatusLabel')}
                       value={verStatus}
                       onChange={(e) =>
                         handleQuickStatusChange(pe, e.target.value)
                       }
                       className="text-xs rounded border border-border bg-surface px-2 py-1 text-foreground"
                     >
-                      <option value="HYPOTHESIS">❓ Hypothesis</option>
-                      <option value="INVESTIGATING">🔍 Investigating</option>
-                      <option value="CONFIRMED">🚨 Confirmed</option>
-                      <option value="RULED_OUT">✓ Ruled Out</option>
+                      <option value="HYPOTHESIS">{verificationLabels.HYPOTHESIS}</option>
+                      <option value="INVESTIGATING">{verificationLabels.INVESTIGATING}</option>
+                      <option value="CONFIRMED">{verificationLabels.CONFIRMED}</option>
+                      <option value="RULED_OUT">{verificationLabels.RULED_OUT}</option>
                     </select>
                     <button
                       type="button"
@@ -488,7 +499,7 @@ export default function PersonEventsManager({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-1">
-                    Involvement Type
+                    {tEvents('involvementTypeLabel')}
                   </label>
                   <select
                     value={formData.involvementType}
@@ -500,18 +511,18 @@ export default function PersonEventsManager({
                     }
                     className={inputClass}
                   >
-                    <option value="SUSPECT">Suspect (Nghi phạm)</option>
-                    <option value="PERSON_OF_INTEREST">Person of Interest (Nghi vấn)</option>
-                    <option value="ACCOMPLICE">Accomplice (Đồng phạm)</option>
-                    <option value="WITNESS">Witness (Nhân chứng)</option>
-                    <option value="VICTIM">Victim (Nạn nhân)</option>
-                    <option value="INFORMANT">Informant (Nguồn tin)</option>
+                    <option value="SUSPECT">{involvementLabels.SUSPECT}</option>
+                    <option value="PERSON_OF_INTEREST">{involvementLabels.PERSON_OF_INTEREST}</option>
+                    <option value="ACCOMPLICE">{involvementLabels.ACCOMPLICE}</option>
+                    <option value="WITNESS">{involvementLabels.WITNESS}</option>
+                    <option value="VICTIM">{involvementLabels.VICTIM}</option>
+                    <option value="INFORMANT">{involvementLabels.INFORMANT}</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-1">
-                    Verification Status
+                    {tEvents('verificationStatusLabel')}
                   </label>
                   <select
                     value={formData.verificationStatus}
@@ -523,10 +534,10 @@ export default function PersonEventsManager({
                     }
                     className={inputClass}
                   >
-                    <option value="HYPOTHESIS">Hypothesis (Giả thuyết)</option>
-                    <option value="INVESTIGATING">Investigating (Đang xác minh)</option>
-                    <option value="CONFIRMED">Confirmed (Đã xác nhận)</option>
-                    <option value="RULED_OUT">Ruled Out (Đã loại trừ)</option>
+                    <option value="HYPOTHESIS">{verificationLabels.HYPOTHESIS}</option>
+                    <option value="INVESTIGATING">{verificationLabels.INVESTIGATING}</option>
+                    <option value="CONFIRMED">{verificationLabels.CONFIRMED}</option>
+                    <option value="RULED_OUT">{verificationLabels.RULED_OUT}</option>
                   </select>
                 </div>
               </div>
@@ -534,7 +545,7 @@ export default function PersonEventsManager({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-1">
-                    Confidence Level
+                    {tEvents('confidenceLevelLabel')}
                   </label>
                   <select
                     value={formData.confidence}
@@ -546,10 +557,10 @@ export default function PersonEventsManager({
                     }
                     className={inputClass}
                   >
-                    <option value="">— Optional —</option>
-                    <option value="HIGH">High (Cao)</option>
-                    <option value="MEDIUM">Medium (Trung bình)</option>
-                    <option value="LOW">Low (Thấp)</option>
+                    <option value="">{tEvents('confidenceOptional')}</option>
+                    <option value="HIGH">{confidenceLabels.HIGH}</option>
+                    <option value="MEDIUM">{confidenceLabels.MEDIUM}</option>
+                    <option value="LOW">{confidenceLabels.LOW}</option>
                   </select>
                 </div>
 
@@ -571,7 +582,7 @@ export default function PersonEventsManager({
 
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">
-                  {tDetail('notes')} (Evidence / Alibi)
+                  {tEvents('evidenceNotesLabel')}
                 </label>
                 <textarea
                   rows={2}
@@ -579,6 +590,7 @@ export default function PersonEventsManager({
                   onChange={(e) =>
                     setFormData((prev) => ({ ...prev, notes: e.target.value }))
                   }
+                  placeholder={tEvents('evidenceNotesPlaceholder')}
                   className={inputClass}
                 />
               </div>

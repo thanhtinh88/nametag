@@ -240,6 +240,12 @@ export default function MapView({
     viewContact: t('viewContact'),
     directions: t('directions'),
     colocatedTitle: (count: number) => t('colocatedTitle', { count }),
+    distanceMetersFromScene: (meters: number) => t('distanceMetersFromScene', { meters }),
+    distanceKmFromScene: (km: string) => t('distanceKmFromScene', { km }),
+    flagAsSuspectInCase: (title: string) => t('flagAsSuspectInCase', { title }),
+    flagSaving: t('flagSaving'),
+    flaggedInCase: t('flaggedInCase'),
+    flagFailed: t('flagFailed'),
   });
   const [webglUnavailable, setWebglUnavailable] = useState(false);
 
@@ -278,6 +284,12 @@ export default function MapView({
       viewContact: t('viewContact'),
       directions: t('directions'),
       colocatedTitle: (count: number) => t('colocatedTitle', { count }),
+      distanceMetersFromScene: (meters: number) => t('distanceMetersFromScene', { meters }),
+      distanceKmFromScene: (km: string) => t('distanceKmFromScene', { km }),
+      flagAsSuspectInCase: (title: string) => t('flagAsSuspectInCase', { title }),
+      flagSaving: t('flagSaving'),
+      flaggedInCase: t('flaggedInCase'),
+      flagFailed: t('flagFailed'),
     };
   }, [t]);
 
@@ -738,7 +750,16 @@ function openPopup(
   map: maplibregl.Map,
   coordinates: [number, number],
   props: MarkerProperties,
-  labels: { viewContact: string; directions: string },
+  labels: {
+    viewContact: string;
+    directions: string;
+    distanceMetersFromScene?: (meters: number) => string;
+    distanceKmFromScene?: (km: string) => string;
+    flagAsSuspectInCase?: (title: string) => string;
+    flagSaving?: string;
+    flaggedInCase?: string;
+    flagFailed?: string;
+  },
   selectedCase?: MapCase | null,
 ): void {
   const container = document.createElement('div');
@@ -782,8 +803,12 @@ function openPopup(
     distLine.className = 'text-xs font-medium text-red-700 pt-0.5';
     distLine.textContent =
       distKm < 1
-        ? `📍 ${Math.round(distKm * 1000)} m from crime scene`
-        : `📍 ${distKm.toFixed(2)} km from crime scene`;
+        ? labels.distanceMetersFromScene
+          ? labels.distanceMetersFromScene(Math.round(distKm * 1000))
+          : `📍 ${Math.round(distKm * 1000)} m from crime scene`
+        : labels.distanceKmFromScene
+          ? labels.distanceKmFromScene(distKm.toFixed(2))
+          : `📍 ${distKm.toFixed(2)} km from crime scene`;
     container.appendChild(distLine);
   }
 
@@ -815,10 +840,12 @@ function openPopup(
     flagBtn.type = 'button';
     flagBtn.className =
       'w-full px-2 py-1 text-xs font-medium rounded bg-amber-100 hover:bg-amber-200 text-amber-900 transition-colors';
-    flagBtn.textContent = `+ Flag as Suspect in "${selectedCase.title}"`;
+    flagBtn.textContent = labels.flagAsSuspectInCase
+      ? labels.flagAsSuspectInCase(selectedCase.title)
+      : `+ Flag as Suspect in "${selectedCase.title}"`;
     flagBtn.onclick = async () => {
       flagBtn.disabled = true;
-      flagBtn.textContent = 'Saving...';
+      flagBtn.textContent = labels.flagSaving || 'Saving...';
       try {
         const res = await fetch(`/api/events/${encodeURIComponent(selectedCase.id)}/people`, {
           method: 'POST',
@@ -832,15 +859,15 @@ function openPopup(
           }),
         });
         if (res.ok || res.status === 409) {
-          flagBtn.textContent = '✓ Flagged in Case';
+          flagBtn.textContent = labels.flaggedInCase || '✓ Flagged in Case';
           flagBtn.className =
             'w-full px-2 py-1 text-xs font-medium rounded bg-emerald-100 text-emerald-900';
         } else {
-          flagBtn.textContent = 'Failed — try again';
+          flagBtn.textContent = labels.flagFailed || 'Failed — try again';
           flagBtn.disabled = false;
         }
       } catch {
-        flagBtn.textContent = 'Failed — try again';
+        flagBtn.textContent = labels.flagFailed || 'Failed — try again';
         flagBtn.disabled = false;
       }
     };

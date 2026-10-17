@@ -243,10 +243,10 @@ export default function EventsListClient({
           <div className="flex items-center justify-between mb-3">
             <div>
               <h3 className="text-sm font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
-                ⚠️ Cross-Case Subjects Analysis (Đối tượng nghi vấn giao thoa nhiều vụ án) ({crossCaseSuspects.length})
+                {t('crossCaseAnalysisTitle', { count: crossCaseSuspects.length })}
               </h3>
               <p className="text-xs text-muted mt-0.5">
-                Subjects linked to 2 or more cases (excluding ruled-out hypotheses). Click a subject to filter cases.
+                {t('crossCaseAnalysisDesc')}
               </p>
             </div>
             {personFilter !== 'ALL' && (
@@ -255,7 +255,7 @@ export default function EventsListClient({
                 onClick={() => setPersonFilter('ALL')}
                 className="text-xs text-primary hover:underline"
               >
-                Clear Subject Filter
+                {t('clearPersonFilter')}
               </button>
             )}
           </div>
@@ -292,7 +292,7 @@ export default function EventsListClient({
                           {displayName}
                         </Link>
                         <span className="text-xs font-medium text-amber-700 dark:text-amber-300">
-                          Linked to {cases.length} cases
+                          {t('casesCountBadge', { count: cases.length })}
                         </span>
                       </div>
                     </div>
@@ -334,7 +334,7 @@ export default function EventsListClient({
             aria-label={t('statusLabel')}
           >
             <option value="ALL">{t('allStatuses')}</option>
-            <option value="ACTIVE_ONLY">🔥 Active Cases Only (Đang điều tra)</option>
+            <option value="ACTIVE_ONLY">🔥 {t('activeCasesOnly')}</option>
             <option value="PLANNED">{t('statuses.PLANNED')}</option>
             <option value="ONGOING">{t('statuses.ONGOING')}</option>
             <option value="COMPLETED">{t('statuses.COMPLETED')}</option>

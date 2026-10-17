@@ -327,14 +327,14 @@ export default function JournalEntryForm({
       {pillEvents.length > 0 && (
         <div>
           <PillSelector<PillPerson>
-            label="Related Cases (Vụ án liên quan)"
+            label={t('eventsLabel')}
             selectedItems={selectedEvents}
             availableItems={pillEvents}
             onAdd={(item) => setSelectedEvents((prev) => [...prev, item])}
             onRemove={(itemId) =>
               setSelectedEvents((prev) => prev.filter((ev) => ev.id !== itemId))
             }
-            placeholder="Tag cases..."
+            placeholder={t('eventsPlaceholder')}
             showAllOnFocus
             isLoading={isLoading}
           />

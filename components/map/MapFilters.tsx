@@ -65,9 +65,9 @@ export default function MapFilters({
               })
             }
             className={selectClasses}
-            aria-label="Filter by Case"
+            aria-label={t('allCases')}
           >
-            <option value="">All Cases / Incidents</option>
+            <option value="">{t('allCases')}</option>
             {cases.map((c) => (
               <option key={c.id} value={c.id}>
                 🚨 {c.title} ({c.status})
@@ -86,14 +86,14 @@ export default function MapFilters({
               })
             }
             className={selectClasses}
-            aria-label="Crime Scene Radius"
+            aria-label={t('radiusOff')}
           >
-            <option value="0">Radius: Off</option>
-            <option value="0.5">Radius: 500 m</option>
-            <option value="1">Radius: 1 km</option>
-            <option value="2">Radius: 2 km</option>
-            <option value="5">Radius: 5 km</option>
-            <option value="10">Radius: 10 km</option>
+            <option value="0">{t('radiusOff')}</option>
+            <option value="0.5">{t('radius500m')}</option>
+            <option value="1">{t('radiusKm', { km: 1 })}</option>
+            <option value="2">{t('radiusKm', { km: 2 })}</option>
+            <option value="5">{t('radiusKm', { km: 5 })}</option>
+            <option value="10">{t('radiusKm', { km: 10 })}</option>
           </select>
         )}
 
@@ -198,7 +198,7 @@ export default function MapFilters({
                 }
                 className="rounded border-border text-primary focus:ring-primary"
               />
-              <span>Only subjects within {filters.radiusKm} km of crime scene</span>
+              <span>{t('onlyWithinRadius', { km: filters.radiusKm ?? 1 })}</span>
             </label>
           )}
           <label className="inline-flex items-center gap-1.5 text-foreground cursor-pointer select-none">
@@ -210,7 +210,7 @@ export default function MapFilters({
               }
               className="rounded border-border text-primary focus:ring-primary"
             />
-            <span>Active Cases Only</span>
+            <span>{t('activeCasesOnly')}</span>
           </label>
           {filters.caseId && (
             <label className="inline-flex items-center gap-1.5 text-foreground cursor-pointer select-none">
@@ -222,17 +222,17 @@ export default function MapFilters({
                 }
                 className="rounded border-border text-primary focus:ring-primary"
               />
-              <span>Show Ruled-Out Subjects</span>
+              <span>{t('showRuledOut')}</span>
             </label>
           )}
           <div className="ml-auto flex items-center gap-3">
             <span className="inline-flex items-center gap-1">
               <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-amber-300" />
-              Crime Scene
+              {t('legendCrimeScene')}
             </span>
             <span className="inline-flex items-center gap-1">
               <span className="inline-block w-2.5 h-2.5 rounded-full bg-blue-500" />
-              Subject Location
+              {t('legendSubjectLocation')}
             </span>
           </div>
         </div>

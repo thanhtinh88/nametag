@@ -843,13 +843,13 @@ export default function UnifiedNetworkGraph({
           {events && (
             <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-border/60 text-xs">
               <div className="flex items-center gap-1.5">
-                <label className="font-medium text-muted">Case Focus:</label>
+                <label className="font-medium text-muted">{t('caseFocus')}</label>
                 <select
                   value={selectedCaseId}
                   onChange={(e) => setSelectedCaseId(e.target.value)}
                   className="px-2.5 py-1.5 rounded border border-border bg-surface-elevated text-foreground"
                 >
-                  <option value="">All Cases</option>
+                  <option value="">{t('allCases')}</option>
                   {events.map((ev) => (
                     <option key={ev.id} value={ev.id}>
                       📅 {ev.title} ({ev.status})
@@ -866,7 +866,7 @@ export default function UnifiedNetworkGraph({
                     onChange={(e) => setIncludeHop(e.target.checked)}
                     className="rounded border-border text-primary focus:ring-primary"
                   />
-                  <span>+ 1-Hop Associates</span>
+                  <span>{t('includeHop')}</span>
                 </label>
               )}
 
@@ -877,7 +877,7 @@ export default function UnifiedNetworkGraph({
                   onChange={(e) => setActiveCasesOnly(e.target.checked)}
                   className="rounded border-border text-primary focus:ring-primary"
                 />
-                <span>Active Cases Only</span>
+                <span>{t('activeCasesOnly')}</span>
               </label>
 
               <label className="inline-flex items-center gap-1.5 text-foreground cursor-pointer select-none">
@@ -887,7 +887,7 @@ export default function UnifiedNetworkGraph({
                   onChange={(e) => setShowRuledOut(e.target.checked)}
                   className="rounded border-border text-primary focus:ring-primary"
                 />
-                <span>Show Ruled-Out</span>
+                <span>{t('showRuledOut')}</span>
               </label>
 
               <label className="inline-flex items-center gap-1.5 text-foreground cursor-pointer select-none">
@@ -897,12 +897,12 @@ export default function UnifiedNetworkGraph({
                   onChange={(e) => setHideUserNode(e.target.checked)}
                   className="rounded border-border text-primary focus:ring-primary"
                 />
-                <span>Hide &quot;You&quot; Node</span>
+                <span>{t('hideUserNode')}</span>
               </label>
 
               {customFieldTemplates && customFieldTemplates.length > 0 && (
                 <div className="flex items-center gap-1.5">
-                  <label className="font-medium text-muted">Custom Field:</label>
+                  <label className="font-medium text-muted">{t('customFieldFilter')}</label>
                   <select
                     value={customFieldSlug}
                     onChange={(e) => {
@@ -911,7 +911,7 @@ export default function UnifiedNetworkGraph({
                     }}
                     className="px-2 py-1.5 rounded border border-border bg-surface-elevated text-foreground"
                   >
-                    <option value="">Any</option>
+                    <option value="">{t('customFieldAny')}</option>
                     {customFieldTemplates.map((cf) => (
                       <option key={cf.id} value={cf.slug}>
                         {cf.name}
@@ -923,7 +923,7 @@ export default function UnifiedNetworkGraph({
                       type="text"
                       value={customFieldValue}
                       onChange={(e) => setCustomFieldValue(e.target.value)}
-                      placeholder="Value contains..."
+                      placeholder={t('customFieldValuePlaceholder')}
                       className="px-2 py-1 rounded border border-border bg-surface-elevated text-foreground w-32"
                     />
                   )}
@@ -933,19 +933,19 @@ export default function UnifiedNetworkGraph({
               <div className="ml-auto flex flex-wrap items-center gap-3 text-[11px] text-muted">
                 <span className="inline-flex items-center gap-1">
                   <span className="inline-block w-3 h-2.5 rounded-sm bg-amber-500 border border-amber-800 dark:border-amber-200" />
-                  Case
+                  {t('legendCase')}
                 </span>
                 <span className="inline-flex items-center gap-1">
                   <span className="inline-block w-4 h-0.5 bg-red-500" />
-                  Confirmed
+                  {t('legendConfirmed')}
                 </span>
                 <span className="inline-flex items-center gap-1">
                   <span className="inline-block w-4 border-t-2 border-dashed border-orange-500" />
-                  Investigating / Hypothesis
+                  {t('legendInvestigating')}
                 </span>
                 <span className="inline-flex items-center gap-1">
                   <span className="inline-block w-4 border-t-2 border-dotted border-gray-500" />
-                  Ruled Out
+                  {t('legendRuledOut')}
                 </span>
               </div>
             </div>

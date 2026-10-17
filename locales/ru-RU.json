@@ -742,7 +742,9 @@
       "deleteError": "Введите DELETE для подтверждения",
       "passwordRequired": "Требуется пароль",
       "deleteFailed": "Не удалось удалить аккаунт",
-      "importDataFailed": "Не удалось импортировать данные"
+      "importDataFailed": "Не удалось импортировать данные",
+      "people": "{count, plural, one {# person} other {# people}}",
+      "groups": "{count, plural, one {# group} other {# groups}}"
     },
     "trash": {
       "title": "Корзина",
@@ -989,7 +991,20 @@
       "showAsGroups": "Показать как группы",
       "showIndividuals": "Показать отдельных людей",
       "collapseAllGroups": "Свернуть все группы",
-      "unsortedBubbleLabel": "Без группы"
+      "unsortedBubbleLabel": "Без группы",
+      "caseFocus": "Case Focus:",
+      "allCases": "All Cases",
+      "includeHop": "+ 1-Hop Associates",
+      "activeCasesOnly": "Active Cases Only",
+      "showRuledOut": "Show Ruled-Out",
+      "hideUserNode": "Hide \"You\" Node",
+      "customFieldFilter": "Custom Field:",
+      "customFieldAny": "Any",
+      "customFieldValuePlaceholder": "Value contains...",
+      "legendCase": "Case",
+      "legendConfirmed": "Confirmed",
+      "legendInvestigating": "Investigating / Hypothesis",
+      "legendRuledOut": "Ruled Out"
     }
   },
   "people": {
@@ -1405,13 +1420,15 @@
           "instagram": "Instagram",
           "github": "Профиль GitHub",
           "custom": "Пользовательское поле"
-        }
+        },
+        "noCustomFields": "No custom fields added"
       },
       "connectedEventLabel": "Connected Event (Optional)",
       "connectedEventHelp": "Attach this person to an event they participated in or are associated with",
       "selectEvent": "None (no event)",
       "connectedEventRoleLabel": "Role in Event",
-      "connectedEventRolePlaceholder": "e.g., Organizer, Speaker, Participant, Witness..."
+      "connectedEventRolePlaceholder": "e.g., Organizer, Speaker, Participant, Witness...",
+      "searchGroups": "Search groups..."
     },
     "exportVcf": "Экспорт VCF",
     "exportingVcf": "Экспорт...",
@@ -1647,7 +1664,22 @@
     "viewContact": "Открыть контакт",
     "directions": "Маршрут",
     "webglUnavailable": "Ваш браузер не может отобразить карту, потому что WebGL недоступен или отключён. Включите ускорение графики или WebGL в браузере и перезагрузите страницу.",
-    "colocatedTitle": "{count, plural, one {# человек в этом месте} few {# человека в этом месте} many {# человек в этом месте} other {# человек в этом месте}}"
+    "colocatedTitle": "{count, plural, one {# человек в этом месте} few {# человека в этом месте} many {# человек в этом месте} other {# человек в этом месте}}",
+    "allCases": "All Cases / Incidents",
+    "radiusOff": "Radius: Off",
+    "radius500m": "Radius: 500 m",
+    "radiusKm": "Radius: {km} km",
+    "onlyWithinRadius": "Only subjects within {km} km of crime scene",
+    "activeCasesOnly": "Active Cases Only",
+    "showRuledOut": "Show Ruled-Out Subjects",
+    "legendCrimeScene": "Crime Scene",
+    "legendSubjectLocation": "Subject Location",
+    "distanceMetersFromScene": "📍 {meters} m from crime scene",
+    "distanceKmFromScene": "📍 {km} km from crime scene",
+    "flagAsSuspectInCase": "+ Flag as Suspect in \"{title}\"",
+    "flagSaving": "Saving...",
+    "flaggedInCase": "✓ Flagged in Case",
+    "flagFailed": "Failed — try again"
   },
   "relationshipTypes": {
     "title": "Типы связей",
@@ -1700,7 +1732,8 @@
       "errorSomethingWrong": "Что-то пошло не так",
       "errorConnection": "Не удалось подключиться к серверу. Проверьте соединение и попробуйте снова.",
       "successCreated": "Тип связи \"{label}\" создан",
-      "successUpdated": "Тип связи \"{label}\" обновлён"
+      "successUpdated": "Тип связи \"{label}\" обновлён",
+      "generateRandomColor": "Generate random color"
     },
     "autocomplete": {
       "placeholder": "Поиск или создание обратной связи...",
@@ -2124,7 +2157,9 @@
       "timeLabel": "Время",
       "addTime": "Добавить время",
       "removeTime": "Удалить время",
-      "saved": "Запись сохранена"
+      "saved": "Запись сохранена",
+      "eventsLabel": "Related Cases",
+      "eventsPlaceholder": "Tag cases..."
     },
     "detail": {
       "editButton": "Редактировать",
@@ -2141,7 +2176,8 @@
       "writeOne": "Написать запись",
       "viewAll": "Посмотреть все записи",
       "newEntry": "Новая запись"
-    }
+    },
+    "filterByCase": "Filter by Case..."
   },
   "pwa": {
     "description": "Помните о людях, которые важны для вас.",
@@ -2227,7 +2263,12 @@
       "relationshipTypePlaceholder": "e.g., Sub-event, Follow-up, Part of...",
       "selectEvent": "Select an event...",
       "deleteEvent": "Delete Event",
-      "confirmDelete": "Are you sure you want to delete this event?"
+      "confirmDelete": "Are you sure you want to delete this event?",
+      "journalTitle": "Investigation Log ({count})",
+      "journalDescription": "Chronological field notes, witness interviews, and evidence updates linked to this case",
+      "viewAllJournalEntries": "View All ({count})",
+      "addJournalEntry": "+ Add Log Entry",
+      "noJournalEntries": "No investigation log entries recorded for this case yet."
     },
     "personSection": {
       "title": "Events",
@@ -2236,6 +2277,114 @@
       "coParticipants": "People in the Same Events",
       "coParticipantsDescription": "Other people who participated in one or more events with this person:",
       "noCoParticipants": "No other people share events with this person yet."
+    },
+    "statsTotalEvents": "Total Cases",
+    "statsActiveEvents": "Active Investigations",
+    "statsInvolvedPeople": "Subjects Involved",
+    "statsTopEvent": "Most Subjects Linked",
+    "statusLabel": "Case Status",
+    "statuses": {
+      "PLANNED": "Initial Report / Pending",
+      "ONGOING": "Under Investigation",
+      "COMPLETED": "Solved / Closed",
+      "CANCELLED": "Cold Case / Suspended"
+    },
+    "categoryLabel": "Case Category",
+    "categoryPlaceholder": "e.g., Theft, Fraud, Cybercrime, Narcotics...",
+    "categories": {
+      "conference": "Organized Crime",
+      "meeting": "Narcotics",
+      "trip": "Smuggling / Trafficking",
+      "project": "Economic / Fraud",
+      "celebration": "Cybercrime",
+      "incident": "Violent Crime / Incident",
+      "other": "Other Case"
+    },
+    "allPeople": "All Subjects",
+    "noEventsYet": "No cases recorded yet. Create your first case to start investigating.",
+    "noMatchingEvents": "No cases match your current filters.",
+    "createEvent": "Create Case",
+    "peopleCount": "{count, plural, =0 {No subjects} one {# subject} other {# subjects}}",
+    "errorTitleRequired": "Case title is required",
+    "errorSaving": "Failed to save case",
+    "successCreated": "Created case \"{title}\"",
+    "successUpdated": "Updated case \"{title}\"",
+    "sectionBasicInfo": "Case Information",
+    "titleLabel": "Case Title / Code",
+    "titlePlaceholder": "e.g., Case #2026-04: Jewelry Store Robbery",
+    "includeTime": "Include specific time",
+    "startDateLabel": "Incident Start Date",
+    "endDateLabel": "Incident End / Closed Date",
+    "sectionParticipants": "Involved Subjects & Suspects",
+    "participantsHelp": "Link suspects, persons of interest, witnesses, or victims to this case.",
+    "searchPersonPlaceholder": "Search subject...",
+    "rolePlaceholder": "Specific role (e.g., Driver, Lookout)...",
+    "notesPlaceholderShort": "Evidence / Alibi notes...",
+    "addParticipant": "Add Subject",
+    "descriptionLabel": "Case Summary & Investigation Notes",
+    "descriptionPlaceholder": "Describe the incident, modus operandi (MO), physical evidence, and investigation leads...",
+    "activeCasesOnly": "Active Cases Only",
+    "crossCaseAnalysisTitle": "⚠️ Cross-Case Suspect Analysis ({count})",
+    "crossCaseAnalysisDesc": "Subjects linked to 2 or more active cases (excluding ruled-out hypotheses). Click a subject to filter cases.",
+    "clearPersonFilter": "Clear Subject Filter",
+    "casesCountBadge": "Linked to {count} cases",
+    "involvementTypeLabel": "Involvement Type",
+    "verificationStatusLabel": "Verification Status",
+    "confidenceLevelLabel": "Confidence Level",
+    "confidenceOptional": "— Optional —",
+    "confidencePrefix": "Confidence: {level}",
+    "involvementTypes": {
+      "SUSPECT": "Suspect",
+      "PERSON_OF_INTEREST": "Person of Interest",
+      "ACCOMPLICE": "Accomplice",
+      "WITNESS": "Witness",
+      "VICTIM": "Victim",
+      "INFORMANT": "Informant"
+    },
+    "verificationStatuses": {
+      "HYPOTHESIS": "❓ Hypothesis",
+      "INVESTIGATING": "🔍 Investigating",
+      "CONFIRMED": "🚨 Confirmed",
+      "RULED_OUT": "✓ Ruled Out"
+    },
+    "confidenceLevels": {
+      "HIGH": "High",
+      "MEDIUM": "Medium",
+      "LOW": "Low"
+    },
+    "showRuledOutCount": "Show Ruled-Out ({count})",
+    "hideRuledOutCount": "Hide Ruled-Out ({count})",
+    "evidenceNotesLabel": "Notes (Evidence / Alibi)",
+    "evidenceNotesPlaceholder": "Enter evidence, alibi, witness testimony, or reason for hypothesis...",
+    "statusUpdatedToast": "Updated status: {status}",
+    "journalTitle": "Investigation Log ({count})",
+    "journalDescription": "Chronological field notes, witness interviews, and evidence updates linked to this case",
+    "viewAllJournalEntries": "View All ({count})",
+    "addJournalEntry": "+ Add Log Entry",
+    "noJournalEntries": "No investigation log entries recorded for this case yet."
+  },
+  "carddav": {
+    "export": {
+      "title": "Export Contacts to CardDAV",
+      "description": "Select contacts to export to your CardDAV server.",
+      "nothingToExport": "Nothing to export",
+      "nothingToExportDescription": "All contacts are already synced with your CardDAV server.",
+      "noContactsSelected": "No contacts selected",
+      "exportFailed": "Failed to export contacts",
+      "exporting": "Exporting...",
+      "selected": "{count} selected",
+      "exportComplete": "Export complete",
+      "exported": "{count} exported",
+      "skipped": "{count} skipped",
+      "errors": "{count} errors",
+      "errorDetails": "Error details",
+      "deselectAll": "Deselect All",
+      "selectAll": "Select All",
+      "organization": "Organization",
+      "jobTitle": "Job Title",
+      "email": "Email",
+      "phone": "Phone",
+      "exportSelected": "Export Selected"
     }
   }
 }
