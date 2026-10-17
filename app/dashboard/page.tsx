@@ -53,7 +53,7 @@ export default async function DashboardPage() {
     prisma.customFieldTemplate.findMany({
       where: { userId: session.user.id, deletedAt: null },
       orderBy: { order: 'asc' },
-      select: { id: true, name: true, slug: true },
+      select: { id: true, name: true, slug: true, type: true, options: true },
     }),
   ]);
 

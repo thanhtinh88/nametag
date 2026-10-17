@@ -123,20 +123,14 @@ function compositeIcon(image: HTMLImageElement, ringColor: string): ImageData | 
 interface MapViewProps {
   markers: MapMarker[];
   focusId: string | null;
+  focusRequest?: { id: string; seq: number } | null;
   /**
    * Serialized filter state ("|"-joined values). The camera fits to the
-   * visible markers whenever it changes, and also on arrival when it starts
-   * out non-empty (a shared pre-filtered URL). Only an initially-empty
-   * filter state keeps the world view.
+   * visible markers on initial load and whenever filters change.
    */
   filtersKey: string;
   selectedCase?: MapCase | null;
   radiusKm?: number;
-}
-
-/** True when every segment of the "|"-joined filter key is empty. */
-function isEmptyFiltersKey(key: string): boolean {
-  return key.split('|').every((part) => part === '' || part === '0');
 }
 
 interface MarkerProperties {
@@ -221,6 +215,7 @@ function toGeoJSON(
 export default function MapView({
   markers,
   focusId,
+  focusRequest = null,
   filtersKey,
   selectedCase = null,
   radiusKm = 0,
@@ -321,8 +316,8 @@ export default function MapView({
       map = new maplibregl.Map({
         container: containerRef.current,
         style: initialStyle,
-        center: [0, 20],
-        zoom: 1.5,
+        center: [105.85, 21.03],
+        zoom: 12,
         attributionControl: { compact: true },
       });
     } catch {
@@ -432,6 +427,7 @@ export default function MapView({
       registeredColorRef.current.clear();
       const primary =
         getComputedStyle(document.documentElement).getPropertyValue('--primary').trim() || '#2563EB';
+      const darkTheme = isDarkRef.current;
 
       ensureIcons();
 
@@ -548,6 +544,32 @@ export default function MapView({
         },
         paint: { 'text-color': '#ffffff' },
       });
+
+      // Text labels directly below unclustered markers (Subject name or Case title)
+      map.addLayer({
+        id: 'marker-labels',
+        type: 'symbol',
+        source: SOURCE_ID,
+        filter: ['all', ['!', ['has', 'point_count']], ['==', ['get', 'colocatedCount'], 1]],
+        layout: {
+          'text-field': ['get', 'personName'],
+          'text-size': ['case', ['==', ['get', 'isCrimeScene'], true], 12, 11],
+          'text-offset': [0, 1.15],
+          'text-anchor': 'top',
+          'text-max-width': 14,
+          'text-optional': true,
+        },
+        paint: {
+          'text-color': [
+            'case',
+            ['==', ['get', 'isCrimeScene'], true],
+            darkTheme ? '#fde047' : '#b91c1c',
+            darkTheme ? '#f3f4f6' : '#111827',
+          ],
+          'text-halo-color': darkTheme ? 'rgba(17, 24, 39, 0.92)' : 'rgba(255, 255, 255, 0.95)',
+          'text-halo-width': 1.75,
+        },
+      });
     };
 
     // Fires after initial style load AND after every setStyle (theme switch)
@@ -591,6 +613,7 @@ export default function MapView({
 
     map.on('click', 'unclustered-point', handleUnclusteredClick);
     map.on('click', 'unclustered-photo', handleUnclusteredClick);
+    map.on('click', 'marker-labels', handleUnclusteredClick);
 
     const handleColocatedClick = (event: maplibregl.MapLayerMouseEvent) => {
       const feature = event.features?.[0];
@@ -613,7 +636,7 @@ export default function MapView({
     map.on('click', 'colocated-circle', handleColocatedClick);
     map.on('click', 'colocated-count', handleColocatedClick);
 
-    for (const layer of ['clusters', 'unclustered-point', 'unclustered-photo', 'colocated-circle', 'colocated-count']) {
+    for (const layer of ['clusters', 'unclustered-point', 'unclustered-photo', 'marker-labels', 'colocated-circle', 'colocated-count']) {
       map.on('mouseenter', layer, () => {
         map.getCanvas().style.cursor = 'pointer';
       });
@@ -696,28 +719,53 @@ export default function MapView({
     );
   }, [focusId, markers]);
 
-  // Fit the camera to the visible markers whenever the user changes filters,
-  // including clearing them back to "all". Arriving with filters already in
-  // the URL fits immediately; only an initially-empty filter state keeps the
-  // world view on arrival.
+  // Handle imperative focus requests from the Subject Roster Sidebar
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !focusRequest) return;
+    const target = markers.find((marker) => marker.id === focusRequest.id);
+    if (!target) return;
+    if (prefersReducedMotion()) {
+      map.jumpTo({ center: [target.longitude, target.latitude], zoom: FOCUS_ZOOM });
+    } else {
+      map.easeTo({ center: [target.longitude, target.latitude], zoom: FOCUS_ZOOM, duration: CAMERA_ANIMATION_MS });
+    }
+    openPopup(
+      map,
+      [target.longitude, target.latitude],
+      {
+        id: target.id,
+        personId: target.personId,
+        personName: target.personName,
+        label: target.label,
+        ...(target.addressText ? { addressText: target.addressText } : {}),
+        ...(target.source === 'event_address' ? { isCrimeScene: true } : {}),
+        colocatedCount: 1,
+      },
+      translationsRef.current,
+      selectedCaseRef.current,
+    );
+  }, [focusRequest, markers]);
+
+  // Fit the camera to the visible markers on initial load and whenever the
+  // user changes filters, including clearing them back to "all".
   useEffect(() => {
     const map = mapRef.current;
     if (!map || focusId) {
       appliedFiltersKeyRef.current = filtersKey;
       return;
     }
+    if (markers.length === 0) return;
     const previous = appliedFiltersKeyRef.current;
     appliedFiltersKeyRef.current = filtersKey;
     if (previous === filtersKey) return;
-    if (previous === null && isEmptyFiltersKey(filtersKey)) return;
-    if (markers.length === 0) return;
     const bounds = new maplibregl.LngLatBounds();
     for (const marker of markers) {
       bounds.extend([marker.longitude, marker.latitude]);
     }
     map.fitBounds(bounds, {
       padding: 64,
-      maxZoom: 12,
+      maxZoom: 14,
       duration: CAMERA_ANIMATION_MS,
       animate: !prefersReducedMotion(),
     });

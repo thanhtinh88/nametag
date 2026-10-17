@@ -58,6 +58,7 @@ model User {
   pushSubscriptions     PushSubscription[]
   apiTokens             ApiToken[]
   cardDavConnection     CardDavConnection?
+  immichConnection      ImmichConnection?
   cardDavPendingImports CardDavPendingImport[]
   customFieldTemplates  CustomFieldTemplate[]
   duplicateDismissals   DuplicateDismissal[]
@@ -77,6 +78,8 @@ model Person {
   name                        String
   surname                     String?
   middleName                  String?
+  immichPersonId              String?               // Immich face-cluster (person) ID
+  immichAlbumId               String?               // Immich album with subject evidence photos
   secondLastName              String?
   nickname                    String?
   lastContact                 DateTime?
@@ -813,6 +816,24 @@ model CardDavConnection {
   @@map("carddav_connections")
 }
 
+// ImmichConnection - Per-user link to a self-hosted Immich photo server
+model ImmichConnection {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  serverUrl String   // Internal URL Nametag uses to reach Immich (e.g. http://immich:2283)
+  publicUrl String?  // Optional browser-facing URL for "Open in Immich" links
+  apiKey    String   // Encrypted with AES-256-GCM
+  enabled   Boolean  @default(true)
+  lastError   String?
+  lastCheckedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("immich_connections")
+}
+
 // CardDavMapping - Mapping between Nametag Person and CardDAV vCard
 model CardDavMapping {
   id               String   @id @default(cuid())
@@ -1050,6 +1071,7 @@ model Event {
   hasTime     Boolean     @default(false)
   description String?     @db.Text
   photo       String?
+  immichAlbumId String?   // Immich album with crime-scene / CCTV evidence
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   deletedAt   DateTime?

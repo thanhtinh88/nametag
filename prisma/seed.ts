@@ -68,6 +68,9 @@ async function main() {
   });
 
   // Seed investigation data for ALL existing users (including demo@nametag.one and any custom account)
+  await prisma.user.updateMany({
+    data: { nameOrder: 'EASTERN' },
+  });
   const allUsers = await prisma.user.findMany();
   for (const user of allUsers) {
     console.log(`\n👤 Đang nạp dữ liệu điều tra mẫu cho tài khoản: ${user.email} (ID: ${user.id})...`);
@@ -284,7 +287,8 @@ async function main() {
   const hungSoi = await prisma.person.create({
     data: {
       userId: user.id,
-      surname: 'Nguyễn Văn',
+      surname: 'Nguyễn',
+      middleName: 'Văn',
       name: 'Hùng',
       nickname: 'Hùng Sói',
       organization: 'Tự do (Băng nhóm Long Biên)',
@@ -345,7 +349,8 @@ async function main() {
   const haiCan = await prisma.person.create({
     data: {
       userId: user.id,
-      surname: 'Lê Hoàng',
+      surname: 'Lê',
+      middleName: 'Hoàng',
       name: 'Hải',
       nickname: 'Hải Cận',
       organization: 'Tiệm sửa khóa & Điện tử Hoàng Hải',
@@ -392,7 +397,8 @@ async function main() {
   const tuanXe = await prisma.person.create({
     data: {
       userId: user.id,
-      surname: 'Phạm Quốc',
+      surname: 'Phạm',
+      middleName: 'Quốc',
       name: 'Tuấn',
       nickname: 'Tuấn Xế',
       organization: 'Bãi xe tự phát Cầu Giấy',
@@ -454,7 +460,8 @@ async function main() {
   const maiVang = await prisma.person.create({
     data: {
       userId: user.id,
-      surname: 'Đặng Thị',
+      surname: 'Đặng',
+      middleName: 'Thị',
       name: 'Mai',
       nickname: 'Mai Vàng',
       organization: 'Tiệm cầm đồ & Thu mua vàng bạc Ánh Mai',
@@ -501,7 +508,8 @@ async function main() {
   const khanhChot = await prisma.person.create({
     data: {
       userId: user.id,
-      surname: 'Vũ Đình',
+      surname: 'Vũ',
+      middleName: 'Đình',
       name: 'Khánh',
       nickname: 'Khánh Chột',
       organization: 'CLB Bi-a Đêm Trắng Cầu Giấy',
@@ -548,7 +556,8 @@ async function main() {
   const ducDen = await prisma.person.create({
     data: {
       userId: user.id,
-      surname: 'Trần Minh',
+      surname: 'Trần',
+      middleName: 'Minh',
       name: 'Đức',
       nickname: 'Đức Đen',
       organization: 'Cửa hàng Điện thoại & Laptop Đức Minh',
@@ -592,7 +601,8 @@ async function main() {
   const namBeo = await prisma.person.create({
     data: {
       userId: user.id,
-      surname: 'Hoàng Văn',
+      surname: 'Hoàng',
+      middleName: 'Văn',
       name: 'Nam',
       nickname: 'Nam Béo',
       organization: 'Tự do',
@@ -635,7 +645,8 @@ async function main() {
   const thaoNgan = await prisma.person.create({
     data: {
       userId: user.id,
-      surname: 'Bùi Thanh',
+      surname: 'Bùi',
+      middleName: 'Thanh',
       name: 'Thảo',
       nickname: 'Thảo Ngân',
       organization: 'Tiệm vàng Kim Bảo (Hàng Bạc)',
@@ -678,7 +689,8 @@ async function main() {
   const binhXeOm = await prisma.person.create({
     data: {
       userId: user.id,
-      surname: 'Đỗ Văn',
+      surname: 'Đỗ',
+      middleName: 'Văn',
       name: 'Bình',
       nickname: 'Bình Xe Ôm',
       organization: 'Tổ tự quản an ninh trật tự Hoàn Kiếm',
@@ -717,11 +729,53 @@ async function main() {
     },
   });
 
-  console.log('✓ Đã tạo 9 hồ sơ đối tượng (Nghi phạm, Đồng phạm, Tiêu thụ, Nội gián, Nhân chứng)');
+  // Subject 10: Ngô Thế Vinh ("Vinh Bạc") - Fugitive / Unlocated Subject (for testing Unlocated Roster on Map)
+  const vinhBac = await prisma.person.create({
+    data: {
+      userId: user.id,
+      surname: 'Ngô',
+      middleName: 'Thế',
+      name: 'Vinh',
+      nickname: 'Vinh Bạc',
+      organization: 'Tự do (Lang thang không nơi ở cố định)',
+      jobTitle: 'Đối tượng cung cấp thiết bị phá khóa',
+      lastContact: new Date('2026-03-02'),
+      notes:
+        'Đối tượng chuyên nhập lậu bộ dò mã két sắt điện tử và thiết bị phá sóng báo động. Hiện đã rời khỏi nơi trọ cũ, chưa xác định được tọa độ nơi ẩn náu hiện tại.',
+      groups: {
+        create: [{ groupId: taskForceGroup.id }, { groupId: longBienGangGroup.id }],
+      },
+      phoneNumbers: {
+        create: [{ type: 'mobile', number: '0919 404 000' }],
+      },
+      customFieldValues: {
+        create: [
+          { templateId: riskTemplate.id, value: 'Cao (Có vũ khí)' },
+          { templateId: priorRecordTemplate.id, value: 'true' },
+          { templateId: idNumberTemplate.id, value: '001085099881' },
+        ],
+      },
+    },
+  });
+
+  console.log('✓ Đã tạo 10 hồ sơ đối tượng (9 đã có tọa độ GPS, 1 đang truy tìm chưa rõ tọa độ)');
 
   // 6. Create Relationships between Subjects (Interconnected Network)
   await prisma.relationship.createMany({
     data: [
+      // Hải Cận <-> Vinh Bạc (Cung cấp thiết bị phá khóa)
+      {
+        personId: haiCan.id,
+        relatedPersonId: vinhBac.id,
+        relationshipTypeId: accompliceType.id,
+        notes: 'Mua bộ dò mã két sắt chuyên dụng từ Vinh Bạc trước vụ trộm Hàng Bạc',
+      },
+      {
+        personId: vinhBac.id,
+        relatedPersonId: haiCan.id,
+        relationshipTypeId: accompliceType.id,
+        notes: 'Cung cấp thiết bị phá khóa và dò mã báo động cho Hải Cận',
+      },
       // Hùng Sói <-> Hải Cận (Cầm đầu <-> Đàn em)
       {
         personId: hungSoi.id,
@@ -1046,6 +1100,16 @@ async function main() {
   await prisma.personEvent.createMany({
     data: [
       // === CASE 1: Tiệm vàng Kim Bảo (ONGOING) ===
+      {
+        eventId: caseKimBao.id,
+        personId: vinhBac.id,
+        involvementType: 'ACCOMPLICE',
+        verificationStatus: 'HYPOTHESIS',
+        confidence: 'MEDIUM',
+        role: 'Nghi vấn cung cấp thiết bị dò mã két sắt (Đang truy tìm tọa độ)',
+        notes:
+          'Nguồn tin trinh sát báo Vinh Bạc vừa giao một bộ dò mã két sắt nhập lậu cho Hải Cận 3 ngày trước vụ án. Hiện đối tượng đã bỏ trốn khỏi nơi trọ cũ, chưa xác định được tọa độ GPS.',
+      },
       {
         eventId: caseKimBao.id,
         personId: hungSoi.id,

@@ -856,6 +856,44 @@
       "geocodingLabel": "住所を自動的に位置特定する",
       "success": "マップ設定を保存しました",
       "error": "マップ設定を保存できませんでした"
+    },
+    "immich": {
+      "title": "Immich Photo & Video Server",
+      "description": "Connect your self-hosted Immich instance to embed face clusters, albums, photos, and videos directly into Subject and Case files.",
+      "statusConnected": "Connected",
+      "statusError": "Connection Error",
+      "statusDisabled": "Disabled",
+      "linkedSubjects": "Subjects Linked to Immich",
+      "linkedCases": "Cases Linked to Immich Albums",
+      "lastErrorLabel": "Last error",
+      "serverUrlLabel": "Immich Server URL (Internal / API)",
+      "serverUrlPlaceholder": "http://192.168.1.10:2283",
+      "serverUrlHelp": "Base URL used by this server to communicate with Immich (e.g. http://localhost:2283 or http://immich-server:2283).",
+      "publicUrlLabel": "Public Immich URL (Optional)",
+      "publicUrlPlaceholder": "https://photos.example.com",
+      "publicUrlHelp": "External URL used for \"Open in Immich\" links in your browser. Leave blank to use the Server URL.",
+      "apiKeyLabel": "Immich API Key",
+      "apiKeyPlaceholder": "Enter your Immich API Key",
+      "apiKeySavedPlaceholder": "•••••••••••••••• (Saved — leave blank to keep current key)",
+      "apiKeyHelp": "Generate an API key in Immich under Account Settings → API Keys with asset.read, person.read, and album.read permissions.",
+      "enabledLabel": "Enable Immich integration across Subject and Case pages",
+      "saveButton": "Save Configuration",
+      "testButton": "Test Connection",
+      "testingButton": "Testing...",
+      "disconnectButton": "Remove Connection",
+      "disconnectingButton": "Removing...",
+      "confirmDisconnect": "Are you sure you want to remove the Immich server connection? Linked IDs on subjects and cases will be preserved.",
+      "testSuccess": "Successfully connected to Immich server",
+      "testFailed": "Could not connect to Immich server. Check URL and API key.",
+      "saveSuccess": "Immich settings saved successfully.",
+      "saveFailed": "Failed to save Immich settings.",
+      "disconnectSuccess": "Immich connection removed.",
+      "disconnectFailed": "Failed to remove Immich connection.",
+      "guideTitle": "How Immich Integration Works",
+      "guideStep1": "Your Immich API key is encrypted at rest (AES-256-GCM) and never exposed to the browser.",
+      "guideStep2": "On any Subject page, link an Immich Face Cluster (AI facial recognition) or Album to embed all matching photos and videos.",
+      "guideStep3": "Click \"Set as Avatar\" on any Immich photo to crop and save a 256px profile photo for the subject.",
+      "guideStep4": "On any Case (Event) page, link an Immich Album to display crime scene photos, CCTV clips, and EXIF GPS metadata."
     }
   },
   "customFields": {
@@ -1428,7 +1466,11 @@
       "selectEvent": "None (no event)",
       "connectedEventRoleLabel": "Role in Event",
       "connectedEventRolePlaceholder": "e.g., Organizer, Speaker, Participant, Witness...",
-      "searchGroups": "Search groups..."
+      "searchGroups": "Search groups...",
+      "quickFullNameLabel": "Quick Full Name Input (Auto-split)",
+      "quickFullNamePlaceholder": "e.g. Nguyen Van Hung",
+      "quickFullNameHelp": "Type a full name to automatically split into Surname, Middle Name, and First Name below.",
+      "advancedNameFields": "Advanced Name Options (Prefix, Second Surname, Suffix, Display Name Override)"
     },
     "exportVcf": "VCFエクスポート",
     "exportingVcf": "エクスポート中...",
@@ -1679,7 +1721,14 @@
     "flagAsSuspectInCase": "+ Flag as Suspect in \"{title}\"",
     "flagSaving": "Saving...",
     "flaggedInCase": "✓ Flagged in Case",
-    "flagFailed": "Failed — try again"
+    "flagFailed": "Failed — try again",
+    "rosterToggle": "Subject Roster",
+    "rosterTitle": "Subject & Scene Roster",
+    "rosterLocatedSection": "Located on Map",
+    "rosterUnlocatedSection": "Unlocated Subjects",
+    "rosterUnlocatedHint": "Subjects matching filters without GPS coordinates:",
+    "rosterUnlocatedEmpty": "All matching subjects have coordinates.",
+    "rosterAddCoordsLink": "Profile →"
   },
   "relationshipTypes": {
     "title": "関係の種類",
@@ -2386,5 +2435,37 @@
       "phone": "Phone",
       "exportSelected": "Export Selected"
     }
+  },
+  "graph": {
+    "resetLayout": "Reset graph layout"
+  },
+  "immich": {
+    "personSectionTitle": "Photos & Videos (Immich)",
+    "personSectionDescription": "Embedded gallery from linked Immich AI face cluster or evidence album",
+    "eventSectionTitle": "Crime Scene & Evidence Media (Immich)",
+    "eventSectionDescription": "Photos and video recordings linked from an Immich case album",
+    "notConfiguredPrompt": "Connect your Immich server in Settings to embed photos, facial recognition clusters, and video evidence here.",
+    "configureInSettings": "Configure Immich in Settings",
+    "openInImmich": "Open in Immich",
+    "linkImmichButton": "Link Immich",
+    "editLinkButton": "Configure Link",
+    "loadingCatalog": "Loading face clusters and albums from Immich...",
+    "faceClusterLabel": "Immich AI Face Cluster (Person)",
+    "searchFaceClusterPlaceholder": "Search face clusters by name or ID...",
+    "noneOption": "None",
+    "unnamedFace": "Unnamed Face",
+    "manualPersonIdPlaceholder": "Or paste Immich Person UUID directly...",
+    "albumLabel": "Immich Album",
+    "selectAlbumPrompt": "-- Select an Immich Album (or leave blank) --",
+    "manualAlbumIdPlaceholder": "Or paste Immich Album UUID directly...",
+    "noPersonLinkYet": "No Immich face cluster or album linked to this subject yet. Click \"Link Immich\" to connect photos & videos.",
+    "noEventLinkYet": "No Immich evidence album linked to this case yet. Click \"Link Immich\" to connect crime scene photos & videos.",
+    "loadAssetsError": "Unable to load media from Immich. Check your Immich connection in Settings.",
+    "noAssetsFound": "No photos or videos found in the linked Immich source.",
+    "setAsAvatar": "Set as Avatar (256px)",
+    "setAsAvatarShort": "Set Avatar",
+    "setAvatarSuccess": "Profile avatar updated from Immich photo!",
+    "setAvatarError": "Failed to set profile avatar from Immich.",
+    "downloadOriginal": "Original File"
   }
 }

@@ -13,6 +13,7 @@ type DashboardGraphPerson = {
   id: string;
   name: string;
   surname: string | null;
+  middleName?: string | null;
   nickname: string | null;
   displayNameOverride: string | null;
   photo: string | null;
@@ -119,10 +120,9 @@ export const GET = withAuth(async (request, session) => {
       const cfVal = colonIdx >= 0 ? customFieldFilter.slice(colonIdx + 1).trim() : '';
       if (cfSlug) {
         filterPredicates.push({
-          customFields: {
+          customFieldValues: {
             some: {
-              deletedAt: null,
-              customFieldTemplate: { slug: cfSlug, deletedAt: null },
+              template: { slug: cfSlug, deletedAt: null },
               ...(cfVal ? { value: { contains: cfVal, mode: 'insensitive' } } : {}),
             },
           },
@@ -143,6 +143,7 @@ export const GET = withAuth(async (request, session) => {
         id: true,
         name: true,
         surname: true,
+        middleName: true,
         nickname: true,
         displayNameOverride: true,
         photo: true,

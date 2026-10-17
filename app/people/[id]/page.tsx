@@ -22,6 +22,7 @@ import { getDateDisplayTitle } from '@/lib/important-date-types';
 import JournalSection from '@/components/JournalSection';
 import MessagingLinks from '@/components/MessagingLinks';
 import PersonEventsManager from '@/components/PersonEventsManager';
+import ImmichGallerySection from '@/components/ImmichGallerySection';
 import { customFieldValuesInclude } from '@/lib/prisma-queries';
 
 function isSafeUrl(url: string): boolean {
@@ -122,7 +123,7 @@ export default async function PersonDetailsPage({
   const nameOrder = user?.nameOrder;
   const nameDisplayFormat: NameDisplayFormat = user?.nameDisplayFormat || 'FULL';
 
-  const [person, allPeople, relationshipTypes, cardDavConnection, latestJournalEntry, allEvents] = await Promise.all([
+  const [person, allPeople, relationshipTypes, cardDavConnection, latestJournalEntry, allEvents, immichConnection] = await Promise.all([
     prisma.person.findUnique({
       where: {
         id,
@@ -303,6 +304,10 @@ export default async function PersonDetailsPage({
         title: true,
       },
       orderBy: [{ startDate: 'desc' }, { title: 'asc' }],
+    }),
+    prisma.immichConnection.findUnique({
+      where: { userId: session.user.id },
+      select: { enabled: true },
     }),
   ]);
 
@@ -841,6 +846,15 @@ export default async function PersonDetailsPage({
                   <MarkdownRenderer content={person.notes} />
                 </div>
               )}
+
+              {/* Immich Photo & Video Evidence Gallery */}
+              <ImmichGallerySection
+                mode="person"
+                entityId={person.id}
+                initialImmichPersonId={person.immichPersonId}
+                initialImmichAlbumId={person.immichAlbumId}
+                immichConfigured={Boolean(immichConnection?.enabled)}
+              />
 
               {/* Journal Section */}
               <JournalSection

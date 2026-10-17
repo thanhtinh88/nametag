@@ -139,6 +139,7 @@ interface Person
   extends Prisma.PersonGetPayload<{
     select: { id: true; name: true; surname: true; nickname: true; displayNameOverride: true; photo: true };
   }> {
+  middleName?: string | null;
   groups: { group: Group }[];
 }
 

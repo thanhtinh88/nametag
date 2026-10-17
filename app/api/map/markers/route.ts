@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { apiResponse, handleApiError, withAuth } from '@/lib/api-utils';
 import { formatGraphName, type NameDisplayFormat } from '@/lib/nameUtils';
 import { getCountryName } from '@/lib/countries';
-import type { MapGroup, MapMarker, UnlocatedPerson } from '@/lib/map/types';
+import type { MapGroup, MapMarker, UnlocatedPerson, UnmappedSubject } from '@/lib/map/types';
 
 export const GET = withAuth(async (request, session) => {
   try {
@@ -17,6 +17,7 @@ export const GET = withAuth(async (request, session) => {
           id: true,
           name: true,
           surname: true,
+          middleName: true,
           nickname: true,
           displayNameOverride: true,
           photo: true,
@@ -67,6 +68,13 @@ export const GET = withAuth(async (request, session) => {
     const groupsById = new Map<string, MapGroup>();
     const markers: MapMarker[] = [];
     const unlocatedPeople: UnlocatedPerson[] = [];
+    const locatedPersonIds = new Set<string>();
+    const personSummaryList: Array<{
+      personId: string;
+      personName: string;
+      groupIds: string[];
+      groupColor: string | null;
+    }> = [];
 
     for (const person of people) {
       // formatGraphName honors the user's name display settings (FULL,
@@ -86,6 +94,13 @@ export const GET = withAuth(async (request, session) => {
       // network graph picks a node's fill/ring color.
       const groupColor = person.groups.find((pg) => pg.group.color)?.group.color ?? null;
 
+      personSummaryList.push({
+        personId: person.id,
+        personName,
+        groupIds,
+        groupColor,
+      });
+
       const personFailedCount = person.addresses.filter(
         (address) => address.geocodeStatus === 'failed'
       ).length;
@@ -97,6 +112,7 @@ export const GET = withAuth(async (request, session) => {
         if (address.geocodeStatus !== 'success' || address.latitude === null || address.longitude === null) {
           continue;
         }
+        locatedPersonIds.add(person.id);
         const addressText = [
           address.streetLine1,
           address.streetLine2,
@@ -127,6 +143,7 @@ export const GET = withAuth(async (request, session) => {
       }
 
       for (const location of person.locations) {
+        locatedPersonIds.add(person.id);
         markers.push({
           id: `loc_${location.id}`,
           source: 'location',
@@ -153,6 +170,7 @@ export const GET = withAuth(async (request, session) => {
       latitude: number | null;
       longitude: number | null;
     }> = [];
+    const unmappedSubjects: UnmappedSubject[] = [];
 
     if (prisma.event?.findMany) {
       const events = await prisma.event.findMany({
@@ -296,6 +314,21 @@ export const GET = withAuth(async (request, session) => {
           }
         }
       }
+
+      // Collect subjects that have no located markers on the map
+      for (const summary of personSummaryList) {
+        if (!locatedPersonIds.has(summary.personId)) {
+          const links = caseLinksByPersonId.get(summary.personId);
+          unmappedSubjects.push({
+            personId: summary.personId,
+            personName: summary.personName,
+            groupIds: summary.groupIds,
+            groupColor: summary.groupColor,
+            ...(links && links.length > 0 ? { caseLinks: links } : {}),
+          });
+        }
+      }
+      unmappedSubjects.sort((a, b) => a.personName.localeCompare(b.personName));
     }
 
     const groups = [...groupsById.values()].sort((a, b) => a.name.localeCompare(b.name));
@@ -305,6 +338,7 @@ export const GET = withAuth(async (request, session) => {
       markers,
       groups,
       ...(cases.length > 0 ? { cases } : {}),
+      ...(unmappedSubjects.length > 0 ? { unmappedSubjects } : {}),
       pendingCount,
       failedCount,
       unlocatedPeople,

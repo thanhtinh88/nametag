@@ -12,6 +12,7 @@ import MarkdownRenderer from '@/components/MarkdownRenderer';
 import EventPeopleManager from '@/components/EventPeopleManager';
 import EventRelationshipManager from '@/components/EventRelationshipManager';
 import EventDeleteButton from '@/components/EventDeleteButton';
+import ImmichGallerySection from '@/components/ImmichGallerySection';
 
 export default async function EventDetailPage({
   params,
@@ -28,7 +29,7 @@ export default async function EventDetailPage({
 
   const { id } = await params;
 
-  const [event, availablePeople, availableEvents, preferences] = await Promise.all([
+  const [event, availablePeople, availableEvents, preferences, immichConnection] = await Promise.all([
     prisma.event.findFirst({
       where: {
         id,
@@ -124,6 +125,10 @@ export default async function EventDetailPage({
       orderBy: { title: 'asc' },
     }),
     getUserDisplayPreferences(session.user.id),
+    prisma.immichConnection.findUnique({
+      where: { userId: session.user.id },
+      select: { enabled: true },
+    }),
   ]);
 
   if (!event) {
@@ -344,6 +349,14 @@ export default async function EventDetailPage({
               </div>
             )}
           </div>
+
+          {/* Immich Crime Scene / Case Evidence Gallery */}
+          <ImmichGallerySection
+            mode="event"
+            entityId={event.id}
+            initialImmichAlbumId={event.immichAlbumId}
+            immichConfigured={Boolean(immichConnection?.enabled)}
+          />
 
           {/* Participants / Suspects Manager */}
           <EventPeopleManager

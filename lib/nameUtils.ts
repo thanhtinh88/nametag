@@ -50,9 +50,9 @@ export function formatPersonName(
     const parts: string[] = [];
     if (surname) parts.push(surname);
     if (secondLastName) parts.push(secondLastName);
-    if (nicknameStr) parts.push(nicknameStr);
-    parts.push(name);
     if (middleName) parts.push(middleName);
+    parts.push(name);
+    if (nicknameStr) parts.push(nicknameStr);
     return parts.join(sep);
   }
 
@@ -132,6 +132,7 @@ export function formatCanonicalName(person: {
 export function formatGraphName(person: {
   name: string;
   surname?: string | null;
+  middleName?: string | null;
   nickname?: string | null;
   displayNameOverride?: string | null;
 }, nameOrder?: 'WESTERN' | 'EASTERN', nameDisplayFormat?: NameDisplayFormat): string {
@@ -159,7 +160,7 @@ export function formatGraphName(person: {
   // FULL (default): show complete name with nickname in quotes
   const nicknameStr = person.nickname ? `'${person.nickname}'` : null;
 
-  if (!person.surname) {
+  if (!person.surname && (!person.middleName || nameOrder !== 'EASTERN')) {
     if (nicknameStr) {
       return `${person.name} ${nicknameStr}`;
     }
@@ -167,18 +168,49 @@ export function formatGraphName(person: {
   }
 
   if (nameOrder === 'EASTERN') {
-    const parts: string[] = [person.surname];
-    if (nicknameStr) parts.push(nicknameStr);
+    const parts: string[] = [];
+    if (person.surname) parts.push(person.surname);
+    if (person.middleName) parts.push(person.middleName);
     parts.push(person.name);
-    const sep = nameSeparator(person.name, person.surname);
+    if (nicknameStr) parts.push(nicknameStr);
+    const sep = nameSeparator(person.name, person.surname, person.middleName);
     return parts.join(sep);
   }
 
   // Western FULL
   const parts: string[] = [person.name];
   if (nicknameStr) parts.push(nicknameStr);
-  parts.push(person.surname);
+  if (person.surname) parts.push(person.surname);
   return parts.join(' ');
+}
+
+/**
+ * Parses a Vietnamese full name string into { surname, middleName, name }.
+ * - 1 word (e.g. "Hùng") -> { surname: '', middleName: '', name: 'Hùng' }
+ * - 2 words (e.g. "Nguyễn Hùng") -> { surname: 'Nguyễn', middleName: '', name: 'Hùng' }
+ * - 3+ words (e.g. "Nguyễn Văn Hùng", "Trần Thị Minh Ánh") ->
+ *   first word is surname, last word is name, middle words joined as middleName.
+ */
+export function parseVietnameseFullName(rawFullName: string): {
+  surname: string;
+  middleName: string;
+  name: string;
+} {
+  const tokens = rawFullName.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) {
+    return { surname: '', middleName: '', name: '' };
+  }
+  if (tokens.length === 1) {
+    return { surname: '', middleName: '', name: tokens[0] };
+  }
+  if (tokens.length === 2) {
+    return { surname: tokens[0], middleName: '', name: tokens[1] };
+  }
+  return {
+    surname: tokens[0],
+    middleName: tokens.slice(1, -1).join(' '),
+    name: tokens[tokens.length - 1],
+  };
 }
 
 /**

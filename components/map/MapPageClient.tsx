@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import type { MapMarkersResponse } from '@/lib/map/types';
+import type { MapMarkersResponse, UnmappedSubject } from '@/lib/map/types';
 import { filterMarkers, type MapFilterState } from '@/lib/map/filter-markers';
 import MapFilters from './MapFilters';
 
@@ -21,6 +21,8 @@ function MapPageInner() {
   const [loadError, setLoadError] = useState(false);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [unlocatedOpen, setUnlocatedOpen] = useState(false);
+  const [rosterOpen, setRosterOpen] = useState(true);
+  const [focusRequest, setFocusRequest] = useState<{ id: string; seq: number } | null>(null);
 
   const filters: MapFilterState = useMemo(
     () => ({
@@ -81,6 +83,30 @@ function MapPageInner() {
     () => (data ? filterMarkers(data.markers, filters) : []),
     [data, filters]
   );
+
+  const filteredUnmappedSubjects = useMemo<UnmappedSubject[]>(() => {
+    if (!data?.unmappedSubjects) return [];
+    const needle = filters.query.trim().toLowerCase();
+    return data.unmappedSubjects.filter((subj) => {
+      if (needle && !subj.personName.toLowerCase().includes(needle)) {
+        return false;
+      }
+      if (filters.groupId && !subj.groupIds.includes(filters.groupId)) {
+        return false;
+      }
+      if (filters.caseId) {
+        const link = subj.caseLinks?.find((cl) => cl.eventId === filters.caseId);
+        if (!link) return false;
+        if (filters.showRuledOut === false && link.verificationStatus === 'RULED_OUT') {
+          return false;
+        }
+      } else if (filters.showRuledOut === false && subj.caseLinks && subj.caseLinks.length > 0) {
+        const allRuledOut = subj.caseLinks.every((cl) => cl.verificationStatus === 'RULED_OUT');
+        if (allRuledOut) return false;
+      }
+      return true;
+    });
+  }, [data, filters]);
 
   const selectedCase = useMemo(
     () =>
@@ -159,10 +185,161 @@ function MapPageInner() {
             <MapView
               markers={visibleMarkers}
               focusId={focusId}
+              focusRequest={focusRequest}
               filtersKey={`${filters.query}|${filters.groupId}|${filters.city}|${filters.region}|${filters.country}|${filters.caseId ?? ''}|${filters.radiusKm ?? 0}|${filters.onlyWithinRadius ? '1' : ''}|${filters.activeCasesOnly ? '1' : ''}|${filters.showRuledOut === false ? '0' : ''}`}
               selectedCase={selectedCase}
               radiusKm={filters.radiusKm ?? 0}
             />
+
+            {/* Toggle button when Subject Roster Sidebar is collapsed */}
+            {!rosterOpen && (
+              <button
+                type="button"
+                onClick={() => setRosterOpen(true)}
+                className="absolute top-3 left-3 z-20 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-surface/95 backdrop-blur border border-border shadow-md text-xs font-medium text-foreground hover:bg-surface-elevated transition-colors"
+              >
+                <span>📋 {t('rosterToggle')}</span>
+                <span className="px-1.5 py-0.5 rounded-full bg-primary/15 text-primary font-semibold">
+                  {visibleMarkers.length}
+                </span>
+                {filteredUnmappedSubjects.length > 0 && (
+                  <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 font-semibold">
+                    +{filteredUnmappedSubjects.length}
+                  </span>
+                )}
+              </button>
+            )}
+
+            {/* Collapsible Subject Roster Sidebar */}
+            {rosterOpen && (
+              <aside
+                className="absolute top-3 left-3 bottom-3 z-20 w-72 sm:w-80 bg-surface/95 backdrop-blur border border-border rounded-xl shadow-lg flex flex-col overflow-hidden"
+                aria-label={t('rosterTitle')}
+              >
+                <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 border-b border-border bg-surface-elevated/60">
+                  <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground">
+                    📋 {t('rosterTitle')}
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => setRosterOpen(false)}
+                    aria-label={tCommon('close')}
+                    className="p-1 rounded text-muted hover:text-foreground hover:bg-surface transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto divide-y divide-border/60 text-xs">
+                  {/* Section 1: Located on Map */}
+                  <div className="p-2.5">
+                    <div className="flex items-center justify-between px-1.5 mb-1.5">
+                      <span className="font-semibold text-muted">
+                        📍 {t('rosterLocatedSection')}
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded-full bg-primary/15 text-primary font-semibold text-[11px]">
+                        {visibleMarkers.length}
+                      </span>
+                    </div>
+                    {visibleMarkers.length === 0 ? (
+                      <p className="px-1.5 py-2 text-muted italic">{t('noResults')}</p>
+                    ) : (
+                      <ul className="space-y-1">
+                        {visibleMarkers.map((marker) => {
+                          const isCrimeScene = marker.source === 'event_address';
+                          return (
+                            <li key={marker.id}>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setFocusRequest((prev) => ({
+                                    id: marker.id,
+                                    seq: (prev?.seq ?? 0) + 1,
+                                  }))
+                                }
+                                className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-surface-elevated transition-colors flex items-start gap-2 group"
+                              >
+                                <span
+                                  className="mt-1 w-2.5 h-2.5 rounded-full shrink-0 border border-white/60"
+                                  style={{
+                                    backgroundColor: isCrimeScene
+                                      ? '#ef4444'
+                                      : marker.groupColor ?? '#3b82f6',
+                                  }}
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <div className="font-medium text-foreground truncate group-hover:text-primary transition-colors">
+                                    {marker.personName}
+                                  </div>
+                                  {(marker.city || marker.addressText) && (
+                                    <div className="text-[11px] text-muted truncate">
+                                      {marker.addressText ?? marker.city}
+                                    </div>
+                                  )}
+                                </div>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+
+                  {/* Section 2: Unlocated Subjects */}
+                  <div className="p-2.5 bg-amber-500/5">
+                    <div className="flex items-center justify-between px-1.5 mb-1">
+                      <span className="font-semibold text-amber-700 dark:text-amber-300">
+                        ❓ {t('rosterUnlocatedSection')}
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 font-semibold text-[11px]">
+                        {filteredUnmappedSubjects.length}
+                      </span>
+                    </div>
+                    <p className="px-1.5 mb-2 text-[11px] text-muted">
+                      {t('rosterUnlocatedHint')}
+                    </p>
+                    {filteredUnmappedSubjects.length === 0 ? (
+                      <p className="px-1.5 py-1 text-[11px] text-muted italic">
+                        {t('rosterUnlocatedEmpty')}
+                      </p>
+                    ) : (
+                      <ul className="space-y-1">
+                        {filteredUnmappedSubjects.map((subj) => {
+                          const activeCaseLink = filters.caseId
+                            ? subj.caseLinks?.find((cl) => cl.eventId === filters.caseId)
+                            : subj.caseLinks?.[0];
+                          return (
+                            <li key={subj.personId}>
+                              <Link
+                                href={`/people/${subj.personId}`}
+                                className="block px-2.5 py-1.5 rounded-lg border border-amber-500/25 bg-surface hover:bg-surface-elevated transition-colors"
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="font-medium text-foreground truncate">
+                                    {subj.personName}
+                                  </span>
+                                  <span className="text-[10px] text-primary shrink-0 hover:underline">
+                                    {t('rosterAddCoordsLink')}
+                                  </span>
+                                </div>
+                                {activeCaseLink && (
+                                  <div className="text-[11px] text-muted truncate mt-0.5">
+                                    {activeCaseLink.role || activeCaseLink.eventTitle}
+                                  </div>
+                                )}
+                              </Link>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              </aside>
+            )}
+
             {visibleMarkers.length === 0 && (
               <div className="absolute inset-0 z-10 flex items-center justify-center p-8 pointer-events-none">
                 <p

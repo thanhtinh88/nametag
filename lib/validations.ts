@@ -850,3 +850,40 @@ export function validateRequest<T>(
 
   return { success: true, data: result.data };
 }
+
+// ============================================
+// Immich integration
+// ============================================
+
+const immichIdSchema = z
+  .string()
+  .regex(/^[A-Za-z0-9-]{1,64}$/, 'Invalid Immich id');
+
+export const immichConnectionSchema = z.object({
+  serverUrl: z.string().trim().url('Invalid URL').max(500),
+  publicUrl: z
+    .union([z.string().trim().url('Invalid URL').max(500), z.literal('')])
+    .optional()
+    .nullable(),
+  // Omit (or send empty) to keep the stored key when editing other fields.
+  apiKey: z.string().trim().max(500).optional(),
+  enabled: z.boolean().optional(),
+});
+
+export const immichConnectionTestSchema = z.object({
+  serverUrl: z.string().trim().url('Invalid URL').max(500).optional(),
+  apiKey: z.string().trim().max(500).optional(),
+});
+
+export const personImmichLinkSchema = z.object({
+  immichPersonId: immichIdSchema.nullable().optional(),
+  immichAlbumId: immichIdSchema.nullable().optional(),
+});
+
+export const eventImmichLinkSchema = z.object({
+  immichAlbumId: immichIdSchema.nullable(),
+});
+
+export const immichSetPhotoSchema = z.object({
+  assetId: immichIdSchema,
+});

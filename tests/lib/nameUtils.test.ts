@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatPersonName, formatFullName, formatGraphName, formatCanonicalName } from '@/lib/nameUtils';
+import { formatPersonName, formatFullName, formatGraphName, formatCanonicalName, parseVietnameseFullName } from '@/lib/nameUtils';
 
 describe('nameUtils', () => {
   describe('formatCanonicalName', () => {
@@ -109,11 +109,11 @@ describe('nameUtils', () => {
     });
 
     it('should format name with nickname in eastern order', () => {
-      expect(formatPersonName('Charles', 'Brown', null, null, 'Charlie', 'EASTERN')).toBe("Brown 'Charlie' Charles");
+      expect(formatPersonName('Charles', 'Brown', null, null, 'Charlie', 'EASTERN')).toBe("Brown Charles 'Charlie'");
     });
 
     it('should format name with middle name in eastern order', () => {
-      expect(formatPersonName('John', 'Doe', 'Michael', null, null, 'EASTERN')).toBe('Doe John Michael');
+      expect(formatPersonName('Hùng', 'Nguyễn', 'Văn', null, null, 'EASTERN')).toBe('Nguyễn Văn Hùng');
     });
 
     it('should format name with second last name in eastern order', () => {
@@ -121,7 +121,7 @@ describe('nameUtils', () => {
     });
 
     it('should format complete name in eastern order', () => {
-      expect(formatPersonName('Matias', 'Godoy', 'Alejandro', 'Biedma', 'Matto', 'EASTERN')).toBe("Godoy Biedma 'Matto' Matias Alejandro");
+      expect(formatPersonName('Hùng', 'Nguyễn', 'Văn', null, 'Sói', 'EASTERN')).toBe("Nguyễn Văn Hùng 'Sói'");
     });
 
     it('should default to western order when nameOrder is omitted', () => {
@@ -195,7 +195,7 @@ describe('nameUtils', () => {
         secondLastName: 'Biedma',
         nickname: 'Matto',
       };
-      expect(formatFullName(person, 'EASTERN')).toBe("Godoy Biedma 'Matto' Matias Alejandro");
+      expect(formatFullName(person, 'EASTERN')).toBe("Godoy Biedma Alejandro Matias 'Matto'");
     });
 
     it('should default to western when nameOrder is omitted', () => {
@@ -220,7 +220,7 @@ describe('nameUtils', () => {
       expect(formatGraphName(person)).toBe("Matias 'Matto' Godoy");
     });
 
-    it('should show only first name and surname (ignore middle names)', () => {
+    it('should show only first name and surname (ignore middle names in western order)', () => {
       const person = {
         name: 'Matias',
         surname: 'Godoy',
@@ -230,7 +230,7 @@ describe('nameUtils', () => {
       expect(formatGraphName(person)).toBe('Matias Godoy');
     });
 
-    it('should show full name with nickname in quotes (ignore middle names)', () => {
+    it('should show full name with nickname in quotes (ignore middle names in western order)', () => {
       const person = {
         name: 'Matias',
         surname: 'Godoy',
@@ -258,9 +258,9 @@ describe('nameUtils', () => {
       expect(formatGraphName(person, 'EASTERN')).toBe('Tanaka Taro');
     });
 
-    it('should show full name with nickname in eastern order', () => {
-      const person = { name: 'Matias', surname: 'Godoy', nickname: 'Matto' };
-      expect(formatGraphName(person, 'EASTERN')).toBe("Godoy 'Matto' Matias");
+    it('should show full name with middleName and nickname in eastern order', () => {
+      const person = { name: 'Hùng', surname: 'Nguyễn', middleName: 'Văn', nickname: 'Sói' };
+      expect(formatGraphName(person, 'EASTERN')).toBe("Nguyễn Văn Hùng 'Sói'");
     });
 
     it('should handle no surname in eastern order', () => {
@@ -335,7 +335,7 @@ describe('nameUtils', () => {
     // EASTERN name order combinations
     it('should use Eastern order in FULL format', () => {
       expect(formatGraphName({ name: 'Robert', surname: 'Johnson', nickname: 'Dad' }, 'EASTERN', 'FULL'))
-        .toBe("Johnson 'Dad' Robert");
+        .toBe("Johnson Robert 'Dad'");
     });
 
     it('should use Eastern order in NICKNAME_PREFERRED format', () => {
@@ -357,7 +357,7 @@ describe('nameUtils', () => {
     // CJK names
     it('should handle CJK names in FULL format with Eastern order', () => {
       expect(formatGraphName({ name: '太郎', surname: '田中', nickname: 'タロウ' }, 'EASTERN', 'FULL'))
-        .toBe("田中'タロウ'太郎");
+        .toBe("田中太郎'タロウ'");
     });
 
     it('should handle CJK names in NICKNAME_PREFERRED format with Eastern order', () => {
@@ -431,7 +431,7 @@ describe('nameUtils', () => {
     });
 
     it('should omit spaces for CJK names with middle name', () => {
-      expect(formatPersonName('太郎', '田中', '次郎', null, null, 'EASTERN')).toBe('田中太郎次郎');
+      expect(formatPersonName('太郎', '田中', '次郎', null, null, 'EASTERN')).toBe('田中次郎太郎');
     });
 
     it('should omit spaces for CJK formatFullName', () => {
@@ -446,12 +446,42 @@ describe('nameUtils', () => {
 
     it('should omit spaces for CJK formatGraphName with nickname', () => {
       const person = { name: '太郎', surname: '田中', nickname: 'たろちゃん' };
-      expect(formatGraphName(person, 'EASTERN')).toBe("田中'たろちゃん'太郎");
+      expect(formatGraphName(person, 'EASTERN')).toBe("田中太郎'たろちゃん'");
     });
 
     it('should keep spaces for CJK names in western order', () => {
       const person = { name: '太郎', surname: '田中' };
       expect(formatFullName(person)).toBe('太郎 田中');
+    });
+  });
+
+  describe('parseVietnameseFullName', () => {
+    it('should return empty strings for blank input', () => {
+      expect(parseVietnameseFullName('   ')).toEqual({ surname: '', middleName: '', name: '' });
+    });
+
+    it('should put single word into name', () => {
+      expect(parseVietnameseFullName('Hùng')).toEqual({ surname: '', middleName: '', name: 'Hùng' });
+    });
+
+    it('should split 2 words into surname and name', () => {
+      expect(parseVietnameseFullName('Nguyễn Hùng')).toEqual({ surname: 'Nguyễn', middleName: '', name: 'Hùng' });
+    });
+
+    it('should split 3 words into surname, middleName, and name', () => {
+      expect(parseVietnameseFullName('Nguyễn Văn Hùng')).toEqual({
+        surname: 'Nguyễn',
+        middleName: 'Văn',
+        name: 'Hùng',
+      });
+    });
+
+    it('should split 4+ words by joining middle tokens into middleName', () => {
+      expect(parseVietnameseFullName('Trần Thị Minh Ánh')).toEqual({
+        surname: 'Trần',
+        middleName: 'Thị Minh',
+        name: 'Ánh',
+      });
     });
   });
 });

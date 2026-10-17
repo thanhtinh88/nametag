@@ -1,7 +1,9 @@
 'use client';
 
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import PersonAutocomplete from '../PersonAutocomplete';
+import { parseVietnameseFullName } from '@/lib/nameUtils';
 import type { FormData } from '../../hooks/usePersonForm';
 
 interface AvailablePerson {
@@ -57,23 +59,67 @@ export default function PersonalInfoSection({
 }: PersonalInfoSectionProps) {
   const t = useTranslations('people.form');
   const tEvents = useTranslations('events');
+  const [quickFullName, setQuickFullName] = useState('');
+
+  const handleQuickFullNameChange = (value: string) => {
+    setQuickFullName(value);
+    const parsed = parseVietnameseFullName(value);
+    onFormDataChange({
+      surname: parsed.surname,
+      middleName: parsed.middleName,
+      name: parsed.name,
+    });
+  };
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="p-3 rounded-lg border border-primary/30 bg-primary/5">
+        <label
+          htmlFor="quickFullName"
+          className="block text-sm font-medium text-foreground mb-1"
+        >
+          {t('quickFullNameLabel')}
+        </label>
+        <input
+          type="text"
+          id="quickFullName"
+          value={quickFullName}
+          onChange={(e) => handleQuickFullNameChange(e.target.value)}
+          placeholder={t('quickFullNamePlaceholder')}
+          className={inputClass}
+        />
+        <p className="text-xs text-muted mt-1">{t('quickFullNameHelp')}</p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div>
           <label
-            htmlFor="prefix"
+            htmlFor="surname"
             className="block text-sm font-medium text-muted mb-1"
           >
-            {t('prefixLabel')}
+            {t('surnameLabel')}
           </label>
           <input
             type="text"
-            id="prefix"
-            value={formData.prefix}
-            onChange={(e) => onFormDataChange({ prefix: e.target.value })}
-            placeholder={t('prefixPlaceholder')}
+            id="surname"
+            value={formData.surname}
+            onChange={(e) => onFormDataChange({ surname: e.target.value })}
+            className={inputClass}
+          />
+        </div>
+
+        <div>
+          <label
+            htmlFor="middleName"
+            className="block text-sm font-medium text-muted mb-1"
+          >
+            {t('middleNameLabel')}
+          </label>
+          <input
+            type="text"
+            id="middleName"
+            value={formData.middleName}
+            onChange={(e) => onFormDataChange({ middleName: e.target.value })}
             className={inputClass}
           />
         </div>
@@ -97,56 +143,6 @@ export default function PersonalInfoSection({
 
         <div>
           <label
-            htmlFor="middleName"
-            className="block text-sm font-medium text-muted mb-1"
-          >
-            {t('middleNameLabel')}
-          </label>
-          <input
-            type="text"
-            id="middleName"
-            value={formData.middleName}
-            onChange={(e) => onFormDataChange({ middleName: e.target.value })}
-            className={inputClass}
-          />
-        </div>
-
-        <div>
-          <label
-            htmlFor="surname"
-            className="block text-sm font-medium text-muted mb-1"
-          >
-            {t('surnameLabel')}
-          </label>
-          <input
-            type="text"
-            id="surname"
-            value={formData.surname}
-            onChange={(e) => onFormDataChange({ surname: e.target.value })}
-            className={inputClass}
-          />
-        </div>
-
-        <div>
-          <label
-            htmlFor="secondLastName"
-            className="block text-sm font-medium text-muted mb-1"
-          >
-            {t('secondLastNameLabel')}
-          </label>
-          <input
-            type="text"
-            id="secondLastName"
-            value={formData.secondLastName}
-            onChange={(e) =>
-              onFormDataChange({ secondLastName: e.target.value })
-            }
-            className={inputClass}
-          />
-        </div>
-
-        <div>
-          <label
             htmlFor="nickname"
             className="block text-sm font-medium text-muted mb-1"
           >
@@ -160,60 +156,110 @@ export default function PersonalInfoSection({
             className={inputClass}
           />
         </div>
-
-        <div>
-          <label
-            htmlFor="suffix"
-            className="block text-sm font-medium text-muted mb-1"
-          >
-            {t('suffixLabel')}
-          </label>
-          <input
-            type="text"
-            id="suffix"
-            value={formData.suffix}
-            onChange={(e) => onFormDataChange({ suffix: e.target.value })}
-            placeholder={t('suffixPlaceholder')}
-            className={inputClass}
-          />
-        </div>
-
-        <div className="md:col-span-2">
-          <div className="flex items-center justify-between mb-1">
-            <label
-              htmlFor="displayNameOverride"
-              className="block text-sm font-medium text-muted"
-            >
-              {t('displayNameOverrideLabel')}
-            </label>
-            {formData.nickname && !formData.displayNameOverride && (
-              <button
-                type="button"
-                onClick={() =>
-                  onFormDataChange({ displayNameOverride: formData.nickname })
-                }
-                className="text-xs text-primary hover:underline"
-              >
-                {t('displayNameOverrideUseNickname')}
-              </button>
-            )}
-          </div>
-          <input
-            type="text"
-            id="displayNameOverride"
-            value={formData.displayNameOverride}
-            onChange={(e) =>
-              onFormDataChange({ displayNameOverride: e.target.value })
-            }
-            placeholder={t('displayNameOverridePlaceholder')}
-            className={inputClass}
-            maxLength={200}
-          />
-          <p className="text-xs text-muted mt-1">
-            {t('displayNameOverrideHelp')}
-          </p>
-        </div>
       </div>
+
+      <details
+        className="rounded-lg border border-border bg-surface-elevated/40 p-3"
+        open={Boolean(
+          formData.prefix ||
+            formData.secondLastName ||
+            formData.suffix ||
+            formData.displayNameOverride
+        )}
+      >
+        <summary className="cursor-pointer text-xs font-medium text-muted hover:text-foreground select-none">
+          {t('advancedNameFields')}
+        </summary>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3">
+          <div>
+            <label
+              htmlFor="prefix"
+              className="block text-sm font-medium text-muted mb-1"
+            >
+              {t('prefixLabel')}
+            </label>
+            <input
+              type="text"
+              id="prefix"
+              value={formData.prefix}
+              onChange={(e) => onFormDataChange({ prefix: e.target.value })}
+              placeholder={t('prefixPlaceholder')}
+              className={inputClass}
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="secondLastName"
+              className="block text-sm font-medium text-muted mb-1"
+            >
+              {t('secondLastNameLabel')}
+            </label>
+            <input
+              type="text"
+              id="secondLastName"
+              value={formData.secondLastName}
+              onChange={(e) =>
+                onFormDataChange({ secondLastName: e.target.value })
+              }
+              className={inputClass}
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="suffix"
+              className="block text-sm font-medium text-muted mb-1"
+            >
+              {t('suffixLabel')}
+            </label>
+            <input
+              type="text"
+              id="suffix"
+              value={formData.suffix}
+              onChange={(e) => onFormDataChange({ suffix: e.target.value })}
+              placeholder={t('suffixPlaceholder')}
+              className={inputClass}
+            />
+          </div>
+
+          <div className="md:col-span-3">
+            <div className="flex items-center justify-between mb-1">
+              <label
+                htmlFor="displayNameOverride"
+                className="block text-sm font-medium text-muted"
+              >
+                {t('displayNameOverrideLabel')}
+              </label>
+              {formData.nickname && !formData.displayNameOverride && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onFormDataChange({ displayNameOverride: formData.nickname })
+                  }
+                  className="text-xs text-primary hover:underline"
+                >
+                  {t('displayNameOverrideUseNickname')}
+                </button>
+              )}
+            </div>
+            <input
+              type="text"
+              id="displayNameOverride"
+              value={formData.displayNameOverride}
+              onChange={(e) =>
+                onFormDataChange({ displayNameOverride: e.target.value })
+              }
+              placeholder={t('displayNameOverridePlaceholder')}
+              className={inputClass}
+              maxLength={200}
+            />
+            <p className="text-xs text-muted mt-1">
+              {t('displayNameOverrideHelp')}
+            </p>
+          </div>
+        </div>
+      </details>
 
       {mode === 'create' && (
         <div>

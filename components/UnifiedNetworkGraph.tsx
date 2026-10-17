@@ -26,7 +26,13 @@ import type { SimulationNode, SimulationEdge } from './graph/simulation-types';
 // Props interface — unchanged from pre-rewrite file
 interface Group { id: string; name: string; color: string | null; }
 interface CaseOption { id: string; title: string; status: string; }
-interface CustomFieldTemplateOption { id: string; name: string; slug: string; }
+interface CustomFieldTemplateOption {
+  id: string;
+  name: string;
+  slug: string;
+  type?: string;
+  options?: string[];
+}
 type IncludeMode = 'or' | 'and';
 type GroupFilterItem = { id: string; label: string; color: string | null; isNegative: boolean; };
 
@@ -73,6 +79,11 @@ export default function UnifiedNetworkGraph({
   const rafRef = useRef<number | null>(null);
   const unpinTimeoutRef = useRef<number | null>(null);
   const isDraggingRef = useRef<boolean>(false);
+  const pinnedPositionsRef = useRef<Record<string, { x: number; y: number }>>({});
+
+  const storageScope = apiEndpoint || 'default';
+  const filtersStorageKey = `nametag:graph:filters:${storageScope}`;
+  const positionsStorageKey = `nametag:graph:positions:${storageScope}`;
 
   // Filter state
   const [selectedGroupFilters, setSelectedGroupFilters] = useState<GroupFilterItem[]>([]);
@@ -84,8 +95,87 @@ export default function UnifiedNetworkGraph({
   const [hideUserNode, setHideUserNode] = useState<boolean>(Boolean(events));
   const [customFieldSlug, setCustomFieldSlug] = useState<string>('');
   const [customFieldValue, setCustomFieldValue] = useState<string>('');
+  const [filtersHydrated, setFiltersHydrated] = useState<boolean>(false);
   const [isMobile, setIsMobile] = useState(false);
   const capitalizeType = useLocale().startsWith('de');
+
+  // Hydrate saved filters & pinned node positions from localStorage (browser runtime only)
+  useEffect(() => {
+    if (typeof window === 'undefined' || process.env.NODE_ENV === 'test') {
+      setFiltersHydrated(true);
+      return;
+    }
+    try {
+      const savedPos = window.localStorage.getItem(positionsStorageKey);
+      if (savedPos) {
+        const parsedPos = JSON.parse(savedPos);
+        if (parsedPos && typeof parsedPos === 'object') {
+          pinnedPositionsRef.current = parsedPos;
+        }
+      }
+      const savedFilters = window.localStorage.getItem(filtersStorageKey);
+      if (savedFilters) {
+        const parsed = JSON.parse(savedFilters);
+        if (Array.isArray(parsed.selectedGroupFilters)) setSelectedGroupFilters(parsed.selectedGroupFilters);
+        if (parsed.includeMode === 'or' || parsed.includeMode === 'and') setIncludeMode(parsed.includeMode);
+        if (typeof parsed.selectedCaseId === 'string') setSelectedCaseId(parsed.selectedCaseId);
+        if (typeof parsed.includeHop === 'boolean') setIncludeHop(parsed.includeHop);
+        if (typeof parsed.activeCasesOnly === 'boolean') setActiveCasesOnly(parsed.activeCasesOnly);
+        if (typeof parsed.showRuledOut === 'boolean') setShowRuledOut(parsed.showRuledOut);
+        if (typeof parsed.hideUserNode === 'boolean') setHideUserNode(parsed.hideUserNode);
+        if (typeof parsed.customFieldSlug === 'string') setCustomFieldSlug(parsed.customFieldSlug);
+        if (typeof parsed.customFieldValue === 'string') setCustomFieldValue(parsed.customFieldValue);
+      }
+    } catch {
+      // Ignore storage errors
+    } finally {
+      setFiltersHydrated(true);
+    }
+  }, [filtersStorageKey, positionsStorageKey]);
+
+  // Persist filter changes to localStorage
+  useEffect(() => {
+    if (!filtersHydrated || typeof window === 'undefined' || process.env.NODE_ENV === 'test') return;
+    try {
+      window.localStorage.setItem(
+        filtersStorageKey,
+        JSON.stringify({
+          selectedGroupFilters,
+          includeMode,
+          selectedCaseId,
+          includeHop,
+          activeCasesOnly,
+          showRuledOut,
+          hideUserNode,
+          customFieldSlug,
+          customFieldValue,
+        }),
+      );
+    } catch {
+      // Ignore storage errors
+    }
+  }, [
+    filtersHydrated,
+    filtersStorageKey,
+    selectedGroupFilters,
+    includeMode,
+    selectedCaseId,
+    includeHop,
+    activeCasesOnly,
+    showRuledOut,
+    hideUserNode,
+    customFieldSlug,
+    customFieldValue,
+  ]);
+
+  const savePinnedPositions = useCallback(() => {
+    if (typeof window === 'undefined' || process.env.NODE_ENV === 'test') return;
+    try {
+      window.localStorage.setItem(positionsStorageKey, JSON.stringify(pinnedPositionsRef.current));
+    } catch {
+      // Ignore storage errors
+    }
+  }, [positionsStorageKey]);
 
   // Bubble state
   const [expandedBubbles, setExpandedBubbles] = useState<Set<string>>(new Set());
@@ -163,6 +253,26 @@ export default function UnifiedNetworkGraph({
       .duration(750)
       .call(zoomBehavior.transform, zoomIdentity);
   }, []);
+
+  // Reset all pinned node positions and re-run force layout
+  const resetGraphLayout = useCallback(() => {
+    pinnedPositionsRef.current = {};
+    if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'test') {
+      try {
+        window.localStorage.removeItem(positionsStorageKey);
+      } catch {
+        // Ignore storage errors
+      }
+    }
+    for (const node of nodesRef.current) {
+      node.fx = null;
+      node.fy = null;
+    }
+    if (simRef.current) {
+      simRef.current.alpha(0.6).restart();
+    }
+    recenterGraph();
+  }, [positionsStorageKey, recenterGraph]);
 
   const toggleFilterSign = (id: string) => {
     setSelectedGroupFilters((prev) =>
@@ -385,12 +495,12 @@ export default function UnifiedNetworkGraph({
       .force('centerX', forceX<SimulationNode>(width / 2).strength((d) => {
         if (d.kind === 'person' && d.isCenter) return 0.5;
         if (d.kind === 'bubble' && d.isExpanded) return 0;
-        return 0.15;
+        return 0.04;
       }))
       .force('centerY', forceY<SimulationNode>(height / 2).strength((d) => {
         if (d.kind === 'person' && d.isCenter) return 0.5;
         if (d.kind === 'bubble' && d.isExpanded) return 0;
-        return 0.15;
+        return 0.04;
       }))
       .force('collision', forceCollide<SimulationNode>().radius(collisionForNode))
       .force('expandedCluster', expandedClusterField);
@@ -405,7 +515,7 @@ export default function UnifiedNetworkGraph({
 
   // Step 3: Composition helper — recomposes sim data from raw cache
   const recomposeAndBuildSim = useCallback((raw: { nodes: RawGraphPerson[]; edges: SimulationEdge[] }) => {
-    const incomingPeople = raw.nodes;
+    const incomingPeople = Array.isArray(raw?.nodes) ? raw.nodes : [];
 
     // If no groups prop, we're not on the dashboard — skip bubble logic.
     const resolvedMode = groups ? resolveGraphMode(localGraphMode) : 'individuals';
@@ -438,7 +548,7 @@ export default function UnifiedNetworkGraph({
       ungroupedLabel,
     });
 
-    const rawEdges: SimulationEdge[] = raw.edges;
+    const rawEdges: SimulationEdge[] = Array.isArray(raw?.edges) ? raw.edges : [];
     const composedEdges = resolvedMode === 'bubbles'
       ? buildHubAndSpokeEdges({
           rawEdges,
@@ -461,6 +571,19 @@ export default function UnifiedNetworkGraph({
     }));
 
     const { nodes, edges } = diffSimulationData(nodesRef.current, incomingNodes, edgesRef.current, incomingEdges);
+
+    // Restore user-pinned node positions from localStorage/ref
+    const pinnedMap = pinnedPositionsRef.current;
+    for (const node of nodes) {
+      const pinned = pinnedMap[node.id];
+      if (pinned && Number.isFinite(pinned.x) && Number.isFinite(pinned.y)) {
+        node.x = pinned.x;
+        node.y = pinned.y;
+        node.fx = pinned.x;
+        node.fy = pinned.y;
+      }
+    }
+
     nodesRef.current = nodes;
     edgesRef.current = edges;
 
@@ -500,13 +623,18 @@ export default function UnifiedNetworkGraph({
         url.searchParams.set('cf', cfQuery);
       }
 
-      const response = await fetch(url.toString());
-      const data = await response.json() as { nodes: RawGraphPerson[]; edges: SimulationEdge[] };
+      try {
+        const response = await fetch(url.toString());
+        if (!response.ok) return;
+        const data = await response.json() as { nodes: RawGraphPerson[]; edges: SimulationEdge[] };
 
-      if (cancelled) return;
+        if (cancelled || !Array.isArray(data?.nodes)) return;
 
-      rawCacheRef.current = data;
-      recomposeAndBuildSim(data);
+        rawCacheRef.current = data;
+        recomposeAndBuildSim(data);
+      } catch {
+        // Ignore network errors on aborted/failed graph fetch
+      }
     };
 
     fetchData();
@@ -694,6 +822,8 @@ export default function UnifiedNetworkGraph({
         if (!d) return;
         const [cx, cy] = clientCoordsOf(event.sourceEvent);
         const [gx, gy] = toGraphCoords(cx, cy);
+        d.x = gx;
+        d.y = gy;
         d.fx = gx;
         d.fy = gy;
       })
@@ -702,12 +832,26 @@ export default function UnifiedNetworkGraph({
         if (!d) return;
         isDraggingRef.current = false;
         if (!event.active && simRef.current) simRef.current.alphaTarget(0);
-        d.fx = null;
-        d.fy = null;
         const isTouch = event.sourceEvent?.type?.startsWith('touch');
         const threshold = isTouch ? TOUCH_TRAVEL_PX : CLICK_TRAVEL_PX;
         const traveled = Math.hypot(event.x - dragStartX, event.y - dragStartY);
-        if (traveled >= threshold) return;
+        if (traveled >= threshold) {
+          // Keep dragged node pinned at its dropped coordinates and persist
+          if (d.x !== undefined && d.y !== undefined) {
+            d.fx = d.x;
+            d.fy = d.y;
+            pinnedPositionsRef.current[d.id] = { x: d.x, y: d.y };
+            savePinnedPositions();
+          }
+          return;
+        }
+
+        // It was a click/tap, not a drag: keep previous pin if it was already pinned, else release
+        const existingPin = pinnedPositionsRef.current[d.id];
+        if (!existingPin) {
+          d.fx = null;
+          d.fy = null;
+        }
 
         if (isTouch) {
           if (touchSelectedNodeIdRef.current === d.id) {
@@ -747,7 +891,9 @@ export default function UnifiedNetworkGraph({
         unpinTimeoutRef.current = null;
       }
     };
-  }, [centerNodeNonClickable, isMobile, requestPaint, router]);
+  }, [centerNodeNonClickable, isMobile, requestPaint, router, savePinnedPositions]);
+
+  const activeCustomFieldTemplate = customFieldTemplates?.find((cf) => cf.slug === customFieldSlug);
 
   return (
     <div className="w-full h-full">
@@ -890,16 +1036,6 @@ export default function UnifiedNetworkGraph({
                 <span>{t('showRuledOut')}</span>
               </label>
 
-              <label className="inline-flex items-center gap-1.5 text-foreground cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={hideUserNode}
-                  onChange={(e) => setHideUserNode(e.target.checked)}
-                  className="rounded border-border text-primary focus:ring-primary"
-                />
-                <span>{t('hideUserNode')}</span>
-              </label>
-
               {customFieldTemplates && customFieldTemplates.length > 0 && (
                 <div className="flex items-center gap-1.5">
                   <label className="font-medium text-muted">{t('customFieldFilter')}</label>
@@ -907,7 +1043,7 @@ export default function UnifiedNetworkGraph({
                     value={customFieldSlug}
                     onChange={(e) => {
                       setCustomFieldSlug(e.target.value);
-                      if (!e.target.value) setCustomFieldValue('');
+                      setCustomFieldValue('');
                     }}
                     className="px-2 py-1.5 rounded border border-border bg-surface-elevated text-foreground"
                   >
@@ -919,13 +1055,38 @@ export default function UnifiedNetworkGraph({
                     ))}
                   </select>
                   {customFieldSlug && (
-                    <input
-                      type="text"
-                      value={customFieldValue}
-                      onChange={(e) => setCustomFieldValue(e.target.value)}
-                      placeholder={t('customFieldValuePlaceholder')}
-                      className="px-2 py-1 rounded border border-border bg-surface-elevated text-foreground w-32"
-                    />
+                    activeCustomFieldTemplate?.type === 'SELECT' && Array.isArray(activeCustomFieldTemplate.options) && activeCustomFieldTemplate.options.length > 0 ? (
+                      <select
+                        value={customFieldValue}
+                        onChange={(e) => setCustomFieldValue(e.target.value)}
+                        className="px-2 py-1.5 rounded border border-border bg-surface-elevated text-foreground"
+                      >
+                        <option value="">{t('customFieldAny')}</option>
+                        {activeCustomFieldTemplate.options.map((opt) => (
+                          <option key={opt} value={opt}>
+                            {opt}
+                          </option>
+                        ))}
+                      </select>
+                    ) : activeCustomFieldTemplate?.type === 'BOOLEAN' ? (
+                      <select
+                        value={customFieldValue}
+                        onChange={(e) => setCustomFieldValue(e.target.value)}
+                        className="px-2 py-1.5 rounded border border-border bg-surface-elevated text-foreground"
+                      >
+                        <option value="">{t('customFieldAny')}</option>
+                        <option value="true">Có (True)</option>
+                        <option value="false">Không (False)</option>
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={customFieldValue}
+                        onChange={(e) => setCustomFieldValue(e.target.value)}
+                        placeholder={t('customFieldValuePlaceholder')}
+                        className="px-2 py-1 rounded border border-border bg-surface-elevated text-foreground w-32"
+                      />
+                    )
                   )}
                 </div>
               )}
@@ -961,7 +1122,44 @@ export default function UnifiedNetworkGraph({
               : 'h-[400px] sm:h-[500px] lg:h-[70vh] lg:min-h-[600px]'
           }`}
         />
-        <div className="absolute bottom-4 right-4 flex gap-2">
+        <div className="absolute bottom-4 right-4 flex items-center gap-2">
+          {events && (
+            <button
+              type="button"
+              onClick={() => setHideUserNode((prev) => !prev)}
+              className={`p-2.5 border rounded-lg transition-all ${
+                hideUserNode
+                  ? 'bg-surface/60 border-border/60 text-muted opacity-60 hover:opacity-100'
+                  : 'bg-surface border-border text-muted hover:text-foreground hover:bg-surface-elevated'
+              }`}
+              aria-label={t('hideUserNode')}
+              title={t('hideUserNode')}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                {hideUserNode && (
+                  <line x1="3" y1="3" x2="21" y2="21" strokeLinecap="round" strokeWidth={2} />
+                )}
+              </svg>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={resetGraphLayout}
+            className="p-3 bg-surface border border-border rounded-lg hover:bg-surface-elevated transition-colors"
+            aria-label={t('resetLayout')}
+            title={t('resetLayout')}
+          >
+            <svg
+              className="w-5 h-5 text-primary dark:text-white"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
           {groups && (() => {
             const bubblesActive = resolveGraphMode(localGraphMode) === 'bubbles';
             const label = bubblesActive ? t('showIndividuals') : t('showAsGroups');

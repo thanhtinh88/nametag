@@ -59,10 +59,20 @@ export interface UnlocatedPerson {
   failedCount: number;
 }
 
+/** A subject who has no geocoded markers on the map at all */
+export interface UnmappedSubject {
+  personId: string;
+  personName: string;
+  groupIds: string[];
+  groupColor: string | null;
+  caseLinks?: MapCaseLink[];
+}
+
 export interface MapMarkersResponse {
   markers: MapMarker[];
   groups: MapGroup[];
   cases?: MapCase[];
+  unmappedSubjects?: UnmappedSubject[];
   pendingCount: number;
   failedCount: number;
   /** Contacts with failed addresses, name-sorted, for the map's unlocated drawer */

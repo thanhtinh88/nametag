@@ -32,7 +32,10 @@ type SerializablePersonAddress = Omit<PersonAddress, 'latitude' | 'longitude'> &
 /**
  * Person with all relations loaded (for vCard export)
  */
-export interface PersonWithRelations extends Person {
+export interface PersonWithRelations
+  extends Omit<Person, 'immichPersonId' | 'immichAlbumId'> {
+  immichPersonId?: string | null;
+  immichAlbumId?: string | null;
   phoneNumbers: PersonPhone[];
   emails: PersonEmail[];
   addresses: SerializablePersonAddress[];
