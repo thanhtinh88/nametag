@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useTranslations } from 'next-intl';
@@ -42,23 +42,30 @@ function ringColorFor(marker: MapMarker, isDark: boolean): string {
   return marker.groupColor ?? (isDark ? RING_FALLBACK_DARK : RING_FALLBACK_LIGHT);
 }
 
+export interface RadiusCenter {
+  latitude: number;
+  longitude: number;
+  label?: string;
+  isPerson?: boolean;
+}
+
 /** Builds a 64-vertex GeoJSON polygon approximating a circle of `radiusKm` around `[lng, lat]`. */
 function buildRadiusGeoJSON(
-  selectedCase: MapCase | null | undefined,
+  center: RadiusCenter | null | undefined,
   radiusKm: number | undefined,
 ): GeoJSON.FeatureCollection<GeoJSON.Polygon> {
   if (
-    !selectedCase ||
-    selectedCase.latitude === null ||
-    selectedCase.longitude === null ||
+    !center ||
+    center.latitude === null ||
+    center.longitude === null ||
     !radiusKm ||
     radiusKm <= 0
   ) {
     return { type: 'FeatureCollection', features: [] };
   }
 
-  const centerLat = selectedCase.latitude;
-  const centerLng = selectedCase.longitude;
+  const centerLat = center.latitude;
+  const centerLng = center.longitude;
   const points = 64;
   const coords: [number, number][] = [];
   const distanceX = radiusKm / (111.32 * Math.cos((centerLat * Math.PI) / 180));
@@ -80,7 +87,9 @@ function buildRadiusGeoJSON(
           type: 'Polygon',
           coordinates: [coords],
         },
-        properties: {},
+        properties: {
+          color: center.isPerson ? '#3b82f6' : '#ef4444',
+        },
       },
     ],
   };
@@ -131,6 +140,8 @@ interface MapViewProps {
   filtersKey: string;
   selectedCase?: MapCase | null;
   radiusKm?: number;
+  radiusCenter?: RadiusCenter | null;
+  onSelectMarker?: (marker: MapMarker) => void;
 }
 
 interface MarkerProperties {
@@ -187,6 +198,7 @@ function toGeoJSON(
     const count = groupMarkers.length;
     const isSolo = count === 1;
     const isCrimeScene = representative.source === 'event_address';
+    const names = groupMarkers.map((m) => m.personName).join(', ');
 
     features.push({
       type: 'Feature',
@@ -194,7 +206,7 @@ function toGeoJSON(
       properties: {
         id: representative.id,
         personId: representative.personId,
-        personName: representative.personName,
+        personName: names,
         label: representative.label,
         // Omitted rather than null: null-valued GeoJSON properties do not
         // survive the round trip through queryRenderedFeatures reliably.
@@ -219,6 +231,8 @@ export default function MapView({
   filtersKey,
   selectedCase = null,
   radiusKm = 0,
+  radiusCenter = null,
+  onSelectMarker,
 }: MapViewProps) {
   const t = useTranslations('map');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -235,6 +249,9 @@ export default function MapView({
     viewContact: t('viewContact'),
     directions: t('directions'),
     colocatedTitle: (count: number) => t('colocatedTitle', { count }),
+    clusterTitle: (count: number) => t('clusterTitle', { count }),
+    clusterZoomIn: t('clusterZoomIn'),
+    clusterHoverTip: t('clusterHoverTip'),
     distanceMetersFromScene: (meters: number) => t('distanceMetersFromScene', { meters }),
     distanceKmFromScene: (km: string) => t('distanceKmFromScene', { km }),
     flagAsSuspectInCase: (title: string) => t('flagAsSuspectInCase', { title }),
@@ -263,22 +280,46 @@ export default function MapView({
     markersRef.current = markers;
   }, [markers]);
 
+  const effectiveRadiusCenter = useMemo(
+    () =>
+      radiusCenter ??
+      (selectedCase && selectedCase.latitude !== null && selectedCase.longitude !== null
+        ? {
+            latitude: selectedCase.latitude,
+            longitude: selectedCase.longitude,
+            label: selectedCase.title,
+            isPerson: false,
+          }
+        : null),
+    [radiusCenter, selectedCase]
+  );
+  const radiusCenterRef = useRef<RadiusCenter | null>(effectiveRadiusCenter);
+  const onSelectMarkerRef = useRef(onSelectMarker);
+
+  useEffect(() => {
+    onSelectMarkerRef.current = onSelectMarker;
+  }, [onSelectMarker]);
+
   useEffect(() => {
     selectedCaseRef.current = selectedCase;
+    radiusCenterRef.current = effectiveRadiusCenter;
     radiusKmRef.current = radiusKm;
     const map = mapRef.current;
     if (!map) return;
     const radiusSource = map.getSource(RADIUS_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
     if (radiusSource) {
-      radiusSource.setData(buildRadiusGeoJSON(selectedCase, radiusKm));
+      radiusSource.setData(buildRadiusGeoJSON(effectiveRadiusCenter, radiusKm));
     }
-  }, [selectedCase, radiusKm]);
+  }, [selectedCase, effectiveRadiusCenter, radiusKm]);
 
   useEffect(() => {
     translationsRef.current = {
       viewContact: t('viewContact'),
       directions: t('directions'),
       colocatedTitle: (count: number) => t('colocatedTitle', { count }),
+      clusterTitle: (count: number) => t('clusterTitle', { count }),
+      clusterZoomIn: t('clusterZoomIn'),
+      clusterHoverTip: t('clusterHoverTip'),
       distanceMetersFromScene: (meters: number) => t('distanceMetersFromScene', { meters }),
       distanceKmFromScene: (km: string) => t('distanceKmFromScene', { km }),
       flagAsSuspectInCase: (title: string) => t('flagAsSuspectInCase', { title }),
@@ -433,7 +474,7 @@ export default function MapView({
 
       map.addSource(RADIUS_SOURCE_ID, {
         type: 'geojson',
-        data: buildRadiusGeoJSON(selectedCaseRef.current, radiusKmRef.current),
+        data: buildRadiusGeoJSON(radiusCenterRef.current, radiusKmRef.current),
       });
 
       map.addLayer({
@@ -441,7 +482,7 @@ export default function MapView({
         type: 'fill',
         source: RADIUS_SOURCE_ID,
         paint: {
-          'fill-color': '#ef4444',
+          'fill-color': ['coalesce', ['get', 'color'], '#ef4444'],
           'fill-opacity': 0.1,
         },
       });
@@ -451,7 +492,7 @@ export default function MapView({
         type: 'line',
         source: RADIUS_SOURCE_ID,
         paint: {
-          'line-color': '#ef4444',
+          'line-color': ['coalesce', ['get', 'color'], '#ef4444'],
           'line-width': 2,
           'line-dasharray': [3, 2],
         },
@@ -463,6 +504,12 @@ export default function MapView({
         cluster: true,
         clusterMaxZoom: 14,
         clusterRadius: 50,
+        clusterProperties: {
+          clusterNames: [
+            ['concat', ['accumulated'], ', ', ['get', 'clusterNames']],
+            ['get', 'personName'],
+          ],
+        },
       });
 
       map.addLayer({
@@ -575,26 +622,98 @@ export default function MapView({
     // Fires after initial style load AND after every setStyle (theme switch)
     map.on('style.load', addDataLayers);
 
-    map.on('click', 'clusters', (event) => {
+    let hoverPopup: maplibregl.Popup | null = null;
+
+    const handleClusterClick = (event: maplibregl.MapLayerMouseEvent) => {
+      if (hoverPopup) {
+        hoverPopup.remove();
+        hoverPopup = null;
+      }
       const features = map.queryRenderedFeatures(event.point, { layers: ['clusters'] });
-      const clusterId = Number(features[0]?.properties?.cluster_id);
+      const feature = features[0];
+      const clusterId = Number(feature?.properties?.cluster_id);
+      const pointCount = Number(feature?.properties?.point_count || 0);
       if (!Number.isFinite(clusterId)) return;
       const source = map.getSource(SOURCE_ID) as maplibregl.GeoJSONSource;
-      const geometry = features[0].geometry as GeoJSON.Point;
+      const geometry = feature.geometry as GeoJSON.Point;
       const center = geometry.coordinates as [number, number];
+
       source
-        .getClusterExpansionZoom(clusterId)
-        .then((zoom) => {
-          if (prefersReducedMotion()) {
-            map.jumpTo({ center, zoom });
-          } else {
-            map.easeTo({ center, zoom, duration: CAMERA_ANIMATION_MS });
-          }
+        .getClusterLeaves(clusterId, 100, 0)
+        .then((leaves) => {
+          const leafIds = new Set(leaves.map((l) => l.properties?.id));
+          const clusterMarkers = markersRef.current.filter((m) => leafIds.has(m.id));
+          openClusterPopup(
+            map,
+            center,
+            clusterId,
+            pointCount || clusterMarkers.length,
+            clusterMarkers,
+            translationsRef.current,
+            onSelectMarkerRef.current,
+          );
         })
-        .catch(() => {
-          // The source can be removed between the click and this promise resolving
-          // (e.g. a theme switch triggers setStyle), making the rejection safe to ignore.
-        });
+        .catch(() => {});
+    };
+
+    map.on('click', 'clusters', handleClusterClick);
+
+    map.on('mouseenter', 'clusters', (e) => {
+      map.getCanvas().style.cursor = 'pointer';
+      const features = map.queryRenderedFeatures(e.point, { layers: ['clusters'] });
+      const feature = features[0];
+      if (!feature) return;
+      const pointCount = Number(feature.properties?.point_count || 0);
+      const clusterNames = String(feature.properties?.clusterNames || '');
+      const geometry = feature.geometry as GeoJSON.Point;
+      const center = geometry.coordinates as [number, number];
+
+      const namesList = clusterNames ? clusterNames.split(', ').filter(Boolean) : [];
+
+      const tooltipEl = document.createElement('div');
+      tooltipEl.className = 'text-xs text-gray-900 w-max max-w-[340px] sm:max-w-[420px] p-0.5';
+
+      const namesHtml =
+        namesList.length > 0
+          ? `<div class="mt-1.5 space-y-1 max-h-52 overflow-y-auto pr-1">
+              ${namesList
+                .map(
+                  (name) =>
+                    `<div class="flex items-start gap-1.5 text-gray-800">
+                      <span class="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0 mt-1.5"></span>
+                      <span class="break-words font-medium leading-tight">${name}</span>
+                    </div>`
+                )
+                .join('')}
+            </div>`
+          : '';
+
+      tooltipEl.innerHTML = `
+        <div class="font-semibold text-xs border-b border-gray-200 pb-1 flex items-center justify-between gap-2">
+          <span>👥 ${translationsRef.current.clusterTitle(pointCount)}</span>
+        </div>
+        ${namesHtml}
+        <div class="text-[10px] text-blue-600 mt-1.5 pt-1 border-t border-gray-100 font-medium">${translationsRef.current.clusterHoverTip}</div>
+      `;
+
+      if (hoverPopup) hoverPopup.remove();
+      hoverPopup = new maplibregl.Popup({
+        closeButton: false,
+        offset: 12,
+        maxWidth: '440px',
+        className: 'cluster-hover-popup',
+      })
+        .setLngLat(center)
+        .setDOMContent(tooltipEl)
+        .addTo(map);
+    });
+
+    map.on('mouseleave', 'clusters', () => {
+      map.getCanvas().style.cursor = '';
+      if (hoverPopup) {
+        hoverPopup.remove();
+        hoverPopup = null;
+      }
     });
 
     const handleUnclusteredClick = (event: maplibregl.MapLayerMouseEvent) => {
@@ -602,12 +721,17 @@ export default function MapView({
       if (!feature) return;
       const props = feature.properties as unknown as MarkerProperties;
       const geometry = feature.geometry as GeoJSON.Point;
+      const marker = markersRef.current.find((m) => m.id === props.id);
+      if (marker && onSelectMarkerRef.current) {
+        onSelectMarkerRef.current(marker);
+      }
       openPopup(
         map,
         geometry.coordinates as [number, number],
         props,
         translationsRef.current,
         selectedCaseRef.current,
+        radiusCenterRef.current,
       );
     };
 
@@ -629,14 +753,21 @@ export default function MapView({
         map,
         [representative.longitude, representative.latitude],
         colocated,
-        translationsRef.current
+        translationsRef.current,
+        onSelectMarkerRef.current,
       );
     };
 
     map.on('click', 'colocated-circle', handleColocatedClick);
     map.on('click', 'colocated-count', handleColocatedClick);
 
-    for (const layer of ['clusters', 'unclustered-point', 'unclustered-photo', 'marker-labels', 'colocated-circle', 'colocated-count']) {
+    for (const layer of [
+      'unclustered-point',
+      'unclustered-photo',
+      'marker-labels',
+      'colocated-circle',
+      'colocated-count',
+    ]) {
       map.on('mouseenter', layer, () => {
         map.getCanvas().style.cursor = 'pointer';
       });
@@ -716,6 +847,7 @@ export default function MapView({
       },
       translationsRef.current,
       selectedCaseRef.current,
+      radiusCenterRef.current,
     );
   }, [focusId, markers]);
 
@@ -744,6 +876,7 @@ export default function MapView({
       },
       translationsRef.current,
       selectedCaseRef.current,
+      radiusCenterRef.current,
     );
   }, [focusRequest, markers]);
 
@@ -809,6 +942,7 @@ function openPopup(
     flagFailed?: string;
   },
   selectedCase?: MapCase | null,
+  radiusCenter?: RadiusCenter | null,
 ): void {
   const container = document.createElement('div');
   // MapLibre popups have a white background regardless of app theme, so the
@@ -836,6 +970,32 @@ function openPopup(
   const isEventMarker = props.id.startsWith('evaddr_');
 
   if (
+    radiusCenter &&
+    radiusCenter.latitude !== null &&
+    radiusCenter.longitude !== null
+  ) {
+    const distKm = haversineDistanceKm(
+      radiusCenter.latitude,
+      radiusCenter.longitude,
+      coordinates[1],
+      coordinates[0],
+    );
+    if (distKm > 0.005) {
+      const distLine = document.createElement('div');
+      distLine.className = `text-xs font-medium pt-0.5 ${radiusCenter.isPerson ? 'text-blue-700' : 'text-red-700'}`;
+      const centerLabel = radiusCenter.label ? ` từ "${radiusCenter.label}"` : '';
+      distLine.textContent =
+        distKm < 1
+          ? `📍 ${Math.round(distKm * 1000)} m${centerLabel}`
+          : `📍 ${distKm.toFixed(2)} km${centerLabel}`;
+      container.appendChild(distLine);
+    } else {
+      const distLine = document.createElement('div');
+      distLine.className = 'text-xs font-semibold text-blue-700 pt-0.5';
+      distLine.textContent = '🎯 Tâm bán kính lọc';
+      container.appendChild(distLine);
+    }
+  } else if (
     !isEventMarker &&
     selectedCase &&
     selectedCase.latitude !== null &&
@@ -926,6 +1086,118 @@ function openPopup(
   new maplibregl.Popup({ closeButton: true, offset: 12 }).setLngLat(coordinates).setDOMContent(container).addTo(map);
 }
 
+function openClusterPopup(
+  map: maplibregl.Map,
+  coordinates: [number, number],
+  clusterId: number,
+  pointCount: number,
+  clusterMarkers: MapMarker[],
+  labels: {
+    clusterTitle: (count: number) => string;
+    clusterZoomIn: string;
+    clusterHoverTip: string;
+    viewContact: string;
+    directions: string;
+  },
+  onSelectMarker?: (marker: MapMarker) => void,
+): void {
+  const container = document.createElement('div');
+  container.className = 'space-y-1.5 text-gray-900 min-w-56 max-w-xs sm:max-w-sm';
+
+  const header = document.createElement('div');
+  header.className = 'flex items-center justify-between gap-2 border-b border-gray-200 pb-1.5';
+
+  const title = document.createElement('div');
+  title.className = 'font-semibold text-sm';
+  title.textContent = labels.clusterTitle(pointCount);
+  header.appendChild(title);
+
+  const zoomBtn = document.createElement('button');
+  zoomBtn.type = 'button';
+  zoomBtn.className =
+    'px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors whitespace-nowrap';
+  zoomBtn.textContent = labels.clusterZoomIn;
+  zoomBtn.onclick = () => {
+    const source = map.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+    if (source) {
+      source
+        .getClusterExpansionZoom(clusterId)
+        .then((zoom) => {
+          map.easeTo({ center: coordinates, zoom });
+        })
+        .catch(() => {});
+    }
+  };
+  header.appendChild(zoomBtn);
+  container.appendChild(header);
+
+  const list = document.createElement('div');
+  list.className = 'max-h-60 overflow-y-auto divide-y divide-gray-100 text-xs pr-1';
+
+  for (const m of clusterMarkers) {
+    const row = document.createElement('div');
+    row.className = 'py-1 flex items-start justify-between gap-2';
+
+    const left = document.createElement('div');
+    left.className = 'min-w-0 flex-1';
+
+    const isCrimeScene = m.source === 'event_address';
+    const nameLine = document.createElement('div');
+    nameLine.className = 'font-medium flex items-start gap-1.5';
+
+    const dot = document.createElement('span');
+    dot.className = 'w-2 h-2 rounded-full shrink-0 mt-1';
+    dot.style.backgroundColor = isCrimeScene ? '#ef4444' : m.groupColor ?? '#3b82f6';
+    nameLine.appendChild(dot);
+
+    const nameText = document.createElement('span');
+    nameText.className = 'break-words leading-tight';
+    nameText.textContent = m.personName;
+    nameLine.appendChild(nameText);
+    left.appendChild(nameLine);
+
+    if (m.addressText) {
+      const addr = document.createElement('div');
+      addr.className = 'text-[11px] text-gray-500 break-words pl-3.5 leading-tight mt-0.5';
+      addr.textContent = m.addressText;
+      left.appendChild(addr);
+    }
+    row.appendChild(left);
+
+    const right = document.createElement('div');
+    right.className = 'flex items-center gap-2 shrink-0 pt-0.5';
+
+    if (onSelectMarker) {
+      const focusBtn = document.createElement('button');
+      focusBtn.type = 'button';
+      focusBtn.className = 'text-xs text-blue-700 hover:underline whitespace-nowrap font-medium';
+      focusBtn.textContent = '🎯 Focus';
+      focusBtn.onclick = () => {
+        onSelectMarker(m);
+      };
+      right.appendChild(focusBtn);
+    }
+
+    const viewLink = document.createElement('a');
+    viewLink.href = m.id.startsWith('evaddr_')
+      ? `/events/${encodeURIComponent(m.personId)}`
+      : `/people/${encodeURIComponent(m.personId)}`;
+    viewLink.textContent = labels.viewContact;
+    viewLink.className = 'text-xs underline text-blue-700 whitespace-nowrap';
+    right.appendChild(viewLink);
+
+    row.appendChild(right);
+    list.appendChild(row);
+  }
+
+  container.appendChild(list);
+
+  new maplibregl.Popup({ closeButton: true, offset: 12, maxWidth: '440px' })
+    .setLngLat(coordinates)
+    .setDOMContent(container)
+    .addTo(map);
+}
+
 // Popup for a location shared by multiple people (e.g. partners or family
 // members living together), listing everyone at that address instead of a
 // single person's details.
@@ -933,7 +1205,8 @@ function openColocatedPopup(
   map: maplibregl.Map,
   coordinates: [number, number],
   colocatedMarkers: MapMarker[],
-  labels: { viewContact: string; directions: string; colocatedTitle: (count: number) => string }
+  labels: { viewContact: string; directions: string; colocatedTitle: (count: number) => string },
+  onSelectMarker?: (marker: MapMarker) => void,
 ): void {
   const container = document.createElement('div');
   container.className = 'space-y-1 text-gray-900';
@@ -964,14 +1237,29 @@ function openColocatedPopup(
     nameEl.textContent = m.personName;
     row.appendChild(nameEl);
 
+    const actions = document.createElement('div');
+    actions.className = 'flex items-center gap-2';
+
+    if (onSelectMarker) {
+      const focusBtn = document.createElement('button');
+      focusBtn.type = 'button';
+      focusBtn.className = 'text-xs text-blue-700 hover:underline whitespace-nowrap';
+      focusBtn.textContent = '🎯 Focus';
+      focusBtn.onclick = () => {
+        onSelectMarker(m);
+      };
+      actions.appendChild(focusBtn);
+    }
+
     const link = document.createElement('a');
     link.href = m.id.startsWith('evaddr_')
       ? `/events/${encodeURIComponent(m.personId)}`
       : `/people/${encodeURIComponent(m.personId)}`;
     link.textContent = labels.viewContact;
     link.className = 'text-xs underline text-blue-700 whitespace-nowrap';
-    row.appendChild(link);
+    actions.appendChild(link);
 
+    row.appendChild(actions);
     container.appendChild(row);
   }
 

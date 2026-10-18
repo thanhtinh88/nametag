@@ -1044,6 +1044,13 @@
       "legendInvestigating": "Đang xác minh / Giả thuyết",
       "legendRuledOut": "Đã loại trừ",
       "resetLayout": "Đặt lại bố cục mặc định",
+      "rosterTitle": "Danh sách đối tượng & Vụ án",
+      "rosterToggle": "Danh sách",
+      "rosterCases": "Vụ án / Vụ việc",
+      "rosterPersons": "Đối tượng",
+      "rosterSearchPlaceholder": "Tìm kiếm đối tượng, vụ án...",
+      "rosterEmpty": "Không tìm thấy kết quả phù hợp",
+      "focusInGraph": "Tiêu điểm trên đồ thị",
       "contextMenu": {
         "personTitle": "Đối tượng nghi vấn",
         "eventTitle": "Vụ án điều tra",
@@ -1059,7 +1066,9 @@
         "expandGroup": "Mở rộng nhóm",
         "collapseGroup": "Thu gọn nhóm",
         "close": "Đóng menu"
-      }
+      },
+      "filterTitle": "Bộ lọc",
+      "clearFilters": "Xóa bộ lọc"
     }
   },
   "people": {
@@ -1725,10 +1734,11 @@
     "webglUnavailable": "Trình duyệt không thể hiển thị bản đồ do WebGL bị tắt hoặc không khả dụng. Vui lòng bật tăng tốc phần cứng hoặc WebGL và tải lại trang.",
     "colocatedTitle": "{count, plural, one {1 đối tượng tại vị trí này} other {# đối tượng tại vị trí này}}",
     "allCases": "Tất cả vụ án / Hiện trường",
+    "allPersons": "Tất cả đối tượng",
     "radiusOff": "Bán kính: Tắt",
     "radius500m": "Bán kính: 500 m",
     "radiusKm": "Bán kính: {km} km",
-    "onlyWithinRadius": "Chỉ hiện đối tượng trong bán kính {km} km quanh hiện trường",
+    "onlyWithinRadius": "Chỉ hiện đối tượng trong bán kính {km} km",
     "activeCasesOnly": "Chỉ vụ đang điều tra",
     "showRuledOut": "Hiện đối tượng đã loại trừ",
     "legendCrimeScene": "Hiện trường vụ án",
@@ -1745,7 +1755,11 @@
     "rosterUnlocatedSection": "Chưa có tọa độ",
     "rosterUnlocatedHint": "Các đối tượng khớp bộ lọc nhưng chưa có tọa độ GPS:",
     "rosterUnlocatedEmpty": "Tất cả đối tượng trong bộ lọc đều đã có tọa độ.",
-    "rosterAddCoordsLink": "Hồ sơ →"
+    "rosterAddCoordsLink": "Hồ sơ →",
+    "filterTitle": "Bộ lọc",
+    "clusterTitle": "Cụm {count} đối tượng",
+    "clusterZoomIn": "Phóng to cụm",
+    "clusterHoverTip": "Click để xem chi tiết & tương tác"
   },
   "relationshipTypes": {
     "title": "Loại mối quan hệ",

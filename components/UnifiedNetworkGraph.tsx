@@ -70,6 +70,7 @@ export default function UnifiedNetworkGraph({
 }: UnifiedNetworkGraphProps) {
   const t = useTranslations('dashboard.graph');
   const tPeople = useTranslations('people');
+  const tEvents = useTranslations('events');
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const router = useRouter();
 
@@ -88,6 +89,9 @@ export default function UnifiedNetworkGraph({
   const isDraggingRef = useRef<boolean>(false);
   const pinnedPositionsRef = useRef<Record<string, { x: number; y: number }>>({});
   const [contextMenu, setContextMenu] = useState<GraphContextMenuState | null>(null);
+  const [graphData, setGraphData] = useState<{ nodes: RawGraphPerson[]; edges: SimulationEdge[] } | null>(null);
+  const [rosterOpen, setRosterOpen] = useState<boolean>(false);
+  const [rosterQuery, setRosterQuery] = useState<string>('');
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -105,9 +109,53 @@ export default function UnifiedNetworkGraph({
   const [hideUserNode, setHideUserNode] = useState<boolean>(Boolean(events));
   const [customFieldSlug, setCustomFieldSlug] = useState<string>('');
   const [customFieldValue, setCustomFieldValue] = useState<string>('');
+  const [filtersOpen, setFiltersOpen] = useState<boolean>(false);
   const [filtersHydrated, setFiltersHydrated] = useState<boolean>(false);
   const [isMobile, setIsMobile] = useState(false);
   const capitalizeType = useLocale().startsWith('de');
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (selectedGroupFilters.length > 0) count++;
+    if (selectedCaseId) count++;
+    if (activeCasesOnly) count++;
+    if (!showRuledOut) count++;
+    if (customFieldSlug && customFieldValue) count++;
+    return count;
+  }, [selectedGroupFilters.length, selectedCaseId, activeCasesOnly, showRuledOut, customFieldSlug, customFieldValue]);
+
+  const handleClearFilters = useCallback(() => {
+    setSelectedGroupFilters([]);
+    setIncludeMode('or');
+    setSelectedCaseId('');
+    setIncludeHop(true);
+    setActiveCasesOnly(false);
+    setShowRuledOut(true);
+    setCustomFieldSlug('');
+    setCustomFieldValue('');
+  }, []);
+
+  const invMap = useMemo<Record<string, string>>(() => {
+    try {
+      return {
+        SUSPECT: tEvents('involvementTypes.SUSPECT'),
+        PERSON_OF_INTEREST: tEvents('involvementTypes.PERSON_OF_INTEREST'),
+        ACCOMPLICE: tEvents('involvementTypes.ACCOMPLICE'),
+        WITNESS: tEvents('involvementTypes.WITNESS'),
+        VICTIM: tEvents('involvementTypes.VICTIM'),
+        INFORMANT: tEvents('involvementTypes.INFORMANT'),
+      };
+    } catch {
+      return {
+        SUSPECT: 'Nghi phạm',
+        PERSON_OF_INTEREST: 'Đối tượng nghi vấn',
+        ACCOMPLICE: 'Đồng phạm',
+        WITNESS: 'Nhân chứng',
+        VICTIM: 'Bị hại',
+        INFORMANT: 'Nguồn tin / Cơ sở',
+      };
+    }
+  }, [tEvents]);
 
   // Hydrate saved filters & pinned node positions from localStorage (browser runtime only)
   useEffect(() => {
@@ -229,12 +277,8 @@ export default function UnifiedNetworkGraph({
         const w = rect.width;
         const h = rect.height;
 
-        type CenterForce = ReturnType<typeof forceCenter<SimulationNode>>;
         type XForce = ReturnType<typeof forceX<SimulationNode>>;
         type YForce = ReturnType<typeof forceY<SimulationNode>>;
-
-        const center = sim.force('center') as CenterForce | undefined;
-        if (center) center.x(w / 2).y(h / 2);
 
         const fx = sim.force('centerX') as XForce | undefined;
         if (fx) fx.x(w / 2);
@@ -323,10 +367,16 @@ export default function UnifiedNetworkGraph({
     requestPaint();
   }, [savePinnedPositions, requestPaint]);
 
-  // Dismiss context menu on click outside or Escape
+  // Dismiss context menu on left-click outside or Escape
   useEffect(() => {
     if (!contextMenu) return;
     const handleGlobalClick = (e: MouseEvent) => {
+      // Dismiss immediately on left-click (button 0) outside the menu
+      if (e.button === 0 && contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        setContextMenu(null);
+      }
+    };
+    const handleGlobalTouch = (e: TouchEvent) => {
       if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
         setContextMenu(null);
       }
@@ -336,13 +386,76 @@ export default function UnifiedNetworkGraph({
         setContextMenu(null);
       }
     };
-    window.addEventListener('mousedown', handleGlobalClick);
+    // capture: true ensures this handler runs before D3 or canvas cancels event propagation
+    window.addEventListener('mousedown', handleGlobalClick, true);
+    window.addEventListener('touchstart', handleGlobalTouch, true);
     window.addEventListener('keydown', handleKeyDown);
     return () => {
-      window.removeEventListener('mousedown', handleGlobalClick);
+      window.removeEventListener('mousedown', handleGlobalClick, true);
+      window.removeEventListener('touchstart', handleGlobalTouch, true);
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [contextMenu]);
+
+  // Items for the Subject & Case Roster Sidebar
+  const rosterItems = useMemo(() => {
+    if (!graphData?.nodes) return { cases: [], persons: [] };
+    const q = rosterQuery.trim().toLowerCase();
+
+    const cases: RawGraphPerson[] = [];
+    const persons: RawGraphPerson[] = [];
+
+    for (const node of graphData.nodes) {
+      if (node.id.startsWith('user-')) continue;
+      if (q && !node.label.toLowerCase().includes(q)) continue;
+
+      if (node.nodeType === 'event' || node.id.startsWith('event-')) {
+        cases.push(node);
+      } else {
+        persons.push(node);
+      }
+    }
+
+    cases.sort((a, b) => a.label.localeCompare(b.label));
+    persons.sort((a, b) => a.label.localeCompare(b.label));
+
+    return { cases, persons };
+  }, [graphData, rosterQuery]);
+
+  const focusNodeInGraph = useCallback(
+    (nodeId: string) => {
+      // If the node is currently inside a collapsed bubble, expand its group bubble first
+      const rawNode = graphData?.nodes.find((n) => n.id === nodeId);
+      if (rawNode && rawNode.groups && rawNode.groups.length > 0) {
+        setExpandedBubbles((prev) => {
+          const next = new Set(prev);
+          for (const g of rawNode.groups) next.add(g);
+          return next;
+        });
+      }
+
+      touchSelectedNodeIdRef.current = nodeId;
+      requestPaint();
+
+      const canvas = canvasRef.current;
+      const zoomBehavior = zoomBehaviorRef.current;
+      const node = nodesRef.current.find((n) => n.id === nodeId);
+      if (canvas && zoomBehavior && node && node.x !== undefined && node.y !== undefined) {
+        const rect = canvas.getBoundingClientRect();
+        const k = Math.max(transformRef.current.k, 1);
+        const targetX = rect.width / 2 - node.x * k;
+        const targetY = rect.height / 2 - node.y * k;
+        select(canvas)
+          .transition()
+          .duration(500)
+          .call(
+            zoomBehavior.transform,
+            zoomIdentity.translate(targetX, targetY).scale(k)
+          );
+      }
+    },
+    [graphData, requestPaint]
+  );
 
   const formatEdgeLabel = useCallback((edge: SimulationEdge) => {
     if (edge.type === 'aggregated' || edge.type === 'membership') {
@@ -351,9 +464,18 @@ export default function UnifiedNetworkGraph({
     const youLabel = tPeople('you');
     const sourceName = edge.sourceLabel ?? '';
     const targetName = edge.targetLabel ?? '';
+
+    let rawType = edge.type;
+    if (edge.involvementType && invMap[edge.involvementType]) {
+      rawType = invMap[edge.involvementType];
+    } else if (invMap[rawType]) {
+      rawType = invMap[rawType];
+    }
+
     const typeStr = capitalizeType
-      ? edge.type.charAt(0).toUpperCase() + edge.type.slice(1)
-      : edge.type.toLowerCase();
+      ? rawType.charAt(0).toUpperCase() + rawType.slice(1)
+      : rawType.toLowerCase();
+
     let full: string;
     if (sourceName === youLabel || sourceName === 'You') {
       full = tPeople('graphEdgeLabelFromYou', { type: typeStr });
@@ -369,7 +491,7 @@ export default function UnifiedNetworkGraph({
       emphasis: full.substring(idx, idx + typeStr.length),
       after: full.substring(idx + typeStr.length),
     };
-  }, [tPeople, capitalizeType]);
+  }, [tPeople, capitalizeType, invMap]);
 
   // Step 1: Paint loop
   const runPaint = useCallback(() => {
@@ -535,7 +657,7 @@ export default function UnifiedNetworkGraph({
     })();
 
     const sim = forceSimulation<SimulationNode>(nodes)
-      .velocityDecay(0.6)
+      .velocityDecay(0.7)
       .force('link', forceLink<SimulationNode, SimulationEdge>(edges)
         .id((d) => d.id)
         .distance((e) => {
@@ -543,20 +665,18 @@ export default function UnifiedNetworkGraph({
           if (e.type === 'aggregated') return aggregatedLinkDistance;
           return mobileLinkDistance;
         })
-        .strength((e) => e.type === 'membership' ? 0.4 : 1))
-      .force('charge', forceManyBody().strength(mobileChargeStrength))
-      .force('center', forceCenter(width / 2, height / 2))
-      // Stronger pull for "you" anchors it at canvas-center under normal forces,
-      // while still letting the user drag it around for fun.
+        .strength((e) => e.type === 'membership' ? 0.4 : 0.7))
+      .force('charge', forceManyBody<SimulationNode>().strength(mobileChargeStrength).distanceMax(380))
+      // Stable centering forces acting on each node independently, avoiding centroid runaway
       .force('centerX', forceX<SimulationNode>(width / 2).strength((d) => {
         if (d.kind === 'person' && d.isCenter) return 0.5;
         if (d.kind === 'bubble' && d.isExpanded) return 0;
-        return 0.04;
+        return 0.05;
       }))
       .force('centerY', forceY<SimulationNode>(height / 2).strength((d) => {
         if (d.kind === 'person' && d.isCenter) return 0.5;
         if (d.kind === 'bubble' && d.isExpanded) return 0;
-        return 0.04;
+        return 0.05;
       }))
       .force('collision', forceCollide<SimulationNode>().radius(collisionForNode))
       .force('expandedCluster', expandedClusterField);
@@ -687,6 +807,7 @@ export default function UnifiedNetworkGraph({
         if (cancelled || !Array.isArray(data?.nodes)) return;
 
         rawCacheRef.current = data;
+        setGraphData(data);
         recomposeAndBuildSim(data);
       } catch {
         // Ignore network errors on aborted/failed graph fetch
@@ -924,7 +1045,7 @@ export default function UnifiedNetworkGraph({
         dragStartX = event.x;
         dragStartY = event.y;
         isDraggingRef.current = true;
-        if (!event.active && simRef.current) simRef.current.alphaTarget(0.1).restart();
+        if (!event.active && simRef.current) simRef.current.alphaTarget(0.02).restart();
         d.fx = d.x;
         d.fy = d.y;
       })
@@ -1024,222 +1145,6 @@ export default function UnifiedNetworkGraph({
 
   return (
     <div className="w-full h-full">
-      {groups && (
-        <div className="mb-4 space-y-2">
-          <div className="flex items-stretch gap-3">
-            <div className="shrink-0">
-              <label className="flex h-full items-center text-sm placeholder-muted">
-                <span
-                  className="inline-flex h-full items-stretch rounded-md border border-border bg-surface-elevated p-0.5 focus-within:border-secondary focus-within:ring-2 focus-within:ring-secondary/20"
-                >
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setIncludeMode((prev) => (prev === 'or' ? 'and' : 'or'))
-                    }
-                    className="inline-flex h-full px-3 items-center justify-center whitespace-nowrap text-base font-normal rounded border border-transparent text-foreground transition-all hover:bg-surface focus:outline-none"
-                    aria-label={t('matchMode.ariaLabel', {
-                      title:
-                        includeMode === 'or'
-                          ? t('matchMode.anyTitle')
-                          : t('matchMode.allTitle'),
-                    })}
-                    title={
-                      includeMode === 'or'
-                        ? t('matchMode.anyTitle')
-                        : t('matchMode.allTitle')
-                    }
-                  >
-                    {includeMode === 'or'
-                      ? t('matchMode.any')
-                      : t('matchMode.all')}
-                  </button>
-                </span>
-              </label>
-            </div>
-
-            <div className="flex-1">
-              <PillSelector<GroupFilterItem>
-                selectedItems={selectedGroupFilters}
-                availableItems={groups.map((g) => ({
-                  id: g.id,
-                  label: g.name,
-                  color: g.color,
-                  isNegative: false,
-                }))}
-                onAdd={(item) => {
-                  setSelectedGroupFilters((prev) =>
-                    prev.some((f) => f.id === item.id)
-                      ? prev
-                      : [...prev, { ...item, isNegative: false }],
-                  );
-                }}
-                onRemove={(itemId) =>
-                  setSelectedGroupFilters((prev) =>
-                    prev.filter((f) => f.id !== itemId),
-                  )
-                }
-                onClearAll={() => setSelectedGroupFilters([])}
-                placeholder={t('filterPlaceholder')}
-                emptyMessage={t('noGroupsFound')}
-                showAllOnFocus={true}
-                renderPill={(item, onRemove) => (
-                  <GraphFilterGroupPill
-                    key={item.id}
-                    id={item.id}
-                    label={item.label}
-                    color={item.color}
-                    isNegative={item.isNegative}
-                    onToggle={() => toggleFilterSign(item.id)}
-                    onRemove={onRemove}
-                    title={
-                      item.isNegative
-                        ? t('filterState.excluded')
-                        : t('filterState.included')
-                    }
-                    ariaLabel={
-                      item.isNegative
-                        ? t('filterState.excludedWithLabel', {
-                            label: item.label,
-                          })
-                        : t('filterState.includedWithLabel', {
-                            label: item.label,
-                          })
-                    }
-                  />
-                )}
-              />
-            </div>
-          </div>
-
-          {/* Smart Investigation Filter Bar */}
-          {events && (
-            <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-border/60 text-xs">
-              <div className="flex items-center gap-1.5">
-                <label className="font-medium text-muted">{t('caseFocus')}</label>
-                <select
-                  value={selectedCaseId}
-                  onChange={(e) => setSelectedCaseId(e.target.value)}
-                  className="px-2.5 py-1.5 rounded border border-border bg-surface-elevated text-foreground"
-                >
-                  <option value="">{t('allCases')}</option>
-                  {events.map((ev) => (
-                    <option key={ev.id} value={ev.id}>
-                      📅 {ev.title} ({ev.status})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {selectedCaseId && (
-                <label className="inline-flex items-center gap-1.5 text-foreground cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={includeHop}
-                    onChange={(e) => setIncludeHop(e.target.checked)}
-                    className="rounded border-border text-primary focus:ring-primary"
-                  />
-                  <span>{t('includeHop')}</span>
-                </label>
-              )}
-
-              <label className="inline-flex items-center gap-1.5 text-foreground cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={activeCasesOnly}
-                  onChange={(e) => setActiveCasesOnly(e.target.checked)}
-                  className="rounded border-border text-primary focus:ring-primary"
-                />
-                <span>{t('activeCasesOnly')}</span>
-              </label>
-
-              <label className="inline-flex items-center gap-1.5 text-foreground cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={showRuledOut}
-                  onChange={(e) => setShowRuledOut(e.target.checked)}
-                  className="rounded border-border text-primary focus:ring-primary"
-                />
-                <span>{t('showRuledOut')}</span>
-              </label>
-
-              {customFieldTemplates && customFieldTemplates.length > 0 && (
-                <div className="flex items-center gap-1.5">
-                  <label className="font-medium text-muted">{t('customFieldFilter')}</label>
-                  <select
-                    value={customFieldSlug}
-                    onChange={(e) => {
-                      setCustomFieldSlug(e.target.value);
-                      setCustomFieldValue('');
-                    }}
-                    className="px-2 py-1.5 rounded border border-border bg-surface-elevated text-foreground"
-                  >
-                    <option value="">{t('customFieldAny')}</option>
-                    {customFieldTemplates.map((cf) => (
-                      <option key={cf.id} value={cf.slug}>
-                        {cf.name}
-                      </option>
-                    ))}
-                  </select>
-                  {customFieldSlug && (
-                    activeCustomFieldTemplate?.type === 'SELECT' && Array.isArray(activeCustomFieldTemplate.options) && activeCustomFieldTemplate.options.length > 0 ? (
-                      <select
-                        value={customFieldValue}
-                        onChange={(e) => setCustomFieldValue(e.target.value)}
-                        className="px-2 py-1.5 rounded border border-border bg-surface-elevated text-foreground"
-                      >
-                        <option value="">{t('customFieldAny')}</option>
-                        {activeCustomFieldTemplate.options.map((opt) => (
-                          <option key={opt} value={opt}>
-                            {opt}
-                          </option>
-                        ))}
-                      </select>
-                    ) : activeCustomFieldTemplate?.type === 'BOOLEAN' ? (
-                      <select
-                        value={customFieldValue}
-                        onChange={(e) => setCustomFieldValue(e.target.value)}
-                        className="px-2 py-1.5 rounded border border-border bg-surface-elevated text-foreground"
-                      >
-                        <option value="">{t('customFieldAny')}</option>
-                        <option value="true">Có (True)</option>
-                        <option value="false">Không (False)</option>
-                      </select>
-                    ) : (
-                      <input
-                        type="text"
-                        value={customFieldValue}
-                        onChange={(e) => setCustomFieldValue(e.target.value)}
-                        placeholder={t('customFieldValuePlaceholder')}
-                        className="px-2 py-1 rounded border border-border bg-surface-elevated text-foreground w-32"
-                      />
-                    )
-                  )}
-                </div>
-              )}
-
-              <div className="ml-auto flex flex-wrap items-center gap-3 text-[11px] text-muted">
-                <span className="inline-flex items-center gap-1">
-                  <span className="inline-block w-3 h-2.5 rounded-sm bg-amber-500 border border-amber-800 dark:border-amber-200" />
-                  {t('legendCase')}
-                </span>
-                <span className="inline-flex items-center gap-1">
-                  <span className="inline-block w-4 h-0.5 bg-red-500" />
-                  {t('legendConfirmed')}
-                </span>
-                <span className="inline-flex items-center gap-1">
-                  <span className="inline-block w-4 border-t-2 border-dashed border-orange-500" />
-                  {t('legendInvestigating')}
-                </span>
-                <span className="inline-flex items-center gap-1">
-                  <span className="inline-block w-4 border-t-2 border-dotted border-gray-500" />
-                  {t('legendRuledOut')}
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
       <div className="relative" ref={containerRef}>
         <canvas
           ref={canvasRef}
@@ -1249,6 +1154,424 @@ export default function UnifiedNetworkGraph({
               : 'h-[400px] sm:h-[500px] lg:h-[70vh] lg:min-h-[600px]'
           }`}
         />
+
+        {/* Toggle button when Subject & Case Roster Sidebar is collapsed */}
+        {!rosterOpen && (
+          <button
+            type="button"
+            onClick={() => setRosterOpen(true)}
+            className="absolute top-3 left-3 z-10 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-surface/95 backdrop-blur border border-border shadow-md text-xs font-medium text-foreground hover:bg-surface-elevated transition-colors"
+            title={t('rosterTitle')}
+          >
+            <span>📋 {t('rosterToggle')}</span>
+            <span className="px-1.5 py-0.5 rounded-full bg-primary/15 text-primary font-semibold">
+              {rosterItems.persons.length + rosterItems.cases.length}
+            </span>
+            {activeFilterCount > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full bg-primary text-white font-semibold">
+                ⚙️ {activeFilterCount}
+              </span>
+            )}
+          </button>
+        )}
+
+        {/* Collapsible Subject & Case Roster Sidebar */}
+        {rosterOpen && (
+          <aside
+            className="absolute top-3 left-3 bottom-3 z-10 w-72 sm:w-80 bg-surface/95 backdrop-blur border border-border rounded-xl shadow-lg flex flex-col overflow-hidden text-xs"
+            aria-label={t('rosterTitle')}
+          >
+            <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 border-b border-border bg-surface-elevated/60">
+              <div className="flex items-center gap-2 min-w-0">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground truncate">
+                  📋 {t('rosterTitle')}
+                </h2>
+                <span className="px-1.5 py-0.5 rounded-full bg-primary/15 text-primary font-semibold text-[11px] shrink-0">
+                  {rosterItems.persons.length + rosterItems.cases.length}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRosterOpen(false)}
+                aria-label={t('contextMenu.close')}
+                className="p-1 rounded text-muted hover:text-foreground hover:bg-surface transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Search filter inside roster */}
+            <div className="p-2 border-b border-border/60 bg-surface/40">
+              <input
+                type="search"
+                value={rosterQuery}
+                onChange={(e) => setRosterQuery(e.target.value)}
+                placeholder={t('rosterSearchPlaceholder')}
+                className="w-full px-2.5 py-1.5 bg-surface border border-border rounded-lg text-xs text-foreground placeholder-muted focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
+
+            {/* Filter Drawer Toggle & Clear row */}
+            <div className="flex items-center justify-between px-3 py-1.5 bg-surface-elevated/40 border-b border-border/60">
+              <button
+                type="button"
+                onClick={() => setFiltersOpen((prev) => !prev)}
+                className="flex items-center gap-1.5 font-semibold text-foreground hover:text-primary transition-colors text-xs"
+              >
+                <span>⚙️ {t('filterByGroups')}</span>
+                {activeFilterCount > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-primary text-white text-[10px] font-bold">
+                    {activeFilterCount}
+                  </span>
+                )}
+                <svg className={`w-3.5 h-3.5 transition-transform ${filtersOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {activeFilterCount > 0 && (
+                <button
+                  type="button"
+                  onClick={handleClearFilters}
+                  className="text-[11px] text-muted hover:text-red-500 transition-colors"
+                >
+                  Xóa lọc
+                </button>
+              )}
+            </div>
+
+            {/* Collapsible Filter Panel */}
+            {filtersOpen && (
+              <div className="p-2.5 space-y-2.5 border-b border-border/60 bg-surface/30 max-h-72 overflow-y-auto">
+                {groups && groups.length > 0 && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-muted text-[11px]">{t('filterByGroups')}</span>
+                      <button
+                        type="button"
+                        onClick={() => setIncludeMode((prev) => (prev === 'or' ? 'and' : 'or'))}
+                        className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-surface-elevated text-foreground hover:bg-surface border border-border"
+                      >
+                        {includeMode === 'or' ? t('matchMode.any') : t('matchMode.all')}
+                      </button>
+                    </div>
+                    <PillSelector<GroupFilterItem>
+                      selectedItems={selectedGroupFilters}
+                      availableItems={groups.map((g) => ({
+                        id: g.id,
+                        label: g.name,
+                        color: g.color,
+                        isNegative: false,
+                      }))}
+                      onAdd={(item) => {
+                        setSelectedGroupFilters((prev) =>
+                          prev.some((f) => f.id === item.id)
+                            ? prev
+                            : [...prev, { ...item, isNegative: false }],
+                        );
+                      }}
+                      onRemove={(itemId) =>
+                        setSelectedGroupFilters((prev) =>
+                          prev.filter((f) => f.id !== itemId),
+                        )
+                      }
+                      onClearAll={() => setSelectedGroupFilters([])}
+                      placeholder={t('filterPlaceholder')}
+                      emptyMessage={t('noGroupsFound')}
+                      showAllOnFocus={true}
+                      renderPill={(item, onRemove) => (
+                        <GraphFilterGroupPill
+                          key={item.id}
+                          id={item.id}
+                          label={item.label}
+                          color={item.color}
+                          isNegative={item.isNegative}
+                          onToggle={() => toggleFilterSign(item.id)}
+                          onRemove={onRemove}
+                          title={
+                            item.isNegative
+                              ? t('filterState.excluded')
+                              : t('filterState.included')
+                          }
+                          ariaLabel={
+                            item.isNegative
+                              ? t('filterState.excludedWithLabel', {
+                                  label: item.label,
+                                })
+                              : t('filterState.includedWithLabel', {
+                                  label: item.label,
+                                })
+                          }
+                        />
+                      )}
+                    />
+                  </div>
+                )}
+
+                {events && events.length > 0 && (
+                  <div className="space-y-1">
+                    <label className="font-semibold text-muted text-[11px] block">{t('caseFocus')}</label>
+                    <select
+                      value={selectedCaseId}
+                      onChange={(e) => setSelectedCaseId(e.target.value)}
+                      className="w-full px-2 py-1.5 rounded-lg border border-border bg-surface text-foreground text-xs"
+                    >
+                      <option value="">{t('allCases')}</option>
+                      {events.map((ev) => (
+                        <option key={ev.id} value={ev.id}>
+                          📅 {ev.title} ({ev.status})
+                        </option>
+                      ))}
+                    </select>
+                    {selectedCaseId && (
+                      <label className="inline-flex items-center gap-1.5 text-foreground cursor-pointer select-none text-[11px] pt-1">
+                        <input
+                          type="checkbox"
+                          checked={includeHop}
+                          onChange={(e) => setIncludeHop(e.target.checked)}
+                          className="rounded border-border text-primary focus:ring-primary"
+                        />
+                        <span>{t('includeHop')}</span>
+                      </label>
+                    )}
+                  </div>
+                )}
+
+                <div className="space-y-1 pt-1">
+                  <label className="inline-flex items-center gap-1.5 text-foreground cursor-pointer select-none text-[11px] block">
+                    <input
+                      type="checkbox"
+                      checked={activeCasesOnly}
+                      onChange={(e) => setActiveCasesOnly(e.target.checked)}
+                      className="rounded border-border text-primary focus:ring-primary"
+                    />
+                    <span>{t('activeCasesOnly')}</span>
+                  </label>
+                  <label className="inline-flex items-center gap-1.5 text-foreground cursor-pointer select-none text-[11px] block">
+                    <input
+                      type="checkbox"
+                      checked={showRuledOut}
+                      onChange={(e) => setShowRuledOut(e.target.checked)}
+                      className="rounded border-border text-primary focus:ring-primary"
+                    />
+                    <span>{t('showRuledOut')}</span>
+                  </label>
+                </div>
+
+                {customFieldTemplates && customFieldTemplates.length > 0 && (
+                  <div className="space-y-1 pt-1">
+                    <label className="font-semibold text-muted text-[11px] block">{t('customFieldFilter')}</label>
+                    <select
+                      value={customFieldSlug}
+                      onChange={(e) => {
+                        setCustomFieldSlug(e.target.value);
+                        setCustomFieldValue('');
+                      }}
+                      className="w-full px-2 py-1.5 rounded-lg border border-border bg-surface text-foreground text-xs"
+                    >
+                      <option value="">{t('customFieldAny')}</option>
+                      {customFieldTemplates.map((cf) => (
+                        <option key={cf.id} value={cf.slug}>
+                          {cf.name}
+                        </option>
+                      ))}
+                    </select>
+                    {customFieldSlug && (
+                      activeCustomFieldTemplate?.type === 'SELECT' && Array.isArray(activeCustomFieldTemplate.options) && activeCustomFieldTemplate.options.length > 0 ? (
+                        <select
+                          value={customFieldValue}
+                          onChange={(e) => setCustomFieldValue(e.target.value)}
+                          className="w-full px-2 py-1.5 rounded-lg border border-border bg-surface text-foreground text-xs mt-1"
+                        >
+                          <option value="">{t('customFieldAny')}</option>
+                          {activeCustomFieldTemplate.options.map((opt) => (
+                            <option key={opt} value={opt}>
+                              {opt}
+                            </option>
+                          ))}
+                        </select>
+                      ) : activeCustomFieldTemplate?.type === 'BOOLEAN' ? (
+                        <select
+                          value={customFieldValue}
+                          onChange={(e) => setCustomFieldValue(e.target.value)}
+                          className="w-full px-2 py-1.5 rounded-lg border border-border bg-surface text-foreground text-xs mt-1"
+                        >
+                          <option value="">{t('customFieldAny')}</option>
+                          <option value="true">Có (True)</option>
+                          <option value="false">Không (False)</option>
+                        </select>
+                      ) : (
+                        <input
+                          type="text"
+                          value={customFieldValue}
+                          onChange={(e) => setCustomFieldValue(e.target.value)}
+                          placeholder={t('customFieldValuePlaceholder')}
+                          className="w-full px-2 py-1.5 rounded-lg border border-border bg-surface text-foreground text-xs mt-1"
+                        />
+                      )
+                    )}
+                  </div>
+                )}
+
+                {/* Compact Legend */}
+                <div className="pt-2 border-t border-border/50 flex flex-wrap items-center gap-2 text-[10px] text-muted">
+                  <span className="inline-flex items-center gap-1">
+                    <span className="inline-block w-2.5 h-2 rounded-sm bg-amber-500 border border-amber-800" />
+                    {t('legendCase')}
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="inline-block w-3 h-0.5 bg-red-500" />
+                    {t('legendConfirmed')}
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="inline-block w-3 border-t border-dashed border-orange-500" />
+                    {t('legendInvestigating')}
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="inline-block w-3 border-t border-dotted border-gray-500" />
+                    {t('legendRuledOut')}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <div className="flex-1 overflow-y-auto divide-y divide-border/60 text-xs">
+              {/* Cases section */}
+              {rosterItems.cases.length > 0 && (
+                <div className="p-2.5">
+                  <div className="flex items-center justify-between px-1.5 mb-1.5">
+                    <span className="font-semibold text-muted">
+                      📁 {t('rosterCases')}
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 font-semibold text-[11px]">
+                      {rosterItems.cases.length}
+                    </span>
+                  </div>
+                  <ul className="space-y-1">
+                    {rosterItems.cases.map((ev) => {
+                      const eventId = ev.id.replace(/^event-/, '');
+                      const isSelected = selectedCaseId === eventId;
+                      return (
+                        <li key={ev.id} className="rounded-lg hover:bg-surface-elevated transition-colors p-1.5 border border-transparent hover:border-border/60">
+                          <div className="flex items-center justify-between gap-2">
+                            <button
+                              type="button"
+                              onClick={() => focusNodeInGraph(ev.id)}
+                              className="min-w-0 flex-1 text-left flex items-center gap-2 group"
+                              title={t('focusInGraph')}
+                            >
+                              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
+                              <span className="font-medium text-foreground truncate group-hover:text-primary transition-colors">
+                                {ev.label.replace(/^📅\s*/, '')}
+                              </span>
+                            </button>
+                            <div className="flex items-center gap-1 shrink-0">
+                              {events && (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedCaseId((prev) => (prev === eventId ? '' : eventId))}
+                                  className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                                    isSelected
+                                      ? 'bg-primary text-white'
+                                      : 'bg-surface-elevated text-muted hover:text-foreground'
+                                  }`}
+                                  title={t('contextMenu.focusCase')}
+                                >
+                                  {isSelected ? '✓' : '🎯'}
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => router.push(`/events/${eventId}`)}
+                                className="px-1.5 py-0.5 rounded text-[10px] text-muted hover:text-foreground bg-surface-elevated hover:bg-surface transition-colors"
+                                title={t('contextMenu.viewDetails')}
+                              >
+                                →
+                              </button>
+                            </div>
+                          </div>
+                          {ev.eventStatus && (
+                            <div className="pl-4.5 text-[10px] text-muted truncate mt-0.5">
+                              {ev.eventStatus}
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+
+              {/* Persons section */}
+              <div className="p-2.5">
+                <div className="flex items-center justify-between px-1.5 mb-1.5">
+                  <span className="font-semibold text-muted">
+                    👤 {t('rosterPersons')}
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded-full bg-primary/15 text-primary font-semibold text-[11px]">
+                    {rosterItems.persons.length}
+                  </span>
+                </div>
+                {rosterItems.persons.length === 0 ? (
+                  <p className="px-1.5 py-2 text-muted italic">{t('rosterEmpty')}</p>
+                ) : (
+                  <ul className="space-y-1">
+                    {rosterItems.persons.map((person) => {
+                      const groupColor = person.colors?.[0] ?? '#3b82f6';
+                      return (
+                        <li key={person.id} className="rounded-lg hover:bg-surface-elevated transition-colors p-1.5 border border-transparent hover:border-border/60">
+                          <div className="flex items-center justify-between gap-2">
+                            <button
+                              type="button"
+                              onClick={() => focusNodeInGraph(person.id)}
+                              className="min-w-0 flex-1 text-left flex items-center gap-2 group"
+                              title={t('focusInGraph')}
+                            >
+                              {person.photo ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={`/api/photos/${person.id}`}
+                                  alt=""
+                                  className="w-5 h-5 rounded-full object-cover shrink-0 border"
+                                  style={{ borderColor: groupColor }}
+                                />
+                              ) : (
+                                <span
+                                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                                  style={{ backgroundColor: groupColor }}
+                                />
+                              )}
+                              <span className="font-medium text-foreground truncate group-hover:text-primary transition-colors">
+                                {person.label}
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => router.push(`/people/${person.id}`)}
+                              className="px-1.5 py-0.5 rounded text-[10px] text-muted hover:text-foreground bg-surface-elevated hover:bg-surface transition-colors shrink-0"
+                              title={t('contextMenu.viewDetails')}
+                            >
+                              →
+                            </button>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </aside>
+        )}
+
+        {/* Backdrop to dismiss context menu on click anywhere outside */}
+        {contextMenu && (
+          <div
+            className="fixed inset-0 z-20"
+            onClick={() => setContextMenu(null)}
+          />
+        )}
 
         {/* Node Right-Click Context Menu */}
         {contextMenu && (() => {

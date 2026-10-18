@@ -57,6 +57,29 @@ describe('filterMarkers', () => {
   it('combines filters with AND semantics', () => {
     expect(filterMarkers(markers, { ...noFilters, query: 'alice', country: 'FR' })).toHaveLength(0);
   });
+
+  it('filters by radius around a target person', () => {
+    const geoMarkers: MapMarker[] = [
+      marker({ id: 'addr_a', personId: 'pA', personName: 'Person A', latitude: 21.03, longitude: 105.85 }),
+      marker({ id: 'addr_b', personId: 'pB', personName: 'Person B', latitude: 21.035, longitude: 105.855 }), // ~0.76 km away
+      marker({ id: 'addr_c', personId: 'pC', personName: 'Person C', latitude: 21.15, longitude: 105.85 }), // ~13.3 km away
+    ];
+    const filtered1km = filterMarkers(geoMarkers, {
+      ...noFilters,
+      personId: 'pA',
+      radiusKm: 1,
+      onlyWithinRadius: true,
+    });
+    expect(filtered1km.map((m) => m.id)).toEqual(['addr_a', 'addr_b']);
+
+    const filtered500m = filterMarkers(geoMarkers, {
+      ...noFilters,
+      personId: 'pA',
+      radiusKm: 0.5,
+      onlyWithinRadius: true,
+    });
+    expect(filtered500m.map((m) => m.id)).toEqual(['addr_a']);
+  });
 });
 
 describe('distinct value helpers', () => {

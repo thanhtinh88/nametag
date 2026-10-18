@@ -1059,7 +1059,16 @@
         "expandGroup": "Expand Group",
         "collapseGroup": "Collapse Group",
         "close": "Close Menu"
-      }
+      },
+      "rosterTitle": "Subject & Case Roster",
+      "rosterToggle": "Roster",
+      "rosterCases": "Cases / Incidents",
+      "rosterPersons": "Subjects",
+      "rosterSearchPlaceholder": "Search subjects, cases...",
+      "rosterEmpty": "No results found",
+      "focusInGraph": "Focus in graph",
+      "filterTitle": "Filter",
+      "clearFilters": "Filter zurücksetzen"
     }
   },
   "people": {
@@ -1728,7 +1737,7 @@
     "radiusOff": "Radius: Off",
     "radius500m": "Radius: 500 m",
     "radiusKm": "Radius: {km} km",
-    "onlyWithinRadius": "Only subjects within {km} km of crime scene",
+    "onlyWithinRadius": "Only subjects within {km} km radius",
     "activeCasesOnly": "Active Cases Only",
     "showRuledOut": "Show Ruled-Out Subjects",
     "legendCrimeScene": "Crime Scene",
@@ -1745,7 +1754,12 @@
     "rosterUnlocatedSection": "Unlocated Subjects",
     "rosterUnlocatedHint": "Subjects matching filters without GPS coordinates:",
     "rosterUnlocatedEmpty": "All matching subjects have coordinates.",
-    "rosterAddCoordsLink": "Profile →"
+    "rosterAddCoordsLink": "Profile →",
+    "allPersons": "All Subjects",
+    "filterTitle": "Filter",
+    "clusterTitle": "Cluster ({count} Personen)",
+    "clusterZoomIn": "Vergrößern",
+    "clusterHoverTip": "Klicken für Details und Aktionen"
   },
   "relationshipTypes": {
     "title": "Beziehungsarten",

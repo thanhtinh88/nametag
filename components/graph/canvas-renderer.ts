@@ -274,24 +274,24 @@ export function paintFrame(
   rc.ctx.scale(rc.transform.k, rc.transform.k);
 
   // Draw non-highlighted edges first
-  const highlightedEdgeSources = new Set<string>();
-  if (rc.hoveredNodeId) {
-    for (const e of edges) {
-      const srcId = typeof e.source === 'string' ? e.source : e.source.id;
-      if (srcId === rc.hoveredNodeId) highlightedEdgeSources.add(srcId);
-    }
-  }
 
   for (const e of edges) {
     if (e.type === 'membership') continue;
     const srcId = typeof e.source === 'string' ? e.source : e.source.id;
-    const highlighted = srcId === rc.hoveredNodeId;
+    const tgtId = typeof e.target === 'string' ? e.target : e.target.id;
+    const highlighted = Boolean(
+      rc.hoveredNodeId && (srcId === rc.hoveredNodeId || tgtId === rc.hoveredNodeId)
+    );
     if (!highlighted) drawEdge(rc, e, false);
   }
   for (const e of edges) {
     if (e.type === 'membership') continue;
     const srcId = typeof e.source === 'string' ? e.source : e.source.id;
-    if (srcId === rc.hoveredNodeId) drawEdge(rc, e, true);
+    const tgtId = typeof e.target === 'string' ? e.target : e.target.id;
+    const highlighted = Boolean(
+      rc.hoveredNodeId && (srcId === rc.hoveredNodeId || tgtId === rc.hoveredNodeId)
+    );
+    if (highlighted) drawEdge(rc, e, true);
   }
 
   // Edge labels for highlighted edges
@@ -304,7 +304,8 @@ export function paintFrame(
     rc.ctx.textBaseline = 'middle';
     for (const e of edges) {
       const srcId = typeof e.source === 'string' ? e.source : e.source.id;
-      if (srcId !== rc.hoveredNodeId) continue;
+      const tgtId = typeof e.target === 'string' ? e.target : e.target.id;
+      if (srcId !== rc.hoveredNodeId && tgtId !== rc.hoveredNodeId) continue;
       const src = e.source as SimulationNode;
       const tgt = e.target as SimulationNode;
       if (src.x === undefined || tgt.x === undefined) continue;

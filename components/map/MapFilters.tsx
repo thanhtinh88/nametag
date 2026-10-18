@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { MapCase, MapGroup, MapMarker } from '@/lib/map/types';
 import { distinctCities, distinctCountries, distinctRegions, type MapFilterState } from '@/lib/map/filter-markers';
@@ -20,214 +21,304 @@ export default function MapFilters({
   markers,
   groups,
   cases = [],
-  resultCount,
+  resultCount: _resultCount,
   onChange,
 }: MapFiltersProps) {
   const t = useTranslations('map');
+  const [open, setOpen] = useState(false);
   const cities = distinctCities(markers);
   const regions = distinctRegions(markers);
   const countries = distinctCountries(markers);
-  const hasActiveFilters = Boolean(
-    filters.query ||
-      filters.groupId ||
-      filters.city ||
-      filters.region ||
-      filters.country ||
-      filters.caseId ||
-      (filters.radiusKm && filters.radiusKm > 0) ||
-      filters.onlyWithinRadius ||
-      filters.activeCasesOnly
-  );
+
+  const uniquePersons = useMemo(() => {
+    const seen = new Set<string>();
+    const list: Array<{ personId: string; personName: string }> = [];
+    for (const m of markers) {
+      if (m.source !== 'event_address' && !seen.has(m.personId)) {
+        seen.add(m.personId);
+        list.push({ personId: m.personId, personName: m.personName });
+      }
+    }
+    return list.sort((a, b) => a.personName.localeCompare(b.personName));
+  }, [markers]);
+
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (filters.groupId) count++;
+    if (filters.city || filters.region || filters.country) count++;
+    if (filters.caseId) count++;
+    if (filters.personId) count++;
+    if (filters.radiusKm && filters.radiusKm > 0) count++;
+    if (filters.onlyWithinRadius) count++;
+    if (filters.activeCasesOnly) count++;
+    if (filters.showRuledOut === false) count++;
+    return count;
+  }, [filters]);
 
   const selectClasses =
-    'w-full sm:w-auto px-3 py-2 bg-surface border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary';
+    'w-full px-2.5 py-1.5 bg-surface border border-border rounded-lg text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary';
+
+  const handleClear = () => {
+    onChange({
+      query: '',
+      groupId: '',
+      city: '',
+      region: '',
+      country: '',
+      caseId: '',
+      personId: '',
+      radiusKm: 0,
+      onlyWithinRadius: false,
+      activeCasesOnly: false,
+      showRuledOut: true,
+    });
+  };
 
   return (
-    <div className="space-y-2 px-4 py-3 bg-surface border-b border-border">
-      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+    <div className="border-b border-border/60 bg-surface/30">
+      {/* Search Input at Top of Sidebar */}
+      <div className="p-2 border-b border-border/60">
         <input
           type="search"
           value={filters.query}
           onChange={(e) => onChange({ ...filters, query: e.target.value })}
           placeholder={t('searchPlaceholder')}
-          className={`${selectClasses} col-span-2 sm:flex-1 sm:min-w-[10rem]`}
+          className="w-full px-2.5 py-1.5 bg-surface border border-border rounded-lg text-xs text-foreground placeholder-muted focus:outline-none focus:ring-1 focus:ring-primary"
           aria-label={t('searchPlaceholder')}
         />
+      </div>
 
-        {cases.length > 0 && (
-          <select
-            value={filters.caseId ?? ''}
-            onChange={(e) =>
-              onChange({
-                ...filters,
-                caseId: e.target.value,
-                radiusKm: e.target.value ? (filters.radiusKm || 1) : 0,
-              })
-            }
-            className={selectClasses}
-            aria-label={t('allCases')}
-          >
-            <option value="">{t('allCases')}</option>
-            {cases.map((c) => (
-              <option key={c.id} value={c.id}>
-                🚨 {c.title} ({c.status})
-              </option>
-            ))}
-          </select>
-        )}
-
-        {filters.caseId && (
-          <select
-            value={String(filters.radiusKm ?? 1)}
-            onChange={(e) =>
-              onChange({
-                ...filters,
-                radiusKm: Number(e.target.value),
-              })
-            }
-            className={selectClasses}
-            aria-label={t('radiusOff')}
-          >
-            <option value="0">{t('radiusOff')}</option>
-            <option value="0.5">{t('radius500m')}</option>
-            <option value="1">{t('radiusKm', { km: 1 })}</option>
-            <option value="2">{t('radiusKm', { km: 2 })}</option>
-            <option value="5">{t('radiusKm', { km: 5 })}</option>
-            <option value="10">{t('radiusKm', { km: 10 })}</option>
-          </select>
-        )}
-
-        <select
-          value={filters.groupId}
-          onChange={(e) => onChange({ ...filters, groupId: e.target.value })}
-          className={selectClasses}
-          aria-label={t('allGroups')}
+      {/* Filter Drawer Toggle & Reset Button */}
+      <div className="flex items-center justify-between px-3 py-1.5 bg-surface-elevated/40 border-b border-border/60">
+        <button
+          type="button"
+          onClick={() => setOpen((prev) => !prev)}
+          className="flex items-center gap-1.5 font-semibold text-foreground hover:text-primary transition-colors text-xs"
         >
-          <option value="">{t('allGroups')}</option>
-          {groups.map((group) => (
-            <option key={group.id} value={group.id}>
-              {group.name}
-            </option>
-          ))}
-        </select>
-
-        {/* City, state/province and country are mutually exclusive: picking
-            one clears the others, since combining them mostly produces
-            impossible matches. */}
-        <select
-          value={filters.city}
-          onChange={(e) => onChange({ ...filters, city: e.target.value, region: '', country: '' })}
-          className={selectClasses}
-          aria-label={t('allCities')}
-        >
-          <option value="">{t('allCities')}</option>
-          {cities.map((city) => (
-            <option key={city} value={city}>
-              {city}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={filters.region}
-          onChange={(e) => onChange({ ...filters, region: e.target.value, city: '', country: '' })}
-          className={selectClasses}
-          aria-label={t('allRegions')}
-        >
-          <option value="">{t('allRegions')}</option>
-          {regions.map((region) => (
-            <option key={region} value={region}>
-              {region}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={filters.country}
-          onChange={(e) => onChange({ ...filters, country: e.target.value, city: '', region: '' })}
-          className={selectClasses}
-          aria-label={t('allCountries')}
-        >
-          <option value="">{t('allCountries')}</option>
-          {countries.map((country) => (
-            <option key={country} value={country}>
-              {getCountryName(country) || country}
-            </option>
-          ))}
-        </select>
-
-        {hasActiveFilters && (
-          <div className="col-span-2 flex items-center justify-between gap-3 sm:ml-auto">
-            <span className="text-sm text-muted whitespace-nowrap" role="status">
-              {t('resultsCount', { count: resultCount })}
+          <span>⚙️ {t('filterTitle')}</span>
+          {activeFiltersCount > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full bg-primary text-white text-[10px] font-bold">
+              {activeFiltersCount}
             </span>
-            <button
-              type="button"
-              onClick={() =>
-                onChange({
-                  query: '',
-                  groupId: '',
-                  city: '',
-                  region: '',
-                  country: '',
-                  caseId: '',
-                  radiusKm: 0,
-                  onlyWithinRadius: false,
-                  activeCasesOnly: false,
-                  showRuledOut: false,
-                })
-              }
-              className="px-3 py-2 text-sm text-primary hover:text-primary-dark transition-colors whitespace-nowrap"
-            >
-              {t('clearFilters')}
-            </button>
-          </div>
+          )}
+          <svg
+            className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {activeFiltersCount > 0 && (
+          <button
+            type="button"
+            onClick={handleClear}
+            className="text-[11px] text-muted hover:text-red-500 transition-colors"
+          >
+            {t('clearFilters')}
+          </button>
         )}
       </div>
 
-      {/* Investigation Quick Toggles */}
-      {cases.length > 0 && (
-        <div className="flex flex-wrap items-center gap-4 pt-1 text-xs text-muted">
-          {filters.caseId && (filters.radiusKm ?? 0) > 0 && (
-            <label className="inline-flex items-center gap-1.5 text-foreground cursor-pointer select-none">
+      {/* Collapsible Filter Panel */}
+      {open && (
+        <div className="p-2.5 space-y-2 border-b border-border/60 max-h-72 overflow-y-auto text-xs">
+          {cases.length > 0 && (
+            <div className="space-y-1">
+              <label className="font-semibold text-muted text-[11px] block">{t('allCases')}</label>
+              <select
+                value={filters.caseId ?? ''}
+                onChange={(e) =>
+                  onChange({
+                    ...filters,
+                    caseId: e.target.value,
+                    radiusKm: e.target.value ? (filters.radiusKm || 1) : (filters.personId ? filters.radiusKm : 0),
+                  })
+                }
+                className={selectClasses}
+                aria-label={t('allCases')}
+              >
+                <option value="">{t('allCases')}</option>
+                {cases.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    🚨 {c.title} ({c.status})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {uniquePersons.length > 0 && (
+            <div className="space-y-1">
+              <label className="font-semibold text-muted text-[11px] block">{t('allPersons')}</label>
+              <select
+                value={filters.personId ?? ''}
+                onChange={(e) =>
+                  onChange({
+                    ...filters,
+                    personId: e.target.value,
+                    radiusKm: e.target.value ? (filters.radiusKm || 1) : (filters.caseId ? filters.radiusKm : 0),
+                  })
+                }
+                className={selectClasses}
+                aria-label={t('allPersons')}
+              >
+                <option value="">{t('allPersons')}</option>
+                {uniquePersons.map((p) => (
+                  <option key={p.personId} value={p.personId}>
+                    👤 {p.personName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {(filters.caseId || filters.personId) && (
+            <div className="space-y-1">
+              <label className="font-semibold text-muted text-[11px] block">{t('radiusKm', { km: filters.radiusKm ?? 1 })}</label>
+              <select
+                value={String(filters.radiusKm ?? 1)}
+                onChange={(e) =>
+                  onChange({
+                    ...filters,
+                    radiusKm: Number(e.target.value),
+                  })
+                }
+                className={selectClasses}
+                aria-label={t('radiusOff')}
+              >
+                <option value="0">{t('radiusOff')}</option>
+                <option value="0.5">{t('radius500m')}</option>
+                <option value="1">{t('radiusKm', { km: 1 })}</option>
+                <option value="2">{t('radiusKm', { km: 2 })}</option>
+                <option value="5">{t('radiusKm', { km: 5 })}</option>
+                <option value="10">{t('radiusKm', { km: 10 })}</option>
+              </select>
+            </div>
+          )}
+
+          {groups.length > 0 && (
+            <div className="space-y-1">
+              <label className="font-semibold text-muted text-[11px] block">{t('allGroups')}</label>
+              <select
+                value={filters.groupId}
+                onChange={(e) => onChange({ ...filters, groupId: e.target.value })}
+                className={selectClasses}
+                aria-label={t('allGroups')}
+              >
+                <option value="">{t('allGroups')}</option>
+                {groups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {cities.length > 0 && (
+            <div className="space-y-1">
+              <label className="font-semibold text-muted text-[11px] block">{t('allCities')}</label>
+              <select
+                value={filters.city}
+                onChange={(e) => onChange({ ...filters, city: e.target.value, region: '', country: '' })}
+                className={selectClasses}
+                aria-label={t('allCities')}
+              >
+                <option value="">{t('allCities')}</option>
+                {cities.map((city) => (
+                  <option key={city} value={city}>
+                    {city}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {regions.length > 0 && (
+            <div className="space-y-1">
+              <label className="font-semibold text-muted text-[11px] block">{t('allRegions')}</label>
+              <select
+                value={filters.region}
+                onChange={(e) => onChange({ ...filters, region: e.target.value, city: '', country: '' })}
+                className={selectClasses}
+                aria-label={t('allRegions')}
+              >
+                <option value="">{t('allRegions')}</option>
+                {regions.map((region) => (
+                  <option key={region} value={region}>
+                    {region}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {countries.length > 0 && (
+            <div className="space-y-1">
+              <label className="font-semibold text-muted text-[11px] block">{t('allCountries')}</label>
+              <select
+                value={filters.country}
+                onChange={(e) => onChange({ ...filters, country: e.target.value, city: '', region: '' })}
+                className={selectClasses}
+                aria-label={t('allCountries')}
+              >
+                <option value="">{t('allCountries')}</option>
+                {countries.map((country) => (
+                  <option key={country} value={country}>
+                    {getCountryName(country) || country}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Quick Toggles */}
+          <div className="space-y-1 pt-1">
+            {(filters.caseId || filters.personId) && (filters.radiusKm ?? 0) > 0 && (
+              <label className="inline-flex items-center gap-1.5 text-foreground cursor-pointer select-none text-[11px] block">
+                <input
+                  type="checkbox"
+                  checked={Boolean(filters.onlyWithinRadius)}
+                  onChange={(e) =>
+                    onChange({ ...filters, onlyWithinRadius: e.target.checked })
+                  }
+                  className="rounded border-border text-primary focus:ring-primary"
+                />
+                <span>{t('onlyWithinRadius', { km: filters.radiusKm ?? 1 })}</span>
+              </label>
+            )}
+            <label className="inline-flex items-center gap-1.5 text-foreground cursor-pointer select-none text-[11px] block">
               <input
                 type="checkbox"
-                checked={Boolean(filters.onlyWithinRadius)}
+                checked={Boolean(filters.activeCasesOnly)}
                 onChange={(e) =>
-                  onChange({ ...filters, onlyWithinRadius: e.target.checked })
+                  onChange({ ...filters, activeCasesOnly: e.target.checked })
                 }
                 className="rounded border-border text-primary focus:ring-primary"
               />
-              <span>{t('onlyWithinRadius', { km: filters.radiusKm ?? 1 })}</span>
+              <span>{t('activeCasesOnly')}</span>
             </label>
-          )}
-          <label className="inline-flex items-center gap-1.5 text-foreground cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={Boolean(filters.activeCasesOnly)}
-              onChange={(e) =>
-                onChange({ ...filters, activeCasesOnly: e.target.checked })
-              }
-              className="rounded border-border text-primary focus:ring-primary"
-            />
-            <span>{t('activeCasesOnly')}</span>
-          </label>
-          {filters.caseId && (
-            <label className="inline-flex items-center gap-1.5 text-foreground cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={filters.showRuledOut !== false}
-                onChange={(e) =>
-                  onChange({ ...filters, showRuledOut: e.target.checked })
-                }
-                className="rounded border-border text-primary focus:ring-primary"
-              />
-              <span>{t('showRuledOut')}</span>
-            </label>
-          )}
-          <div className="ml-auto flex items-center gap-3">
+            {filters.caseId && (
+              <label className="inline-flex items-center gap-1.5 text-foreground cursor-pointer select-none text-[11px] block">
+                <input
+                  type="checkbox"
+                  checked={filters.showRuledOut !== false}
+                  onChange={(e) =>
+                    onChange({ ...filters, showRuledOut: e.target.checked })
+                  }
+                  className="rounded border-border text-primary focus:ring-primary"
+                />
+                <span>{t('showRuledOut')}</span>
+              </label>
+            )}
+          </div>
+
+          {/* Compact Legend */}
+          <div className="pt-2 border-t border-border/50 flex items-center gap-3 text-[10px] text-muted">
             <span className="inline-flex items-center gap-1">
-              <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-amber-300" />
+              <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500 ring-1 ring-amber-300" />
               {t('legendCrimeScene')}
             </span>
             <span className="inline-flex items-center gap-1">

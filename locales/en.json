@@ -1044,6 +1044,13 @@
       "legendInvestigating": "Investigating / Hypothesis",
       "legendRuledOut": "Ruled Out",
       "resetLayout": "Reset graph layout",
+      "rosterTitle": "Subject & Case Roster",
+      "rosterToggle": "Roster",
+      "rosterCases": "Cases / Incidents",
+      "rosterPersons": "Subjects",
+      "rosterSearchPlaceholder": "Search subjects, cases...",
+      "rosterEmpty": "No results found",
+      "focusInGraph": "Focus in graph",
       "contextMenu": {
         "personTitle": "Investigation Subject",
         "eventTitle": "Investigation Case",
@@ -1059,7 +1066,9 @@
         "expandGroup": "Expand Group",
         "collapseGroup": "Collapse Group",
         "close": "Close Menu"
-      }
+      },
+      "filterTitle": "Filters",
+      "clearFilters": "Clear filters"
     }
   },
   "people": {
@@ -1725,10 +1734,11 @@
     "webglUnavailable": "Your browser cannot display the map because WebGL is unavailable or disabled. Enable graphics acceleration or WebGL in your browser and reload the page.",
     "colocatedTitle": "{count, plural, one {1 person at this location} other {# people at this location}}",
     "allCases": "All Cases / Incidents",
+    "allPersons": "All Subjects",
     "radiusOff": "Radius: Off",
     "radius500m": "Radius: 500 m",
     "radiusKm": "Radius: {km} km",
-    "onlyWithinRadius": "Only subjects within {km} km of crime scene",
+    "onlyWithinRadius": "Only subjects within {km} km radius",
     "activeCasesOnly": "Active Cases Only",
     "showRuledOut": "Show Ruled-Out Subjects",
     "legendCrimeScene": "Crime Scene",
@@ -1745,7 +1755,11 @@
     "rosterUnlocatedSection": "Unlocated Subjects",
     "rosterUnlocatedHint": "Subjects matching filters without GPS coordinates:",
     "rosterUnlocatedEmpty": "All matching subjects have coordinates.",
-    "rosterAddCoordsLink": "Profile →"
+    "rosterAddCoordsLink": "Profile →",
+    "filterTitle": "Filters",
+    "clusterTitle": "Cluster ({count} subjects)",
+    "clusterZoomIn": "Zoom in",
+    "clusterHoverTip": "Click to view details & actions"
   },
   "relationshipTypes": {
     "title": "Relationship Types",

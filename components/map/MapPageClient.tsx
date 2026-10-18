@@ -32,12 +32,25 @@ function MapPageInner() {
       region: searchParams.get('region') ?? '',
       country: searchParams.get('country') ?? '',
       caseId: searchParams.get('case') ?? '',
+      personId: searchParams.get('person') ?? searchParams.get('focus') ?? '',
       radiusKm: Number(searchParams.get('radius') ?? '0') || 0,
       onlyWithinRadius: searchParams.get('within') === '1',
       activeCasesOnly: searchParams.get('activeCases') === '1',
       showRuledOut: searchParams.get('ruledOut') !== '0',
     }),
     [searchParams]
+  );
+  const hasActiveFilters = Boolean(
+    filters.query ||
+      filters.groupId ||
+      filters.city ||
+      filters.region ||
+      filters.country ||
+      filters.caseId ||
+      filters.personId ||
+      (filters.radiusKm && filters.radiusKm > 0) ||
+      filters.onlyWithinRadius ||
+      filters.activeCasesOnly
   );
   const focusId = searchParams.get('focus');
 
@@ -68,6 +81,7 @@ function MapPageInner() {
       if (next.region) params.set('region', next.region);
       if (next.country) params.set('country', next.country);
       if (next.caseId) params.set('case', next.caseId);
+      if (next.personId) params.set('person', next.personId);
       if (next.radiusKm && next.radiusKm > 0) params.set('radius', String(next.radiusKm));
       if (next.onlyWithinRadius) params.set('within', '1');
       if (next.activeCasesOnly) params.set('activeCases', '1');
@@ -116,6 +130,29 @@ function MapPageInner() {
     [data, filters.caseId]
   );
 
+  const radiusCenter = useMemo(() => {
+    if (filters.personId) {
+      const personMarker = data?.markers.find((m) => m.personId === filters.personId);
+      if (personMarker && personMarker.latitude !== null && personMarker.longitude !== null) {
+        return {
+          latitude: personMarker.latitude,
+          longitude: personMarker.longitude,
+          label: personMarker.personName,
+          isPerson: true,
+        };
+      }
+    }
+    if (selectedCase && selectedCase.latitude !== null && selectedCase.longitude !== null) {
+      return {
+        latitude: selectedCase.latitude,
+        longitude: selectedCase.longitude,
+        label: selectedCase.title,
+        isPerson: false,
+      };
+    }
+    return null;
+  }, [data?.markers, filters.personId, selectedCase]);
+
   if (loadError) {
     return (
       <div className="flex-1 flex items-center justify-center p-8">
@@ -136,14 +173,6 @@ function MapPageInner() {
 
   return (
     <div className="flex-1 flex flex-col">
-      <MapFilters
-        filters={filters}
-        resultCount={visibleMarkers.length}
-        markers={data.markers}
-        groups={data.groups}
-        cases={data.cases ?? []}
-        onChange={handleFiltersChange}
-      />
 
       {showBanner && (
         <div className="flex items-center justify-between gap-4 px-4 py-2 bg-surface-elevated border-b border-border text-sm text-muted">
@@ -186,9 +215,26 @@ function MapPageInner() {
               markers={visibleMarkers}
               focusId={focusId}
               focusRequest={focusRequest}
-              filtersKey={`${filters.query}|${filters.groupId}|${filters.city}|${filters.region}|${filters.country}|${filters.caseId ?? ''}|${filters.radiusKm ?? 0}|${filters.onlyWithinRadius ? '1' : ''}|${filters.activeCasesOnly ? '1' : ''}|${filters.showRuledOut === false ? '0' : ''}`}
+              filtersKey={`${filters.query}|${filters.groupId}|${filters.city}|${filters.region}|${filters.country}|${filters.caseId ?? ''}|${filters.personId ?? ''}|${filters.radiusKm ?? 0}|${filters.onlyWithinRadius ? '1' : ''}|${filters.activeCasesOnly ? '1' : ''}|${filters.showRuledOut === false ? '0' : ''}`}
               selectedCase={selectedCase}
+              radiusCenter={radiusCenter}
               radiusKm={filters.radiusKm ?? 0}
+              onSelectMarker={(marker) => {
+                if (marker.source === 'event_address') {
+                  handleFiltersChange({
+                    ...filters,
+                    caseId: marker.personId,
+                    personId: '',
+                    radiusKm: filters.radiusKm || 1,
+                  });
+                } else {
+                  handleFiltersChange({
+                    ...filters,
+                    personId: marker.personId,
+                    radiusKm: filters.radiusKm || 1,
+                  });
+                }
+              }}
             />
 
             {/* Toggle button when Subject Roster Sidebar is collapsed */}
@@ -207,19 +253,29 @@ function MapPageInner() {
                     +{filteredUnmappedSubjects.length}
                   </span>
                 )}
+                {hasActiveFilters && (
+                  <span className="px-1.5 py-0.5 rounded-full bg-primary text-white font-semibold">
+                    ⚙️
+                  </span>
+                )}
               </button>
             )}
 
             {/* Collapsible Subject Roster Sidebar */}
             {rosterOpen && (
               <aside
-                className="absolute top-3 left-3 bottom-3 z-20 w-72 sm:w-80 bg-surface/95 backdrop-blur border border-border rounded-xl shadow-lg flex flex-col overflow-hidden"
+                className="absolute top-3 left-3 bottom-3 z-20 w-72 sm:w-80 bg-surface/95 backdrop-blur border border-border rounded-xl shadow-lg flex flex-col overflow-hidden text-xs"
                 aria-label={t('rosterTitle')}
               >
                 <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 border-b border-border bg-surface-elevated/60">
-                  <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground">
-                    📋 {t('rosterTitle')}
-                  </h2>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground truncate">
+                      📋 {t('rosterTitle')}
+                    </h2>
+                    <span className="px-1.5 py-0.5 rounded-full bg-primary/15 text-primary font-semibold text-[11px] shrink-0">
+                      {visibleMarkers.length}
+                    </span>
+                  </div>
                   <button
                     type="button"
                     onClick={() => setRosterOpen(false)}
@@ -231,6 +287,15 @@ function MapPageInner() {
                     </svg>
                   </button>
                 </div>
+
+                <MapFilters
+                  filters={filters}
+                  resultCount={visibleMarkers.length}
+                  markers={data.markers}
+                  groups={data.groups}
+                  cases={data.cases ?? []}
+                  onChange={handleFiltersChange}
+                />
 
                 <div className="flex-1 overflow-y-auto divide-y divide-border/60 text-xs">
                   {/* Section 1: Located on Map */}
@@ -253,12 +318,26 @@ function MapPageInner() {
                             <li key={marker.id}>
                               <button
                                 type="button"
-                                onClick={() =>
+                                onClick={() => {
                                   setFocusRequest((prev) => ({
                                     id: marker.id,
                                     seq: (prev?.seq ?? 0) + 1,
-                                  }))
-                                }
+                                  }));
+                                  if (marker.source === 'event_address') {
+                                    handleFiltersChange({
+                                      ...filters,
+                                      caseId: marker.personId,
+                                      personId: '',
+                                      radiusKm: filters.radiusKm || 1,
+                                    });
+                                  } else {
+                                    handleFiltersChange({
+                                      ...filters,
+                                      personId: marker.personId,
+                                      radiusKm: filters.radiusKm || 1,
+                                    });
+                                  }
+                                }}
                                 className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-surface-elevated transition-colors flex items-start gap-2 group"
                               >
                                 <span

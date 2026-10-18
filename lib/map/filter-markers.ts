@@ -7,6 +7,7 @@ export interface MapFilterState {
   region: string;
   country: string;
   caseId?: string;
+  personId?: string;
   radiusKm?: number;
   onlyWithinRadius?: boolean;
   activeCasesOnly?: boolean;
@@ -36,6 +37,7 @@ export function filterMarkers(markers: MapMarker[], filters: MapFilterState): Ma
   const city = filters.city.trim().toLowerCase();
   const region = filters.region.trim().toLowerCase();
   const caseId = filters.caseId?.trim() || '';
+  const personId = filters.personId?.trim() || '';
   const radiusKm = filters.radiusKm ?? 0;
   const onlyWithinRadius = Boolean(filters.onlyWithinRadius);
   const activeCasesOnly = Boolean(filters.activeCasesOnly);
@@ -44,6 +46,16 @@ export function filterMarkers(markers: MapMarker[], filters: MapFilterState): Ma
   const crimeSceneMarkers = caseId
     ? markers.filter((m) => m.source === 'event_address' && m.personId === caseId)
     : [];
+
+  const targetPersonMarker = personId
+    ? markers.find(
+        (m) =>
+          m.personId === personId &&
+          m.source !== 'event_address' &&
+          m.latitude !== null &&
+          m.longitude !== null,
+      ) ?? markers.find((m) => m.personId === personId)
+    : null;
 
   return markers.filter((marker) => {
     if (query && !marker.personName.toLowerCase().includes(query)) return false;
@@ -63,6 +75,16 @@ export function filterMarkers(markers: MapMarker[], filters: MapFilterState): Ma
       ) {
         return false;
       }
+      // If filtering within radius of a target person, apply to crime scenes too
+      if (personId && onlyWithinRadius && radiusKm > 0 && targetPersonMarker) {
+        const dist = haversineDistanceKm(
+          targetPersonMarker.latitude,
+          targetPersonMarker.longitude,
+          marker.latitude,
+          marker.longitude,
+        );
+        if (dist > radiusKm) return false;
+      }
       return true;
     }
 
@@ -81,6 +103,17 @@ export function filterMarkers(markers: MapMarker[], filters: MapFilterState): Ma
           radiusKm,
       );
       if (!withinAnyScene) return false;
+    }
+
+    // Radius filtering around selected person
+    if (personId && onlyWithinRadius && radiusKm > 0 && targetPersonMarker) {
+      const dist = haversineDistanceKm(
+        targetPersonMarker.latitude,
+        targetPersonMarker.longitude,
+        marker.latitude,
+        marker.longitude,
+      );
+      if (dist > radiusKm) return false;
     }
 
     return true;
