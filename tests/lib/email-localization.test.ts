@@ -19,15 +19,15 @@ describe('Email Localization', () => {
       expect(text).toContain(url);
     });
 
-    it('should generate Spanish verification email', async () => {
+    it('should generate Vietnamese verification email', async () => {
       const url = 'https://example.com/verify?token=abc123';
-      const { subject, html, text } = await emailTemplates.accountVerification(url, 'es-ES');
+      const { subject, html, text } = await emailTemplates.accountVerification(url, 'vi-VN');
 
-      expect(subject.toLowerCase()).toContain('verifica');
+      expect(subject.toLowerCase()).toContain('xác thực');
       expect(subject).toContain('Nametag');
-      expect(html.toLowerCase()).toContain('verifica');
+      expect(html.toLowerCase()).toContain('xác thực');
       expect(html).toContain(url);
-      expect(text.toLowerCase()).toContain('verifica');
+      expect(text.toLowerCase()).toContain('xác thực');
       expect(text).toContain(url);
     });
   });
@@ -44,13 +44,12 @@ describe('Email Localization', () => {
       expect(text).toContain(url);
     });
 
-    it('should generate Spanish password reset email', async () => {
+    it('should generate Vietnamese password reset email', async () => {
       const url = 'https://example.com/reset?token=abc123';
-      const { subject, html, text } = await emailTemplates.passwordReset(url, 'es-ES');
+      const { subject, html, text } = await emailTemplates.passwordReset(url, 'vi-VN');
 
-      expect(subject).toContain('Restablece');
-      expect(subject).toContain('contraseña');
-      expect(html).toContain('Restablece');
+      expect(subject).toContain('Đặt lại mật khẩu');
+      expect(html).toContain('Đặt lại mật khẩu');
       expect(html).toContain(url);
       expect(text).toContain(url);
     });
@@ -74,20 +73,20 @@ describe('Email Localization', () => {
       expect(text).toContain('John Doe');
     });
 
-    it('should generate Spanish important date reminder', async () => {
+    it('should generate Vietnamese important date reminder', async () => {
       const { subject, html, text } = await emailTemplates.importantDateReminder(
         'John Doe',
-        'Cumpleaños',
-        '15 de enero de 2024',
+        'Sinh nhật',
+        '15 tháng 1, 2024',
         'https://nametag.one/unsubscribe?token=test',
-        'es-ES'
+        'vi-VN'
       );
 
-      expect(subject).toContain('Recordatorio');
+      expect(subject).toContain('Nhắc nhở');
       expect(subject).toContain('John Doe');
       expect(html).toContain('John Doe');
-      expect(html).toContain('Cumpleaños');
-      expect(html).toContain('15 de enero de 2024');
+      expect(html).toContain('Sinh nhật');
+      expect(html).toContain('15 tháng 1, 2024');
       expect(text).toContain('John Doe');
     });
   });
@@ -110,20 +109,20 @@ describe('Email Localization', () => {
       expect(text).toContain('Jane Smith');
     });
 
-    it('should generate Spanish contact reminder', async () => {
+    it('should generate Vietnamese contact reminder', async () => {
       const { subject, html, text } = await emailTemplates.contactReminder(
         'Jane Smith',
-        '1 de diciembre de 2023',
-        '2 meses',
+        '1 tháng 12, 2023',
+        '2 tháng',
         'https://nametag.one/unsubscribe?token=test',
-        'es-ES'
+        'vi-VN'
       );
 
-      expect(subject.toLowerCase()).toContain('hora de');
+      expect(subject).toContain('Đã đến lúc');
       expect(subject).toContain('Jane Smith');
       expect(html).toContain('Jane Smith');
-      expect(html).toContain('1 de diciembre de 2023');
-      expect(html).toContain('2 meses');
+      expect(html).toContain('1 tháng 12, 2023');
+      expect(html).toContain('2 tháng');
       expect(text).toContain('Jane Smith');
     });
   });
@@ -144,15 +143,15 @@ describe('Email Localization', () => {
       expect(text).toContain('Pro');
     });
 
-    it('should generate Spanish subscription created email', async () => {
+    it('should generate Vietnamese subscription created email', async () => {
       const { subject, html, text } = await emailTemplates.subscriptionCreated(
         'Pro',
         '$9.99',
-        'facturado mensualmente',
-        'es-ES'
+        'thanh toán hàng tháng',
+        'vi-VN'
       );
 
-      expect(subject.toLowerCase()).toContain('bienvenido');
+      expect(subject).toContain('Chào mừng');
       expect(html).toContain('Pro');
       expect(html).toContain('$9.99');
       expect(text).toContain('Pro');
@@ -177,19 +176,17 @@ describe('Email Localization', () => {
       expect(text).toContain('Pro');
     });
 
-    it('should generate Spanish upgrade email', async () => {
+    it('should generate Vietnamese upgrade email', async () => {
       const { subject, html, text } = await emailTemplates.subscriptionChanged(
         'Personal',
         'Pro',
         '$9.99',
-        'facturado mensualmente',
+        'thanh toán hàng tháng',
         true,
-        'es-ES'
+        'vi-VN'
       );
 
-      expect(
-        subject.toLowerCase().includes('suscripción') || subject.toLowerCase().includes('mejorado')
-      ).toBe(true);
+      expect(subject).toContain('nâng cấp');
       expect(html).toContain('Personal');
       expect(html).toContain('Pro');
       expect(html).toContain('$9.99');
@@ -228,17 +225,17 @@ describe('Email Localization', () => {
       expect(text).toContain('Pro');
     });
 
-    it('should generate Spanish cancellation email', async () => {
+    it('should generate Vietnamese cancellation email', async () => {
       const { subject, html, text } = await emailTemplates.subscriptionCanceled(
         'Pro',
-        '31 de enero de 2024',
+        '31 tháng 1, 2024',
         false,
-        'es-ES'
+        'vi-VN'
       );
 
-      expect(subject.toLowerCase()).toContain('cancel');
+      expect(subject).toContain('hủy');
       expect(html).toContain('Pro');
-      expect(html).toContain('31 de enero de 2024');
+      expect(html).toContain('31 tháng 1, 2024');
       expect(text).toContain('Pro');
     });
 

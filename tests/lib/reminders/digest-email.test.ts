@@ -64,37 +64,34 @@ describe('weeklyDigest template', () => {
     expect(template.text).toContain(url);
   });
 
-  describe('Russian numeral agreement', () => {
-    it('uses "дня" for inDays at a count of 2', async () => {
+  describe('Vietnamese translations', () => {
+    it('uses "Sau 2 ngày" for inDays at a count of 2', async () => {
       const twoDaysRow = [{ ...rows[0], daysUntil: 2 }];
-      const template = await emailTemplates.weeklyDigest(twoDaysRow, 0, 'https://example.com/u?token=a', 'ru-RU');
-      expect(template.html).toContain('2 дня');
-      expect(template.html).not.toContain('2 дней');
-      expect(template.text).toContain('2 дня');
-      expect(template.text).not.toContain('2 дней');
+      const template = await emailTemplates.weeklyDigest(twoDaysRow, 0, 'https://example.com/u?token=a', 'vi-VN');
+      expect(template.html).toContain('Sau 2 ngày');
+      expect(template.text).toContain('Sau 2 ngày');
     });
 
-    it('uses "дней" for inDays at a count of 5', async () => {
+    it('uses "Sau 5 ngày" for inDays at a count of 5', async () => {
       const fiveDaysRow = [{ ...rows[0], daysUntil: 5 }];
-      const template = await emailTemplates.weeklyDigest(fiveDaysRow, 0, 'https://example.com/u?token=a', 'ru-RU');
-      expect(template.html).toContain('5 дней');
-      expect(template.text).toContain('5 дней');
+      const template = await emailTemplates.weeklyDigest(fiveDaysRow, 0, 'https://example.com/u?token=a', 'vi-VN');
+      expect(template.html).toContain('Sau 5 ngày');
+      expect(template.text).toContain('Sau 5 ngày');
     });
 
-    it('uses "события" for a subject count of 3', async () => {
+    it('uses "3 sự kiện" for a subject count of 3', async () => {
       const threeRows = [rows[0], rows[1], { ...rows[0], personName: 'Third Person' }];
-      const template = await emailTemplates.weeklyDigest(threeRows, 0, 'https://example.com/u?token=a', 'ru-RU');
-      expect(template.subject).toContain('3 события');
-      expect(template.subject).not.toContain('3 событий');
+      const template = await emailTemplates.weeklyDigest(threeRows, 0, 'https://example.com/u?token=a', 'vi-VN');
+      expect(template.subject).toContain('3 sự kiện');
     });
 
-    it('uses "событий" for a subject count of 7', async () => {
+    it('uses "7 sự kiện" for a subject count of 7', async () => {
       const sevenRows = Array.from({ length: 7 }, (_, i) => ({
         ...rows[0],
         personName: `Person ${i}`,
       }));
-      const template = await emailTemplates.weeklyDigest(sevenRows, 0, 'https://example.com/u?token=a', 'ru-RU');
-      expect(template.subject).toContain('7 событий');
+      const template = await emailTemplates.weeklyDigest(sevenRows, 0, 'https://example.com/u?token=a', 'vi-VN');
+      expect(template.subject).toContain('7 sự kiện');
     });
   });
 });

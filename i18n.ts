@@ -37,40 +37,12 @@ export default getRequestConfig(async () => {
           }
 
           const languageCode = browserLocale.split('-')[0].toLowerCase();
-          if (languageCode === 'es') {
-            locale = 'es-ES';
-            break;
-          }
           if (languageCode === 'en') {
             locale = 'en';
             break;
           }
-          if (languageCode === 'ja') {
-            locale = 'ja-JP';
-            break;
-          }
-          if (languageCode === 'nb' || languageCode === 'no') {
-            locale = 'nb-NO';
-            break;
-          }
-           if (languageCode === 'de') {
-            locale = 'de-DE';
-            break;
-          }
-          if (languageCode === 'it') {
-            locale = 'it-IT';
-            break;
-          }
-          if (languageCode === 'ru') {
-            locale = 'ru-RU';
-            break;
-          }
-          if (languageCode === 'nl') {
-            locale = 'nl-NL';
-            break;
-          }
-          if (languageCode === 'fr') {
-            locale = 'fr-FR';
+          if (languageCode === 'vi') {
+            locale = 'vi-VN';
             break;
           }
         }

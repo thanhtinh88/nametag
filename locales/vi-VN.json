@@ -145,15 +145,6 @@
         "title": "Ngôn ngữ",
         "description": "Chọn ngôn ngữ hiển thị của hệ thống",
         "en": "English (Tiếng Anh)",
-        "esES": "Español (España)",
-        "jaJP": "日本語",
-        "nbNO": "Norsk bokmål (Norwegian Bokmål)",
-        "deDE": "Deutsch",
-        "zhCN": "简体中文",
-        "itIT": "Italiano (Italian)",
-        "ruRU": "Русский (Russian)",
-        "nlNL": "Nederlands (Dutch)",
-        "frFR": "Français (French)",
         "viVN": "Tiếng Việt (Vietnamese)"
       }
     },

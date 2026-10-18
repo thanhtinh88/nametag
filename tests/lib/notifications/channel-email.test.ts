@@ -113,20 +113,20 @@ describe('renderEmail', () => {
       )
     );
 
-    const es = await renderEmail({
+    const viLocale = await renderEmail({
       ...envelope(
         {
           kind: 'contact',
           personId: 'person-1',
           personName: 'Ana Torres',
           lastContactFormatted: null,
-          intervalText: '3 meses',
+          intervalText: '3 tháng',
         },
         { model: 'person', id: 'person-1', field: 'lastContactReminderSent' }
       ),
-      locale: 'es-ES',
+      locale: 'vi-VN',
     });
 
-    expect(es.subject).not.toBe(en.subject);
+    expect(viLocale.subject).not.toBe(en.subject);
   });
 });

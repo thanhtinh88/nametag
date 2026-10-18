@@ -5,36 +5,20 @@ import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import 'flag-icons/css/flag-icons.min.css';
 
+import type { SupportedLocale } from '@/lib/locale';
+
 interface LanguageSelectorProps {
-  currentLanguage: 'en' | 'es-ES' | 'ja-JP' | 'nb-NO' | 'de-DE' | 'zh-CN' | 'it-IT' | 'ru-RU' | 'nl-NL' | 'fr-FR' | 'vi-VN';
+  currentLanguage: SupportedLocale;
 }
 
 const LANGUAGES = [
   { code: 'en' as const, name: 'English', flag: 'gb' },
   { code: 'vi-VN' as const, name: 'Tiếng Việt (Việt Nam)', flag: 'vn' },
-  { code: 'es-ES' as const, name: 'Español (España)', flag: 'es' },
-  { code: 'ja-JP' as const, name: '日本語', flag: 'jp' },
-  { code: 'nb-NO' as const, name: 'Norsk bokmål', flag: 'no' },
-  { code: 'de-DE' as const, name: 'Deutsch (German)', flag: 'de' },
-  { code: 'zh-CN' as const, name: '简体中文', flag: 'cn' },
-  { code: 'it-IT' as const, name: 'Italiano', flag: 'it' },
-  { code: 'ru-RU' as const, name: 'Русский', flag: 'ru' },
-  { code: 'nl-NL' as const, name: 'Nederlands (Dutch)', flag: 'nl' },
-  { code: 'fr-FR' as const, name: 'Français (France)', flag: 'fr' },
 ];
 
 const labelMap = {
   en: 'en',
   'vi-VN': 'viVN',
-  'es-ES': 'esES',
-  'ja-JP': 'jaJP',
-  'nb-NO': 'nbNO',
-  'de-DE': 'deDE',
-  'zh-CN': 'zhCN',
-  'it-IT': 'itIT',
-  'ru-RU': 'ruRU',
-  'nl-NL': 'nlNL',
-  'fr-FR': 'frFR',
 } as const;
 
 /** How long to wait for an active worker before giving up on the refresh. */
@@ -89,7 +73,7 @@ export default function LanguageSelector({
   const [isLoading, setIsLoading] = useState(false);
 
   const handleLanguageChange = async (
-    newLanguage: 'en' | 'es-ES' | 'ja-JP' | 'nb-NO' | 'de-DE' | 'zh-CN' | 'it-IT' | 'ru-RU' | 'nl-NL' | 'fr-FR' | 'vi-VN',
+    newLanguage: SupportedLocale,
   ) => {
     if (isLoading || newLanguage === selectedLanguage) return;
 

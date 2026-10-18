@@ -4,7 +4,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import InstallPrompt from '@/components/InstallPrompt';
 import InstallAppSettings from '@/components/InstallAppSettings';
 import enMessages from '../../locales/en.json';
-import esMessages from '../../locales/es-ES.json';
+import viMessages from '../../locales/vi-VN.json';
 
 const DISMISS_KEY = 'nametag.installPromptDismissed';
 
@@ -234,17 +234,17 @@ describe('InstallPrompt banner', () => {
    * actually wired up. This component carries ten translated keys, so it is the
    * one most worth guarding.
    */
-  it('renders Spanish copy when given Spanish messages', () => {
+  it('renders Vietnamese copy when given Vietnamese messages', () => {
     render(
-      <NextIntlClientProvider locale="es-ES" messages={esMessages}>
+      <NextIntlClientProvider locale="vi-VN" messages={viMessages}>
         <InstallPrompt />
       </NextIntlClientProvider>
     );
     fireInstallPromptEvent();
 
-    expect(screen.getByText('Instalar Nametag')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Instalar' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Ahora no' })).toBeInTheDocument();
+    expect(screen.getByText('Cài đặt Nametag')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cài đặt' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Để sau' })).toBeInTheDocument();
     expect(screen.queryByText('Install Nametag')).not.toBeInTheDocument();
   });
 });

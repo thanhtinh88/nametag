@@ -18,10 +18,7 @@ vi.mock('@/lib/locale', () => ({
   getUserLocale: vi.fn(),
 }));
 
-const SUPPORTED_LOCALES = [
-  'en', 'es-ES', 'ja-JP', 'nb-NO', 'de-DE', 'zh-CN', 'it-IT', 'ru-RU', 'nl-NL',
-  'fr-FR',
-] as const;
+const SUPPORTED_LOCALES = ['en', 'vi-VN'] as const;
 
 describe('app/manifest.ts', () => {
   beforeEach(() => {
@@ -96,24 +93,24 @@ describe('app/manifest.ts', () => {
   });
 
   it('prefers the locale cookie over Accept-Language', async () => {
-    mocks.getLocaleFromCookie.mockResolvedValue('es-ES');
-    mocks.detectBrowserLocale.mockResolvedValue('de-DE');
+    mocks.getLocaleFromCookie.mockResolvedValue('vi-VN');
+    mocks.detectBrowserLocale.mockResolvedValue('en');
 
     const result = await manifest();
 
-    expect(result.lang).toBe('es-ES');
-    expect(result.description).toBe('Organiza a las personas de tu vida.');
-    expect((result.shortcuts ?? [])[0].name).toBe('Añadir persona');
+    expect(result.lang).toBe('vi-VN');
+    expect(result.description).toBe('Hệ thống quản lý hồ sơ vụ án, phân tích mạng lưới và định vị đối tượng nghi vấn.');
+    expect((result.shortcuts ?? [])[0].name).toBe('Thêm đối tượng');
     expect(mocks.detectBrowserLocale).not.toHaveBeenCalled();
   });
 
   it('falls back to Accept-Language when there is no cookie', async () => {
-    mocks.detectBrowserLocale.mockResolvedValue('ja-JP');
+    mocks.detectBrowserLocale.mockResolvedValue('vi-VN');
 
     const result = await manifest();
 
-    expect(result.lang).toBe('ja-JP');
-    expect(result.description).toBe('大切な人たちの情報を整理しましょう。');
+    expect(result.lang).toBe('vi-VN');
+    expect(result.description).toBe('Hệ thống quản lý hồ sơ vụ án, phân tích mạng lưới và định vị đối tượng nghi vấn.');
   });
 
   it('translates the description in every supported locale', async () => {
@@ -130,7 +127,7 @@ describe('app/manifest.ts', () => {
       seen.add(result.description as string);
     }
 
-    // Nine genuinely different strings, so nothing silently fell back.
+    // Two genuinely different strings, so nothing silently fell back.
     expect(seen.size).toBe(SUPPORTED_LOCALES.length);
   });
 });

@@ -81,19 +81,19 @@ describe('Email Templates - Unsubscribe Functionality', () => {
       expect(template.text).toContain('Disable this reminder');
     });
 
-    it('should use correct locale for unsubscribe text (ES)', async () => {
+    it('should use correct locale for unsubscribe text (VI)', async () => {
       const { emailTemplates } = await import('../../lib/email');
 
       const template = await emailTemplates.importantDateReminder(
-        'Juan Pérez',
-        'Cumpleaños',
-        '15 de enero de 2024',
+        'Nguyễn Văn A',
+        'Sinh nhật',
+        '15 tháng 1, 2024',
         'https://nametag.one/unsubscribe?token=abc123',
-        'es-ES'
+        'vi-VN'
       );
 
-      expect(template.html).toContain('Desactivar este recordatorio');
-      expect(template.text).toContain('Desactivar este recordatorio');
+      expect(template.html).toContain('Tắt lời nhắc này');
+      expect(template.text).toContain('Tắt lời nhắc này');
     });
 
     it('should escape HTML in unsubscribe URL', async () => {
@@ -178,19 +178,19 @@ describe('Email Templates - Unsubscribe Functionality', () => {
       expect(template.text).toContain('Disable this reminder');
     });
 
-    it('should use correct locale for unsubscribe text (ES)', async () => {
+    it('should use correct locale for unsubscribe text (VI)', async () => {
       const { emailTemplates } = await import('../../lib/email');
 
       const template = await emailTemplates.contactReminder(
-        'María García',
-        '1 de diciembre de 2024',
-        '3 meses',
+        'Nguyễn Thị B',
+        '1 tháng 12, 2024',
+        '3 tháng',
         'https://nametag.one/unsubscribe?token=xyz789',
-        'es-ES'
+        'vi-VN'
       );
 
-      expect(template.html).toContain('Desactivar este recordatorio');
-      expect(template.text).toContain('Desactivar este recordatorio');
+      expect(template.html).toContain('Tắt lời nhắc này');
+      expect(template.text).toContain('Tắt lời nhắc này');
     });
 
     it('should escape HTML in unsubscribe URL', async () => {
@@ -291,21 +291,21 @@ describe('Email Templates - Unsubscribe Functionality', () => {
         'en'
       );
 
-      const templateES = await emailTemplates.importantDateReminder(
-        'Juan Pérez',
-        'Cumpleaños',
-        '15 de enero de 2024',
+      const templateVI = await emailTemplates.importantDateReminder(
+        'Nguyễn Văn A',
+        'Sinh nhật',
+        '15 tháng 1, 2024',
         'https://nametag.one/unsubscribe?token=abc123',
-        'es-ES'
+        'vi-VN'
       );
 
       // English should have English text
       expect(templateEN.html).toContain('Disable this reminder');
-      expect(templateEN.html).not.toContain('Desactivar');
+      expect(templateEN.html).not.toContain('Tắt lời nhắc này');
 
-      // Spanish should have Spanish text
-      expect(templateES.html).toContain('Desactivar este recordatorio');
-      expect(templateES.html).not.toContain('Disable this reminder');
+      // Vietnamese should have Vietnamese text
+      expect(templateVI.html).toContain('Tắt lời nhắc này');
+      expect(templateVI.html).not.toContain('Disable this reminder');
     });
   });
 

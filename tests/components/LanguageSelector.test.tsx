@@ -61,23 +61,23 @@ describe('LanguageSelector Component', () => {
     expect(englishButton).toHaveClass('border-primary');
   });
 
-  it('should display Spanish as selected when currentLanguage is es-ES', () => {
-    render(<LanguageSelector currentLanguage="es-ES" />);
+  it('should display Vietnamese as selected when currentLanguage is vi-VN', () => {
+    render(<LanguageSelector currentLanguage="vi-VN" />);
 
-    const spanishButton = screen.getByRole('button', { name: /Español/i });
-    expect(spanishButton).toHaveClass('border-primary');
+    const vietnameseButton = screen.getByRole('button', { name: /Tiếng Việt/i });
+    expect(vietnameseButton).toHaveClass('border-primary');
   });
 
-  it('should change language to Spanish when clicked', async () => {
+  it('should change language to Vietnamese when clicked', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ success: true, language: 'es-ES' }),
+      json: async () => ({ success: true, language: 'vi-VN' }),
     });
 
     render(<LanguageSelector currentLanguage="en" />);
 
-    const spanishButton = screen.getByRole('button', { name: /Español/i });
-    fireEvent.click(spanishButton);
+    const vietnameseButton = screen.getByRole('button', { name: /Tiếng Việt/i });
+    fireEvent.click(vietnameseButton);
 
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith('/api/user/language', {
@@ -85,7 +85,7 @@ describe('LanguageSelector Component', () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ language: 'es-ES' }),
+        body: JSON.stringify({ language: 'vi-VN' }),
       });
     });
   });
@@ -100,8 +100,8 @@ describe('LanguageSelector Component', () => {
 
     render(<LanguageSelector currentLanguage="en" />);
 
-    const spanishButton = screen.getByRole('button', { name: /Español/i });
-    fireEvent.click(spanishButton);
+    const vietnameseButton = screen.getByRole('button', { name: /Tiếng Việt/i });
+    fireEvent.click(vietnameseButton);
 
     await waitFor(() => {
       expect(screen.getByText('Loading...')).toBeInTheDocument();
@@ -116,8 +116,8 @@ describe('LanguageSelector Component', () => {
 
     render(<LanguageSelector currentLanguage="en" />);
 
-    const spanishButton = screen.getByRole('button', { name: /Español/i });
-    fireEvent.click(spanishButton);
+    const vietnameseButton = screen.getByRole('button', { name: /Tiếng Việt/i });
+    fireEvent.click(vietnameseButton);
 
     await waitFor(() => {
       expect(window.location.reload).toHaveBeenCalled();
@@ -134,15 +134,15 @@ describe('LanguageSelector Component', () => {
 
     render(<LanguageSelector currentLanguage="en" />);
 
-    const spanishButton = screen.getByRole('button', { name: /Español/i });
-    fireEvent.click(spanishButton);
+    const vietnameseButton = screen.getByRole('button', { name: /Tiếng Việt/i });
+    fireEvent.click(vietnameseButton);
 
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith('Failed to update language. Please try again.');
     });
 
     // Should revert to previous language
-    expect(spanishButton).not.toHaveClass('border-blue-600');
+    expect(vietnameseButton).not.toHaveClass('border-blue-600');
   });
 
   it('should not make API call if same language clicked', async () => {
@@ -167,13 +167,13 @@ describe('LanguageSelector Component', () => {
 
     render(<LanguageSelector currentLanguage="en" />);
 
-    const spanishButton = screen.getByRole('button', { name: /Español/i });
+    const vietnameseButton = screen.getByRole('button', { name: /Tiếng Việt/i });
     const englishButton = screen.getByRole('button', { name: /English/i });
 
-    fireEvent.click(spanishButton);
+    fireEvent.click(vietnameseButton);
 
     await waitFor(() => {
-      expect(spanishButton).toBeDisabled();
+      expect(vietnameseButton).toBeDisabled();
       expect(englishButton).toBeDisabled();
     });
   });
@@ -191,11 +191,11 @@ describe('LanguageSelector Component', () => {
 
     render(<LanguageSelector currentLanguage="en" />);
 
-    const spanishButton = screen.getByRole('button', { name: /Español/i });
-    fireEvent.click(spanishButton);
+    const vietnameseButton = screen.getByRole('button', { name: /Tiếng Việt/i });
+    fireEvent.click(vietnameseButton);
 
     await waitFor(() => {
-      expect(document.cookie).toContain('NEXT_LOCALE=es-ES');
+      expect(document.cookie).toContain('NEXT_LOCALE=vi-VN');
     });
   });
 
@@ -217,7 +217,7 @@ describe('LanguageSelector Component', () => {
     });
 
     render(<LanguageSelector currentLanguage="en" />);
-    fireEvent.click(screen.getByRole('button', { name: /Español/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Tiếng Việt/i }));
 
     await waitFor(() => {
       expect(postMessage).toHaveBeenCalledWith({ type: 'RECACHE_OFFLINE' });
@@ -238,7 +238,7 @@ describe('LanguageSelector Component', () => {
     });
 
     render(<LanguageSelector currentLanguage="en" />);
-    fireEvent.click(screen.getByRole('button', { name: /Español/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Tiếng Việt/i }));
 
     await waitFor(() => {
       expect(window.location.reload).toHaveBeenCalled();
@@ -267,7 +267,7 @@ describe('LanguageSelector Component', () => {
       });
 
       render(<LanguageSelector currentLanguage="en" />);
-      fireEvent.click(screen.getByRole('button', { name: /Español/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Tiếng Việt/i }));
 
       // Flushes the awaited fetch as well as tripping the timeout.
       await vi.advanceTimersByTimeAsync(1000);

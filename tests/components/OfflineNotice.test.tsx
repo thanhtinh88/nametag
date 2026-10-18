@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import OfflineNotice from '@/components/OfflineNotice';
 import enMessages from '../../locales/en.json';
-import esMessages from '../../locales/es-ES.json';
+import viMessages from '../../locales/vi-VN.json';
 
 function Wrapper({ children }: { children: React.ReactNode }) {
   return (
@@ -34,18 +34,18 @@ describe('OfflineNotice', () => {
   /*
    * The English assertions above are byte-identical to locales/en.json, so they
    * would pass even if the component hardcoded its copy and never called t().
-   * Rendering the same component against Spanish messages is what actually
+   * Rendering the same component against Vietnamese messages is what actually
    * proves the translation layer is wired up.
    */
-  it('renders Spanish copy when given Spanish messages', () => {
+  it('renders Vietnamese copy when given Vietnamese messages', () => {
     render(
-      <NextIntlClientProvider locale="es-ES" messages={esMessages}>
+      <NextIntlClientProvider locale="vi-VN" messages={viMessages}>
         <OfflineNotice />
       </NextIntlClientProvider>
     );
 
-    expect(screen.getByText('Sin conexión')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Reintentar' })).toHaveAttribute('href', '/');
+    expect(screen.getByText('Bạn đang ngoại tuyến')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Thử lại' })).toHaveAttribute('href', '/');
     expect(screen.queryByText("You're offline")).not.toBeInTheDocument();
   });
 });

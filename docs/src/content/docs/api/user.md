@@ -211,17 +211,17 @@ curl -X PUT https://your-instance.example.com/api/user/weekly-digest \
 PUT /api/user/language
 ```
 
-Body: `{ "language": "en" | "es-ES" | "ja-JP" | "nb-NO" | "de-DE" | "fr-FR" }`
+Body: `{ "language": "en" | "vi-VN" }`
 
 ```bash
 curl -X PUT https://your-instance.example.com/api/user/language \
   -H "Authorization: Bearer ntag_xxx" \
   -H "Content-Type: application/json" \
-  -d '{ "language": "es-ES" }'
+  -d '{ "language": "vi-VN" }'
 ```
 
 ```json
-{ "success": true, "language": "es-ES" }
+{ "success": true, "language": "vi-VN" }
 ```
 
 ## Photo

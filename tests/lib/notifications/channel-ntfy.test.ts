@@ -140,17 +140,17 @@ describe('sendNtfy', () => {
         {
           kind: 'contact',
           personId: 'person-1',
-          personName: '山田太郎',
+          personName: 'Nguyễn Văn A',
           lastContactFormatted: null,
-          intervalText: '3か月',
+          intervalText: '3 tháng',
         },
-        'ja-JP'
+        'vi-VN'
       )
     );
 
     const [, body, headers] = mocks.postJson.mock.calls[0];
-    expect(JSON.parse(body as string).title).toBe('山田太郎');
-    expect(JSON.stringify(headers)).not.toContain('山田太郎');
+    expect(JSON.parse(body as string).title).toBe('Nguyễn Văn A');
+    expect(JSON.stringify(headers)).not.toContain('Nguyễn Văn A');
   });
 
   it('attaches a decrypted access token as a bearer header', async () => {

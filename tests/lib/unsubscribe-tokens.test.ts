@@ -486,7 +486,7 @@ describe('unsubscribe-tokens', () => {
         user: {
           id: 'user-1',
           email: 'test@example.com',
-          language: 'es-ES',
+          language: 'vi-VN',
         },
       };
 
@@ -499,7 +499,7 @@ describe('unsubscribe-tokens', () => {
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.user.email).toBe('test@example.com');
-        expect(result.user.language).toBe('es-ES');
+        expect(result.user.language).toBe('vi-VN');
       }
     });
   });

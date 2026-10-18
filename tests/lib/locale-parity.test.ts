@@ -37,11 +37,8 @@ const localeFiles = readdirSync(LOCALES_DIR).filter((f) => f.endsWith('.json')).
 const referenceKeys = leafKeys(load(REFERENCE));
 
 describe('locale key parity', () => {
-  it('finds all eleven locale files', () => {
-    expect(localeFiles).toEqual([
-      'de-DE.json', 'en.json', 'es-ES.json', 'fr-FR.json', 'it-IT.json',
-      'ja-JP.json', 'nb-NO.json', 'nl-NL.json', 'ru-RU.json', 'vi-VN.json', 'zh-CN.json',
-    ]);
+  it('finds both locale files', () => {
+    expect(localeFiles).toEqual(['en.json', 'vi-VN.json']);
   });
 
   it('en.json has no duplicate leaf keys', () => {

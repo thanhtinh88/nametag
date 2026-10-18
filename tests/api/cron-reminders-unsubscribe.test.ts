@@ -372,7 +372,7 @@ describe('Cron Job - Unsubscribe Token Generation', () => {
           user: {
             email: 'maria@example.com',
             dateFormat: 'DMY',
-            language: 'es-ES',
+            language: 'vi-VN',
           },
         },
       };
@@ -397,7 +397,7 @@ describe('Cron Job - Unsubscribe Token Generation', () => {
         expect.any(String),
         expect.any(String),
         expect.any(String),
-        'es-ES'
+        'vi-VN'
       );
     });
   });
@@ -603,7 +603,7 @@ describe('Cron Job - Unsubscribe Token Generation', () => {
         user: {
           email: 'carlos@example.com',
           dateFormat: 'DMY',
-          language: 'es-ES',
+          language: 'vi-VN',
         },
       };
 
@@ -627,7 +627,7 @@ describe('Cron Job - Unsubscribe Token Generation', () => {
         expect.any(String),
         expect.any(String),
         expect.any(String),
-        'es-ES'
+        'vi-VN'
       );
     });
   });
@@ -1040,24 +1040,24 @@ describe('Cron Job - Unsubscribe Token Generation', () => {
     });
 
     it('localizes the month name for year-unknown dates', async () => {
-      setProcessTimezone('Europe/Madrid');
+      setProcessTimezone('Asia/Ho_Chi_Minh');
       const today = new Date();
       const stored = storedYearUnknownDate(today);
       const fixture = importantDateFixture(stored);
       fixture.person.user.dateFormat = 'DMY';
-      fixture.person.user.language = 'es-ES';
+      fixture.person.user.language = 'vi-VN';
       mocks.importantDateFindMany.mockResolvedValue([fixture]);
       mocks.personFindMany.mockResolvedValue([]);
 
       await runCron();
 
-      const expected = `${today.getDate()} ${today.toLocaleDateString('es-ES', { month: 'long' })}`;
+      const expected = `${today.getDate()} ${today.toLocaleDateString('vi-VN', { month: 'long' })}`;
       expect(mocks.importantDateReminderTemplate).toHaveBeenCalledWith(
         'John Doe',
         expect.any(String),
         expected,
         expect.any(String),
-        'es-ES'
+        'vi-VN'
       );
     });
   });

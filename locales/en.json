@@ -145,15 +145,6 @@
         "title": "Language",
         "description": "Choose your preferred language",
         "en": "English",
-        "esES": "Español (España)",
-        "jaJP": "日本語",
-        "nbNO": "Norsk bokmål (Norwegian Bokmål)",
-        "deDE": "Deutsch",
-        "zhCN": "简体中文",
-        "itIT": "Italiano (Italian)",
-        "ruRU": "Русский (Russian)",
-        "nlNL": "Nederlands (Dutch)",
-        "frFR": "Français (French)",
         "viVN": "Tiếng Việt (Vietnamese)"
       }
     },

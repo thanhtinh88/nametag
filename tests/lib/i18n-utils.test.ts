@@ -21,12 +21,12 @@ describe('i18n Utilities', () => {
       expect(t('delete')).toBe('Delete');
     });
 
-    it('should return Spanish translations', async () => {
-      const t = await getTranslationsForLocale('es-ES', 'common');
+    it('should return Vietnamese translations', async () => {
+      const t = await getTranslationsForLocale('vi-VN', 'common');
 
-      expect(t('save')).toBe('Guardar');
-      expect(t('cancel')).toBe('Cancelar');
-      expect(t('delete')).toBe('Eliminar');
+      expect(t('save')).toBe('Lưu');
+      expect(t('cancel')).toBe('Hủy');
+      expect(t('delete')).toBe('Xóa');
     });
 
     it('should interpolate values in translations', async () => {
@@ -59,12 +59,12 @@ describe('i18n Utilities', () => {
 
   describe('getEmailTranslations', () => {
     it('should get translations for user locale', async () => {
-      vi.mocked(getUserLocale).mockResolvedValue('es-ES');
+      vi.mocked(getUserLocale).mockResolvedValue('vi-VN');
 
       const t = await getEmailTranslations('user1', 'emails');
 
       expect(getUserLocale).toHaveBeenCalledWith('user1');
-      expect(t('verification.subject')).toContain('Verifica');
+      expect(t('verification.subject')).toContain('Xác thực');
     });
 
     it('should default to English if no userId', async () => {

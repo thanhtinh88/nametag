@@ -25,7 +25,7 @@ vi.mock('sonner', () => ({
 }));
 
 import messages from '../../locales/en.json';
-import jaMessages from '../../locales/ja-JP.json';
+import viMessages from '../../locales/vi-VN.json';
 import NotificationChannelsCard from '../../components/NotificationChannelsCard';
 
 function renderCard(props: Partial<React.ComponentProps<typeof NotificationChannelsCard>> = {}) {
@@ -340,11 +340,8 @@ describe('NotificationChannelsCard', () => {
 
   describe('device label translation', () => {
     it('renders the device label through the locale template rather than a hardcoded string', () => {
-      // The old hardcoded implementation always produced "Chrome on macOS".
-      // Rendering with Japanese messages, where the template puts the OS
-      // first, is the only way to prove the translation is actually wired up.
       render(
-        <NextIntlClientProvider locale="ja-JP" messages={jaMessages}>
+        <NextIntlClientProvider locale="vi-VN" messages={viMessages}>
           <NotificationChannelsCard
             emailEnabled={true}
             emailAvailable={true}
@@ -354,7 +351,7 @@ describe('NotificationChannelsCard', () => {
         </NextIntlClientProvider>
       );
 
-      expect(screen.getByText('macOS の Chrome')).toBeTruthy();
+      expect(screen.getByText('Chrome trên macOS')).toBeTruthy();
     });
   });
 });

@@ -20,7 +20,7 @@ describe('getUserDisplayPreferences', () => {
       nameOrder: 'EASTERN',
       nameDisplayFormat: 'SHORT',
       graphMode: 'bubbles',
-      language: 'es-ES',
+      language: 'vi-VN',
     });
 
     const prefs = await getUserDisplayPreferences('user-1');
@@ -31,7 +31,7 @@ describe('getUserDisplayPreferences', () => {
       nameOrder: 'EASTERN',
       nameDisplayFormat: 'SHORT',
       graphMode: 'bubbles',
-      language: 'es-ES',
+      language: 'vi-VN',
     });
   });
 

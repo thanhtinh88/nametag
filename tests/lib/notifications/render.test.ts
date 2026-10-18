@@ -96,17 +96,15 @@ describe('renderShortForm', () => {
           lastContactFormatted: null,
           intervalText: '3 meses',
         },
-        'es-ES'
+        'vi-VN'
       )
     );
 
-    expect(result.body).toBe('Es momento de ponerse al día');
+    expect(result.body).toBe('Đến lúc rà soát thông tin liên hệ');
   });
 
   it('resolves every push string in every locale, with no fallback and no stray placeholder', async () => {
-    const locales = [
-      'en', 'es-ES', 'de-DE', 'fr-FR', 'it-IT', 'nl-NL', 'nb-NO', 'ru-RU', 'ja-JP', 'zh-CN',
-    ] as const;
+    const locales = ['en', 'vi-VN'] as const;
 
     // Every key under notifications.push. getTranslationsForLocale returns the
     // bare key when a lookup misses, so a rendered string that equals one of

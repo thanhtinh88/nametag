@@ -7,7 +7,7 @@ const log = createModuleLogger('locale');
 /**
  * Supported locales
  */
-export const SUPPORTED_LOCALES = ['en', 'es-ES', 'ja-JP', 'nb-NO', 'de-DE', 'zh-CN', 'it-IT', 'ru-RU', 'nl-NL', 'fr-FR', 'vi-VN'] as const;
+export const SUPPORTED_LOCALES = ['en', 'vi-VN'] as const;
 export type SupportedLocale = typeof SUPPORTED_LOCALES[number];
 
 /**
@@ -28,7 +28,7 @@ export function isSupportedLocale(locale: string): locale is SupportedLocale {
 }
 
 /**
- * Normalize locale string (e.g., "es" -> "es-ES")
+ * Normalize locale string (e.g., "vi" -> "vi-VN")
  */
 export function normalizeLocale(locale: string): SupportedLocale {
   // Handle exact matches first
@@ -36,47 +36,11 @@ export function normalizeLocale(locale: string): SupportedLocale {
     return locale;
   }
 
-  // Handle language code only (e.g., "es" -> "es-ES")
+  // Handle language code only (e.g., "vi" -> "vi-VN")
   const languageCode = locale.split('-')[0].toLowerCase();
-
-  if (languageCode === 'es') {
-    return 'es-ES';
-  }
 
   if (languageCode === 'en') {
     return 'en';
-  }
-
-  if (languageCode === 'ja') {
-    return 'ja-JP';
-  }
-
-  if (languageCode === 'nb' || languageCode === 'no') {
-    return 'nb-NO';
-  }
-
-  if (languageCode === 'de') {
-    return 'de-DE';
-  }
-
-  if (languageCode === 'zh') {
-    return 'zh-CN';
-  }
-
-  if (languageCode === 'it') {
-    return 'it-IT';
-  }
-
-  if (languageCode === 'ru') {
-    return 'ru-RU';
-  }
-
-  if (languageCode === 'nl') {
-    return 'nl-NL';
-  }
-
-  if (languageCode === 'fr') {
-    return 'fr-FR';
   }
 
   if (languageCode === 'vi') {
@@ -165,34 +129,10 @@ export async function detectBrowserLocale(): Promise<SupportedLocale> {
         return locale;
       }
 
-      // Check language code mapping (e.g., "es" -> "es-ES")
+      // Check language code mapping (e.g., "vi" -> "vi-VN")
       const languageCode = locale.split('-')[0].toLowerCase();
-      if (languageCode === 'es') {
-        return 'es-ES';
-      }
       if (languageCode === 'en') {
         return 'en';
-      }
-      if (languageCode === 'ja') {
-        return 'ja-JP';
-      }
-      if (languageCode === 'nb' || languageCode === 'no') {
-        return 'nb-NO';
-      }
-      if (languageCode === 'de') {
-        return 'de-DE';
-      }
-      if (languageCode === 'it') {
-        return 'it-IT';
-      }
-      if (languageCode === 'ru') {
-        return 'ru-RU';
-      }
-      if (languageCode === 'nl') {
-        return 'nl-NL';
-      }
-      if (languageCode === 'fr') {
-        return 'fr-FR';
       }
       if (languageCode === 'vi') {
         return 'vi-VN';
