@@ -1042,7 +1042,24 @@
       "legendCase": "Vụ án",
       "legendConfirmed": "Đã xác nhận",
       "legendInvestigating": "Đang xác minh / Giả thuyết",
-      "legendRuledOut": "Đã loại trừ"
+      "legendRuledOut": "Đã loại trừ",
+      "resetLayout": "Đặt lại bố cục mặc định",
+      "contextMenu": {
+        "personTitle": "Đối tượng nghi vấn",
+        "eventTitle": "Vụ án điều tra",
+        "userTitle": "Bạn (Điều tra viên)",
+        "bubbleTitle": "Nhóm / Băng nhóm",
+        "viewDetails": "Xem chi tiết hồ sơ",
+        "openNewTab": "Mở trong tab mới",
+        "viewJournal": "Xem nhật ký điều tra",
+        "focusCase": "Lọc trọng tâm vụ án này",
+        "pinNode": "Ghim vị trí node này",
+        "unpinNode": "Bỏ ghim vị trí (thả tự do)",
+        "hideUserNode": "Ẩn khỏi đồ thị",
+        "expandGroup": "Mở rộng nhóm",
+        "collapseGroup": "Thu gọn nhóm",
+        "close": "Đóng menu"
+      }
     }
   },
   "people": {

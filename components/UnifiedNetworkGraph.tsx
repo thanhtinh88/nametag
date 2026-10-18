@@ -21,7 +21,14 @@ import { resolveGraphMode } from './graph/mode-resolution';
 import { buildSimulationNodes, type RawGraphPerson } from './graph/bubble-composition';
 import { buildHubAndSpokeEdges } from './graph/edge-composition';
 import { UNGROUPED_SYNTHETIC_ID } from './graph/simulation-types';
-import type { SimulationNode, SimulationEdge } from './graph/simulation-types';
+import type { SimulationNode, SimulationEdge, BubbleSimNode } from './graph/simulation-types';
+
+interface GraphContextMenuState {
+  node: SimulationNode;
+  x: number;
+  y: number;
+  isPinned: boolean;
+}
 
 // Props interface — unchanged from pre-rewrite file
 interface Group { id: string; name: string; color: string | null; }
@@ -80,6 +87,9 @@ export default function UnifiedNetworkGraph({
   const unpinTimeoutRef = useRef<number | null>(null);
   const isDraggingRef = useRef<boolean>(false);
   const pinnedPositionsRef = useRef<Record<string, { x: number; y: number }>>({});
+  const [contextMenu, setContextMenu] = useState<GraphContextMenuState | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const storageScope = apiEndpoint || 'default';
   const filtersStorageKey = `nametag:graph:filters:${storageScope}`;
@@ -287,6 +297,52 @@ export default function UnifiedNetworkGraph({
   const requestPaint = useCallback(() => {
     dirtyRef.current = true;
   }, []);
+
+  // Toggle pinned position for a specific node via context menu
+  const togglePinNode = useCallback((node: SimulationNode) => {
+    const isCurrentlyPinned = Boolean(
+      pinnedPositionsRef.current[node.id] ||
+      (node.fx !== null && node.fx !== undefined)
+    );
+
+    if (isCurrentlyPinned) {
+      node.fx = null;
+      node.fy = null;
+      delete pinnedPositionsRef.current[node.id];
+      savePinnedPositions();
+      if (simRef.current) simRef.current.alpha(0.2).restart();
+    } else {
+      const x = node.x ?? 0;
+      const y = node.y ?? 0;
+      node.fx = x;
+      node.fy = y;
+      pinnedPositionsRef.current[node.id] = { x, y };
+      savePinnedPositions();
+    }
+    setContextMenu((prev) => (prev ? { ...prev, isPinned: !isCurrentlyPinned } : null));
+    requestPaint();
+  }, [savePinnedPositions, requestPaint]);
+
+  // Dismiss context menu on click outside or Escape
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleGlobalClick = (e: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        setContextMenu(null);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setContextMenu(null);
+      }
+    };
+    window.addEventListener('mousedown', handleGlobalClick);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('mousedown', handleGlobalClick);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [contextMenu]);
 
   const formatEdgeLabel = useCallback((edge: SimulationEdge) => {
     if (edge.type === 'aggregated' || edge.type === 'membership') {
@@ -711,6 +767,7 @@ export default function UnifiedNetworkGraph({
       })
       .on('zoom', (event) => {
         transformRef.current = event.transform;
+        setContextMenu(null);
         requestPaint();
       });
     zoomBehaviorRef.current = zoomBehavior;
@@ -726,73 +783,126 @@ export default function UnifiedNetworkGraph({
       }
     };
 
-    const handleNodeActivate = (node: SimulationNode) => {
-      if (node.kind === 'bubble') {
-        // Collapse is instant.
-        if (node.isExpanded) {
-          setExpandedBubbles((prev) => {
-            const next = new Set(prev);
-            next.delete(node.groupId);
-            return next;
-          });
-          return;
-        }
-        // Expand: push the bubble outward, pin it, reheat the sim so other
-        // nodes redistribute, wait briefly, THEN trigger expansion so the
-        // cluster lands in cleared space.
-        if (node.x !== undefined && node.y !== undefined) {
-          const center = nodesRef.current.find(
-            (n): n is SimulationNode & { x: number; y: number } =>
-              n.kind === 'person' && n.isCenter && n.x !== undefined && n.y !== undefined,
-          );
-          if (center) {
-            const dx = node.x - center.x;
-            const dy = node.y - center.y;
-            const dist = Math.hypot(dx, dy) || 1;
-            const memberRadius = isMobile ? 12 : 14;
-            const padding = isMobile ? 18 : 24;
-            const clusterRadius = Math.sqrt(Math.max(node.memberCount, 1)) * memberRadius * 1.2 + padding;
-            const targetDist = (clusterRadius + (isMobile ? 130 : 180)) * 2;
-            const finalDist = Math.max(dist, targetDist);
-            const ratio = finalDist / dist;
-            const targetX = center.x + dx * ratio;
-            const targetY = center.y + dy * ratio;
-
-            node.x = targetX;
-            node.y = targetY;
-            node.fx = targetX;
-            node.fy = targetY;
-            node.vx = 0;
-            node.vy = 0;
-            if (simRef.current) simRef.current.alpha(0.3).restart();
-
-            const bubbleId = node.id;
-            const groupId = node.groupId;
-
-            setExpandedBubbles((prev) => {
-              const next = new Set(prev);
-              next.add(groupId);
-              return next;
-            });
-            // Release the pin once the cluster has had time to settle. With
-            // centerX/Y strength = 0 for expanded ghosts, it stays put.
-            if (unpinTimeoutRef.current !== null) window.clearTimeout(unpinTimeoutRef.current);
-            unpinTimeoutRef.current = window.setTimeout(() => {
-              unpinTimeoutRef.current = null;
-              const ghost = nodesRef.current.find((n) => n.id === bubbleId);
-              if (ghost) {
-                ghost.fx = null;
-                ghost.fy = null;
-              }
-            }, 1500);
-          }
-        }
+    const handleBubbleToggle = (node: BubbleSimNode) => {
+      // Collapse is instant.
+      if (node.isExpanded) {
+        setExpandedBubbles((prev) => {
+          const next = new Set(prev);
+          next.delete(node.groupId);
+          return next;
+        });
         return;
       }
-      if (centerNodeNonClickable && node.isCenter) return;
-      if (node.id.startsWith('user-')) router.push('/dashboard');
-      else if (node.id.startsWith('event-')) router.push(`/events/${node.id.slice('event-'.length)}`);
-      else router.push(`/people/${node.id}`);
+      // Expand: push the bubble outward, pin it, reheat the sim so other
+      // nodes redistribute, wait briefly, THEN trigger expansion so the
+      // cluster lands in cleared space.
+      if (node.x !== undefined && node.y !== undefined) {
+        const center = nodesRef.current.find(
+          (n): n is SimulationNode & { x: number; y: number } =>
+            n.kind === 'person' && n.isCenter && n.x !== undefined && n.y !== undefined,
+        );
+        if (center) {
+          const dx = node.x - center.x;
+          const dy = node.y - center.y;
+          const dist = Math.hypot(dx, dy) || 1;
+          const memberRadius = isMobile ? 12 : 14;
+          const padding = isMobile ? 18 : 24;
+          const clusterRadius = Math.sqrt(Math.max(node.memberCount, 1)) * memberRadius * 1.2 + padding;
+          const targetDist = (clusterRadius + (isMobile ? 130 : 180)) * 2;
+          const finalDist = Math.max(dist, targetDist);
+          const ratio = finalDist / dist;
+          const targetX = center.x + dx * ratio;
+          const targetY = center.y + dy * ratio;
+
+          node.x = targetX;
+          node.y = targetY;
+          node.fx = targetX;
+          node.fy = targetY;
+          node.vx = 0;
+          node.vy = 0;
+          if (simRef.current) simRef.current.alpha(0.3).restart();
+
+          const bubbleId = node.id;
+          const groupId = node.groupId;
+
+          setExpandedBubbles((prev) => {
+            const next = new Set(prev);
+            next.add(groupId);
+            return next;
+          });
+          // Release the pin once the cluster has had time to settle. With
+          // centerX/Y strength = 0 for expanded ghosts, it stays put.
+          if (unpinTimeoutRef.current !== null) window.clearTimeout(unpinTimeoutRef.current);
+          unpinTimeoutRef.current = window.setTimeout(() => {
+            unpinTimeoutRef.current = null;
+            const ghost = nodesRef.current.find((n) => n.id === bubbleId);
+            if (ghost) {
+              ghost.fx = null;
+              ghost.fy = null;
+            }
+          }, 1500);
+        }
+      }
+    };
+
+    const openContextMenuForNode = (node: SimulationNode, clientX: number, clientY: number) => {
+      const rect = canvas.getBoundingClientRect();
+      const rawX = clientX - rect.left;
+      const rawY = clientY - rect.top;
+      const menuWidth = 240;
+      const menuHeight = 220;
+      const x = Math.max(8, Math.min(rawX, rect.width - menuWidth - 8));
+      const y = Math.max(8, Math.min(rawY, rect.height - menuHeight - 8));
+      const isPinned = Boolean(
+        pinnedPositionsRef.current[node.id] ||
+        (node.fx !== null && node.fx !== undefined)
+      );
+      setContextMenu({ node, x, y, isPinned });
+      touchSelectedNodeIdRef.current = node.id;
+      requestPaint();
+    };
+
+    const onContextMenu = (event: MouseEvent) => {
+      event.preventDefault();
+      const node = nodeAt(event.clientX, event.clientY);
+      if (!node) {
+        setContextMenu(null);
+        return;
+      }
+      openContextMenuForNode(node, event.clientX, event.clientY);
+    };
+
+    let touchTimer: NodeJS.Timeout | null = null;
+    let touchStartPos: [number, number] | null = null;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      const t = e.touches[0];
+      touchStartPos = [t.clientX, t.clientY];
+      const node = nodeAt(t.clientX, t.clientY);
+      if (node) {
+        touchTimer = setTimeout(() => {
+          openContextMenuForNode(node, t.clientX, t.clientY);
+        }, 500);
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!touchStartPos || !touchTimer) return;
+      const t = e.touches[0];
+      const dist = Math.hypot(t.clientX - touchStartPos[0], t.clientY - touchStartPos[1]);
+      if (dist > 10) {
+        clearTimeout(touchTimer);
+        touchTimer = null;
+      }
+    };
+
+    const onTouchEndOrCancel = () => {
+      if (touchTimer) {
+        clearTimeout(touchTimer);
+        touchTimer = null;
+      }
+      touchStartPos = null;
     };
 
     let dragStartX = 0;
@@ -810,6 +920,7 @@ export default function UnifiedNetworkGraph({
       .on('start', (event) => {
         const d = event.subject as SimulationNode | null;
         if (!d) return;
+        setContextMenu(null);
         dragStartX = event.x;
         dragStartY = event.y;
         isDraggingRef.current = true;
@@ -853,23 +964,28 @@ export default function UnifiedNetworkGraph({
           d.fy = null;
         }
 
-        if (isTouch) {
-          if (touchSelectedNodeIdRef.current === d.id) {
-            touchSelectedNodeIdRef.current = null;
-            requestPaint();
-            handleNodeActivate(d);
-          } else {
-            touchSelectedNodeIdRef.current = d.id;
-            requestPaint();
-          }
-        } else {
-          handleNodeActivate(d);
+        setContextMenu(null);
+
+        // Bubble toggle on click
+        if (d.kind === 'bubble') {
+          handleBubbleToggle(d as BubbleSimNode);
+          return;
         }
+
+        // Left-click / tap on a person or event node:
+        // DO NOT navigate! Toggle selection highlight so user can easily examine relationships
+        if (touchSelectedNodeIdRef.current === d.id) {
+          touchSelectedNodeIdRef.current = null;
+        } else {
+          touchSelectedNodeIdRef.current = d.id;
+        }
+        requestPaint();
       });
 
     select(canvas).call(drag_);
 
     const onTapEmpty = (event: TouchEvent) => {
+      setContextMenu(null);
       if (!touchSelectedNodeIdRef.current) return;
       const touch = event.changedTouches[0];
       if (touch && !nodeAt(touch.clientX, touch.clientY)) {
@@ -880,10 +996,21 @@ export default function UnifiedNetworkGraph({
 
     canvas.addEventListener('mousemove', onMove);
     canvas.addEventListener('touchend', onTapEmpty);
+    canvas.addEventListener('contextmenu', onContextMenu);
+    canvas.addEventListener('touchstart', onTouchStart, { passive: true });
+    canvas.addEventListener('touchmove', onTouchMove, { passive: true });
+    canvas.addEventListener('touchend', onTouchEndOrCancel);
+    canvas.addEventListener('touchcancel', onTouchEndOrCancel);
 
     return () => {
       canvas.removeEventListener('mousemove', onMove);
       canvas.removeEventListener('touchend', onTapEmpty);
+      canvas.removeEventListener('contextmenu', onContextMenu);
+      canvas.removeEventListener('touchstart', onTouchStart);
+      canvas.removeEventListener('touchmove', onTouchMove);
+      canvas.removeEventListener('touchend', onTouchEndOrCancel);
+      canvas.removeEventListener('touchcancel', onTouchEndOrCancel);
+      if (touchTimer) clearTimeout(touchTimer);
       select(canvas).on('.zoom', null);
       select(canvas).on('.drag', null);
       if (unpinTimeoutRef.current !== null) {
@@ -891,7 +1018,7 @@ export default function UnifiedNetworkGraph({
         unpinTimeoutRef.current = null;
       }
     };
-  }, [centerNodeNonClickable, isMobile, requestPaint, router, savePinnedPositions]);
+  }, [centerNodeNonClickable, isMobile, requestPaint, savePinnedPositions]);
 
   const activeCustomFieldTemplate = customFieldTemplates?.find((cf) => cf.slug === customFieldSlug);
 
@@ -1113,7 +1240,7 @@ export default function UnifiedNetworkGraph({
           )}
         </div>
       )}
-      <div className="relative">
+      <div className="relative" ref={containerRef}>
         <canvas
           ref={canvasRef}
           className={`w-full bg-surface rounded-lg border border-border ${
@@ -1122,6 +1249,203 @@ export default function UnifiedNetworkGraph({
               : 'h-[400px] sm:h-[500px] lg:h-[70vh] lg:min-h-[600px]'
           }`}
         />
+
+        {/* Node Right-Click Context Menu */}
+        {contextMenu && (() => {
+          const node = contextMenu.node;
+          const isPersonNode = node.kind === 'person';
+          const personNode = isPersonNode ? node : null;
+          const isBubbleNode = node.kind === 'bubble';
+          const isUserNode = personNode ? (personNode.isCenter || personNode.id.startsWith('user-')) : false;
+          const isEventNode = personNode ? personNode.id.startsWith('event-') : false;
+
+          return (
+            <div
+              ref={contextMenuRef}
+              style={{
+                left: `${contextMenu.x}px`,
+                top: `${contextMenu.y}px`,
+              }}
+              className="absolute z-30 w-64 bg-surface/95 dark:bg-surface/95 backdrop-blur-md border border-border/90 rounded-xl shadow-2xl p-2.5 text-foreground animate-in fade-in zoom-in-95 duration-100 select-none text-xs"
+              onClick={(e) => e.stopPropagation()}
+              onContextMenu={(e) => e.preventDefault()}
+            >
+              {/* Header */}
+              <div className="flex items-center gap-2.5 pb-2 mb-2 border-b border-border/60">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center bg-primary/10 text-primary font-bold text-sm shrink-0 overflow-hidden">
+                  {personNode && personNode.photo ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={
+                        personNode.id.startsWith('user-')
+                          ? '/api/photos/user'
+                          : `/api/photos/${personNode.id}`
+                      }
+                      alt=""
+                      className="w-full h-full object-cover"
+                    />
+                  ) : isEventNode ? (
+                    '📁'
+                  ) : isUserNode ? (
+                    '⭐'
+                  ) : isBubbleNode ? (
+                    '👥'
+                  ) : (
+                    '👤'
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-semibold text-foreground truncate text-sm">
+                    {node.label}
+                  </div>
+                  <div className="text-[11px] text-muted truncate">
+                    {isBubbleNode
+                      ? t('contextMenu.bubbleTitle')
+                      : isEventNode
+                      ? t('contextMenu.eventTitle')
+                      : isUserNode
+                      ? t('contextMenu.userTitle')
+                      : t('contextMenu.personTitle')}
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions list */}
+              <div className="flex flex-col gap-1">
+                {/* Navigate / Open details */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setContextMenu(null);
+                    if (isBubbleNode) {
+                      // Bubble toggle
+                    } else if (contextMenu.node.id.startsWith('user-')) {
+                      router.push('/dashboard');
+                    } else if (isEventNode) {
+                      router.push(`/events/${contextMenu.node.id.slice('event-'.length)}`);
+                    } else {
+                      router.push(`/people/${contextMenu.node.id}`);
+                    }
+                  }}
+                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-md hover:bg-primary/10 hover:text-primary transition-colors text-left font-medium"
+                >
+                  <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 9l3 3m0 0l-3 3m3-3H8m13 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="truncate">
+                    {isBubbleNode
+                      ? (contextMenu.node as BubbleSimNode).isExpanded
+                        ? t('contextMenu.collapseGroup')
+                        : t('contextMenu.expandGroup')
+                      : t('contextMenu.viewDetails')}
+                  </span>
+                </button>
+
+                {/* Open in new tab (for person and event) */}
+                {isPersonNode && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setContextMenu(null);
+                      const path = contextMenu.node.id.startsWith('user-')
+                        ? '/dashboard'
+                        : isEventNode
+                        ? `/events/${contextMenu.node.id.slice('event-'.length)}`
+                        : `/people/${contextMenu.node.id}`;
+                      window.open(path, '_blank');
+                    }}
+                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-md hover:bg-muted/30 transition-colors text-left"
+                  >
+                    <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                    <span className="truncate">{t('contextMenu.openNewTab')}</span>
+                  </button>
+                )}
+
+                {/* View Journal entries for person or event */}
+                {isPersonNode && !isUserNode && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setContextMenu(null);
+                      const query = isEventNode
+                        ? `?event=${contextMenu.node.id.slice('event-'.length)}`
+                        : `?person=${contextMenu.node.id}`;
+                      router.push(`/journal${query}`);
+                    }}
+                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-md hover:bg-muted/30 transition-colors text-left"
+                  >
+                    <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                    <span className="truncate">{t('contextMenu.viewJournal')}</span>
+                  </button>
+                )}
+
+                {/* Focus graph on this case (if event) */}
+                {isEventNode && events && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const eventId = contextMenu.node.id.slice('event-'.length);
+                      setSelectedCaseId(eventId);
+                      setContextMenu(null);
+                    }}
+                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-md hover:bg-primary/10 hover:text-primary transition-colors text-left"
+                  >
+                    <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <span className="truncate">{t('contextMenu.focusCase')}</span>
+                  </button>
+                )}
+
+                {/* Pin / Unpin node */}
+                <button
+                  type="button"
+                  onClick={() => togglePinNode(contextMenu.node)}
+                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-md hover:bg-muted/30 transition-colors text-left"
+                >
+                  <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                  </svg>
+                  <span className="truncate">
+                    {contextMenu.isPinned
+                      ? t('contextMenu.unpinNode')
+                      : t('contextMenu.pinNode')}
+                  </span>
+                </button>
+
+                {/* Hide user node (if user) */}
+                {isUserNode && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHideUserNode(true);
+                      setContextMenu(null);
+                    }}
+                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-md hover:bg-muted/30 transition-colors text-left"
+                  >
+                    <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" />
+                    </svg>
+                    <span className="truncate">{t('contextMenu.hideUserNode')}</span>
+                  </button>
+                )}
+
+                {/* Close menu button */}
+                <button
+                  type="button"
+                  onClick={() => setContextMenu(null)}
+                  className="flex items-center gap-2 px-2.5 py-1 rounded-md text-muted hover:text-foreground transition-colors text-left mt-1 border-t border-border/40 pt-1.5 text-[11px]"
+                >
+                  <span>✕ {t('contextMenu.close')}</span>
+                </button>
+              </div>
+            </div>
+          );
+        })()}
         <div className="absolute bottom-4 right-4 flex items-center gap-2">
           {events && (
             <button
