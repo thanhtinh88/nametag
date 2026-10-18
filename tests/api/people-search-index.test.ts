@@ -159,5 +159,66 @@ describe('GET /api/people/search-index', () => {
     expect(person.imHandles).toBe('');
     expect(person.groups).toBe('');
     expect(person.customFields).toBe('');
+    expect(person.vehicles).toBe('');
+    expect(person.bankAccounts).toBe('');
+    expect(person.physicalMarks).toBe('');
+    expect(person.criminalRecords).toBe('');
+    expect(person.gangs).toBe('');
+  });
+
+  it('should denormalize investigation fields (vehicles, bankAccounts, physicalMarks, criminalRecords, gangs)', async () => {
+    mocks.personFindMany.mockResolvedValue([
+      {
+        id: 'p-investigation',
+        name: 'Tuấn',
+        surname: 'Vũ',
+        middleName: null,
+        secondLastName: null,
+        nickname: 'Tuấn Phò Mã',
+        displayNameOverride: null,
+        organization: null,
+        jobTitle: null,
+        notes: null,
+        photo: null,
+        citizenId: '001200000888',
+        modusOperandi: 'Chuyên cướp giật ban đêm',
+        vehicles: [
+          { plateNumber: '29M1-123.45', brandModel: 'Exciter 150', color: 'Xanh GP' },
+        ],
+        bankAccounts: [
+          { bankName: 'Vietcombank', accountNumber: '1029384756', accountHolder: 'Nguyễn Văn Tuấn' },
+        ],
+        physicalMarks: [
+          { type: 'TATTOO', location: 'Cổ trái', description: 'Hình hoa hồng' },
+        ],
+        criminalRecords: [
+          { charge: 'Cướp giật tài sản', sentenceDetail: '3 năm tù giam' },
+        ],
+        gangMemberships: [
+          { gang: { name: 'Băng Cầu Giấy', turf: 'Cầu Giấy' } },
+        ],
+        phoneNumbers: [],
+        emails: [],
+        addresses: [],
+        urls: [],
+        imHandles: [],
+        groups: [],
+        customFields: [],
+        customFieldValues: [],
+      },
+    ]);
+
+    const request = new NextRequest('http://localhost:3000/api/people/search-index');
+    const response = await GET(request);
+    const data = await response.json();
+
+    const person = data.people[0];
+    expect(person.citizenId).toBe('001200000888');
+    expect(person.modusOperandi).toBe('Chuyên cướp giật ban đêm');
+    expect(person.vehicles).toBe('29M1-123.45 Exciter 150 Xanh GP');
+    expect(person.bankAccounts).toBe('Vietcombank 1029384756 Nguyễn Văn Tuấn');
+    expect(person.physicalMarks).toBe('TATTOO Cổ trái Hình hoa hồng');
+    expect(person.criminalRecords).toBe('Cướp giật tài sản 3 năm tù giam');
+    expect(person.gangs).toBe('Băng Cầu Giấy Cầu Giấy');
   });
 });

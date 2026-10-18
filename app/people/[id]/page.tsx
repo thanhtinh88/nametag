@@ -23,6 +23,7 @@ import JournalSection from '@/components/JournalSection';
 import MessagingLinks from '@/components/MessagingLinks';
 import PersonEventsManager from '@/components/PersonEventsManager';
 import ImmichGallerySection from '@/components/ImmichGallerySection';
+import PersonInvestigationDossier from '@/components/investigation/PersonInvestigationDossier';
 import { customFieldValuesInclude } from '@/lib/prisma-queries';
 
 function isSafeUrl(url: string): boolean {
@@ -233,6 +234,24 @@ export default async function PersonDetailsPage({
           },
         },
         cardDavMapping: true,
+        vehicles: {
+          orderBy: { createdAt: 'desc' },
+        },
+        physicalMarks: {
+          orderBy: { createdAt: 'desc' },
+        },
+        criminalRecords: {
+          orderBy: { incidentDate: 'desc' },
+        },
+        gangMemberships: {
+          include: {
+            gang: true,
+          },
+        },
+        bankAccounts: {
+          where: { deletedAt: null },
+          orderBy: [{ isPrimary: 'desc' }, { createdAt: 'desc' }],
+        },
       },
     }),
     prisma.person.findMany({
@@ -332,6 +351,26 @@ export default async function PersonDetailsPage({
     addresses: serializedAddresses,
   };
 
+  const investigationPerson = {
+    id: person.id,
+    managementLevel: person.managementLevel,
+    threatLevel: person.threatLevel,
+    citizenId: person.citizenId,
+    citizenIdIssueDate: person.citizenIdIssueDate,
+    citizenIdIssuePlace: person.citizenIdIssuePlace,
+    residenceStatus: person.residenceStatus,
+    heightCm: person.heightCm,
+    weightKg: person.weightKg,
+    bloodType: person.bloodType,
+    modusOperandi: person.modusOperandi,
+    riskNotes: person.riskNotes,
+    vehicles: person.vehicles,
+    physicalMarks: person.physicalMarks,
+    criminalRecords: person.criminalRecords,
+    gangMemberships: person.gangMemberships,
+    bankAccounts: person.bankAccounts,
+  };
+
   // Filter out people who already have a relationship
   const relatedPersonIds = new Set(
     person.relationshipsTo.map((r) => r.personId)
@@ -385,6 +424,30 @@ export default async function PersonDetailsPage({
                   <h1 className="text-2xl sm:text-3xl font-bold text-foreground break-words">
                     {formatGraphName(person, nameOrder, nameDisplayFormat)}
                   </h1>
+                {(person.managementLevel !== 'NORMAL' || person.threatLevel === 'HIGH' || person.threatLevel === 'ARMED_DANGEROUS') && (
+                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                    {person.managementLevel === 'KEY_TARGET' && (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300 border border-red-200 dark:border-red-900">
+                        🔴 {t('form.managementLevels.KEY_TARGET')}
+                      </span>
+                    )}
+                    {person.managementLevel === 'SURVEILLANCE' && (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-900">
+                        🟠 {t('form.managementLevels.SURVEILLANCE')}
+                      </span>
+                    )}
+                    {person.threatLevel === 'ARMED_DANGEROUS' && (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-600 text-white shadow-sm">
+                        ⚠️ {t('form.threatLevels.ARMED_DANGEROUS')}
+                      </span>
+                    )}
+                    {person.threatLevel === 'HIGH' && (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-orange-600 text-white shadow-sm">
+                        ⚠️ {t('form.threatLevels.HIGH')}
+                      </span>
+                    )}
+                  </div>
+                )}
                 {person.groups.length > 0 && (
                   <div className="flex flex-wrap gap-2 mt-2">
                     {person.groups.map((pg) => (
@@ -441,6 +504,39 @@ export default async function PersonDetailsPage({
             </div>
 
             <div className="px-6 py-6 space-y-8">
+              {/* Investigation / Subject Monitoring Dossier */}
+              {(person.managementLevel !== 'NORMAL' ||
+                Boolean(person.citizenId) ||
+                Boolean(person.residenceStatus) ||
+                Boolean(person.heightCm) ||
+                Boolean(person.weightKg) ||
+                Boolean(person.bloodType) ||
+                Boolean(person.modusOperandi) ||
+                Boolean(person.riskNotes) ||
+                person.vehicles.length > 0 ||
+                person.physicalMarks.length > 0 ||
+                person.criminalRecords.length > 0 ||
+                person.gangMemberships.length > 0 ||
+                person.bankAccounts.length > 0) ? (
+                <PersonInvestigationDossier
+                  person={investigationPerson}
+                  dateFormat={dateFormat as DateFormat}
+                />
+              ) : (
+                <details className="border border-dashed border-border rounded-lg p-4 group">
+                  <summary className="text-sm font-medium text-muted cursor-pointer hover:text-foreground list-none flex items-center justify-between">
+                    <span>🛡️ Thêm hồ sơ quản lý nghiệp vụ / đối tượng theo dõi...</span>
+                    <span className="text-xs text-primary group-open:hidden">+ Mở</span>
+                  </summary>
+                  <div className="mt-4">
+                    <PersonInvestigationDossier
+                      person={investigationPerson}
+                      dateFormat={dateFormat as DateFormat}
+                    />
+                  </div>
+                </details>
+              )}
+
               {/* Personal Details */}
               <div className="border border-border rounded-lg p-4">
                 <h3 className="text-lg font-semibold text-foreground mb-4">

@@ -28,6 +28,8 @@ interface PersonRow {
   groups: Array<{ groupId: string; group: { name: string; color: string | null } }>;
   relationshipsFrom: Array<{ id: string }>;
   relationshipsTo: Array<{ id: string }>;
+  managementLevel?: string | null;
+  threatLevel?: string | null;
 }
 
 interface Group {
@@ -51,6 +53,7 @@ interface PeopleListClientProps {
   order: string;
   groupFilter: string;
   relationshipFilter: string;
+  managementFilter?: string;
   cfFilter: { slug: string; value: string } | null;
   dateFormat: DateFormat;
   availableGroups: Group[];
@@ -92,19 +95,47 @@ function NameCell({
   isOrphan,
   orphanWarning,
   displayNameOverride,
+  managementLevel,
+  threatLevel,
 }: {
   href: string;
   label: string;
   isOrphan: boolean;
   orphanWarning: string;
   displayNameOverride?: string | null;
+  managementLevel?: string | null;
+  threatLevel?: string | null;
 }) {
   return (
     <div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5 flex-wrap">
         <Link href={href} className="text-primary hover:underline font-medium">
           {label}
         </Link>
+        {managementLevel === 'KEY_TARGET' && (
+          <span
+            className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300 border border-red-200 dark:border-red-900"
+            title="Đối tượng trọng điểm"
+          >
+            🔴 Trọng điểm
+          </span>
+        )}
+        {managementLevel === 'SURVEILLANCE' && (
+          <span
+            className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-900"
+            title="Đối tượng nghi vấn"
+          >
+            🟠 Nghi vấn
+          </span>
+        )}
+        {(threatLevel === 'HIGH' || threatLevel === 'ARMED_DANGEROUS') && (
+          <span
+            className="inline-flex items-center px-1 rounded text-[11px] font-semibold bg-red-600 text-white"
+            title={threatLevel === 'ARMED_DANGEROUS' ? 'Có vũ khí, cực kỳ nguy hiểm' : 'Nguy hiểm cao'}
+          >
+            ⚠️
+          </span>
+        )}
         {isOrphan && (
           <span className="relative group cursor-help">
             <span className="text-yellow-500">{'⚠️'}</span>
@@ -133,6 +164,7 @@ export default function PeopleListClient({
   order,
   groupFilter,
   relationshipFilter,
+  managementFilter = '',
   cfFilter,
   dateFormat,
   availableGroups,
@@ -244,6 +276,7 @@ export default function PeopleListClient({
     const params = new URLSearchParams();
     if (groupFilter) params.set('group', groupFilter);
     if (relationshipFilter) params.set('relationship', relationshipFilter);
+    if (managementFilter) params.set('managementLevel', managementFilter);
     if (cfFilter) params.set('cf', `${cfFilter.slug}:${cfFilter.value}`);
     return params;
   };
@@ -276,11 +309,13 @@ export default function PeopleListClient({
     const filters: Record<string, string> = {
       group: groupFilter,
       relationship: relationshipFilter,
+      managementLevel: managementFilter,
       cf: cfFilter ? `${cfFilter.slug}:${cfFilter.value}` : '',
       [key]: value,
     };
     if (filters.group) params.set('group', filters.group);
     if (filters.relationship) params.set('relationship', filters.relationship);
+    if (filters.managementLevel) params.set('managementLevel', filters.managementLevel);
     if (filters.cf) params.set('cf', filters.cf);
     params.set('page', '1');
     router.push(`/people?${params.toString()}`);
@@ -294,6 +329,17 @@ export default function PeopleListClient({
           {tt.showing}
         </span>
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <select
+            value={managementFilter}
+            onChange={(e) => handleFilterChange('managementLevel', e.target.value)}
+            className="flex-1 sm:flex-initial min-w-0 px-3 py-1.5 text-base sm:text-sm border border-border rounded-lg bg-surface-elevated text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
+          >
+            <option value="">{tPeople('allManagementLevels')}</option>
+            <option value="monitored">{tPeople('allMonitored')}</option>
+            <option value="KEY_TARGET">🔴 {tPeople('form.managementLevels.KEY_TARGET')}</option>
+            <option value="SURVEILLANCE">🟠 {tPeople('form.managementLevels.SURVEILLANCE')}</option>
+            <option value="NORMAL">{tPeople('normalOnly')}</option>
+          </select>
           <select
             value={groupFilter}
             onChange={(e) => handleFilterChange('group', e.target.value)}
@@ -429,6 +475,8 @@ export default function PeopleListClient({
                         isOrphan={isOrphan}
                         orphanWarning={tt.orphanWarning}
                         displayNameOverride={person.displayNameOverride}
+                        managementLevel={person.managementLevel}
+                        threatLevel={person.threatLevel}
                       />
                     </td>
                     <td className="hidden md:table-cell px-6 py-4 whitespace-nowrap">
@@ -438,6 +486,8 @@ export default function PeopleListClient({
                         isOrphan={isOrphan}
                         orphanWarning={tt.orphanWarning}
                         displayNameOverride={person.displayNameOverride}
+                        managementLevel={person.managementLevel}
+                        threatLevel={person.threatLevel}
                       />
                     </td>
                     <td className="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-foreground">

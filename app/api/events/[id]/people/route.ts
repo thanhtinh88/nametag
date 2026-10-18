@@ -22,7 +22,7 @@ export const POST = withAuth(async (request, session, context) => {
       return validation.response;
     }
 
-    const { personId, role, involvementType, verificationStatus, confidence, notes } = validation.data;
+    const { personId, role, involvementType, verificationStatus, confidence, reasonForSuspicion, alibi, notes } = validation.data;
 
     const person = await prisma.person.findUnique({
       where: { id: personId, userId: session.user.id, deletedAt: null },
@@ -50,6 +50,8 @@ export const POST = withAuth(async (request, session, context) => {
             involvementType: involvementType ?? 'SUSPECT',
             verificationStatus: verificationStatus ?? 'HYPOTHESIS',
             confidence: confidence ?? null,
+            reasonForSuspicion: reasonForSuspicion ? sanitizeNotes(reasonForSuspicion) : null,
+            alibi: alibi ? sanitizeNotes(alibi) : null,
             notes: notes ? sanitizeNotes(notes) : null,
             deletedAt: null,
           },
@@ -84,6 +86,8 @@ export const POST = withAuth(async (request, session, context) => {
             involvementType: involvementType ?? 'SUSPECT',
             verificationStatus: verificationStatus ?? 'HYPOTHESIS',
             confidence: confidence ?? null,
+            reasonForSuspicion: reasonForSuspicion ? sanitizeNotes(reasonForSuspicion) : null,
+            alibi: alibi ? sanitizeNotes(alibi) : null,
             notes: notes ? sanitizeNotes(notes) : null,
           },
           include: {
@@ -135,7 +139,7 @@ export const PUT = withAuth(async (request, session, context) => {
       return validation.response;
     }
 
-    const { id, personId, role, involvementType, verificationStatus, confidence, notes } = validation.data;
+    const { id, personId, role, involvementType, verificationStatus, confidence, reasonForSuspicion, alibi, notes } = validation.data;
 
     const existing = await prisma.personEvent.findFirst({
       where: {
@@ -155,6 +159,12 @@ export const PUT = withAuth(async (request, session, context) => {
         ...(involvementType !== undefined && { involvementType }),
         ...(verificationStatus !== undefined && { verificationStatus }),
         ...(confidence !== undefined && { confidence }),
+        ...(reasonForSuspicion !== undefined && {
+          reasonForSuspicion: reasonForSuspicion ? sanitizeNotes(reasonForSuspicion) : null,
+        }),
+        ...(alibi !== undefined && {
+          alibi: alibi ? sanitizeNotes(alibi) : null,
+        }),
         ...(notes !== undefined && { notes: notes ? sanitizeNotes(notes) : null }),
       },
       include: {

@@ -13,6 +13,11 @@ export interface SerializedEventItem {
   title: string;
   category: string | null;
   status: 'PLANNED' | 'ONGOING' | 'COMPLETED' | 'CANCELLED';
+  caseCode?: string | null;
+  crimeType?: string | null;
+  caseStatus?: string | null;
+  incidentTimeNotes?: string | null;
+  damageAssessment?: string | null;
   startDate: string | null;
   endDate: string | null;
   hasTime: boolean;
@@ -74,6 +79,13 @@ const STATUS_BADGE_CLASSES: Record<SerializedEventItem['status'], string> = {
   CANCELLED: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
 };
 
+const CASE_STATUS_BADGE_CLASSES: Record<string, string> = {
+  UNRESOLVED: 'bg-red-500/15 text-red-700 dark:text-red-300 border border-red-500/30 font-semibold',
+  INVESTIGATING: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 font-medium',
+  SOLVED: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 font-medium',
+  SUSPENDED: 'bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/30 font-medium',
+};
+
 export default function EventsListClient({
   events,
   groups,
@@ -86,6 +98,7 @@ export default function EventsListClient({
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [caseStatusFilter, setCaseStatusFilter] = useState<string>('ALL');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [groupFilter, setGroupFilter] = useState<string>('ALL');
   const [personFilter, setPersonFilter] = useState<string>('ALL');
@@ -103,6 +116,7 @@ export default function EventsListClient({
     const totalEvents = events.length;
     const plannedCount = events.filter((e) => e.status === 'PLANNED').length;
     const ongoingCount = events.filter((e) => e.status === 'ONGOING').length;
+    const unresolvedCount = events.filter((e) => (e.caseStatus || 'UNRESOLVED') === 'UNRESOLVED').length;
     const uniquePeopleIds = new Set<string>();
     let topEvent: { title: string; count: number; id: string } | null = null;
 
@@ -162,6 +176,7 @@ export default function EventsListClient({
       stats: {
         totalEvents,
         activeCount: plannedCount + ongoingCount,
+        unresolvedCount,
         uniquePeopleCount: uniquePeopleIds.size,
         topEvent,
       },
@@ -176,6 +191,10 @@ export default function EventsListClient({
       } else if (statusFilter !== 'ALL' && ev.status !== statusFilter) {
         return false;
       }
+      if (caseStatusFilter !== 'ALL') {
+        const evCaseStatus = ev.caseStatus || 'UNRESOLVED';
+        if (evCaseStatus !== caseStatusFilter) return false;
+      }
       if (categoryFilter !== 'ALL' && ev.category !== categoryFilter) return false;
       if (groupFilter !== 'ALL' && !ev.groups.some((g) => g.groupId === groupFilter)) {
         return false;
@@ -188,14 +207,16 @@ export default function EventsListClient({
         const titleMatch = ev.title.toLowerCase().includes(q);
         const catMatch = ev.category?.toLowerCase().includes(q) ?? false;
         const descMatch = ev.description?.toLowerCase().includes(q) ?? false;
+        const caseCodeMatch = ev.caseCode?.toLowerCase().includes(q) ?? false;
+        const crimeTypeMatch = ev.crimeType?.toLowerCase().includes(q) ?? false;
         const personMatch = ev.people.some((p) =>
           formatGraphName(p.person, nameOrder, nameDisplayFormat).toLowerCase().includes(q)
         );
-        if (!titleMatch && !catMatch && !descMatch && !personMatch) return false;
+        if (!titleMatch && !catMatch && !descMatch && !personMatch && !caseCodeMatch && !crimeTypeMatch) return false;
       }
       return true;
     });
-  }, [events, statusFilter, categoryFilter, groupFilter, personFilter, searchQuery, nameOrder, nameDisplayFormat]);
+  }, [events, statusFilter, caseStatusFilter, categoryFilter, groupFilter, personFilter, searchQuery, nameOrder, nameDisplayFormat]);
 
   return (
     <div className="space-y-6">
@@ -316,9 +337,60 @@ export default function EventsListClient({
         </div>
       )}
 
+      {/* Quick Filters / Case Status Tabs */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <button
+          type="button"
+          onClick={() => setCaseStatusFilter('ALL')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            caseStatusFilter === 'ALL'
+              ? 'bg-primary text-on-primary'
+              : 'bg-surface border border-border text-foreground hover:bg-surface-elevated'
+          }`}
+        >
+          {t('allCaseStatuses')} ({events.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setCaseStatusFilter((prev) => (prev === 'UNRESOLVED' ? 'ALL' : 'UNRESOLVED'))}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 ${
+            caseStatusFilter === 'UNRESOLVED'
+              ? 'bg-red-600 text-white shadow-sm'
+              : 'bg-red-500/10 text-red-700 dark:text-red-300 border border-red-500/30 hover:bg-red-500/20'
+          }`}
+        >
+          <span>{t('unresolvedFilter')}</span>
+          <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-red-700 text-white dark:bg-red-900">
+            {stats.unresolvedCount}
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setCaseStatusFilter((prev) => (prev === 'INVESTIGATING' ? 'ALL' : 'INVESTIGATING'))}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            caseStatusFilter === 'INVESTIGATING'
+              ? 'bg-amber-600 text-white'
+              : 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30 hover:bg-amber-500/20'
+          }`}
+        >
+          {t('caseStatuses.INVESTIGATING')}
+        </button>
+        <button
+          type="button"
+          onClick={() => setCaseStatusFilter((prev) => (prev === 'SOLVED' ? 'ALL' : 'SOLVED'))}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            caseStatusFilter === 'SOLVED'
+              ? 'bg-emerald-600 text-white'
+              : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/20'
+          }`}
+        >
+          {t('caseStatuses.SOLVED')}
+        </button>
+      </div>
+
       {/* Filters */}
       <div className="bg-surface border border-border rounded-lg p-4 space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
           <input
             type="text"
             value={searchQuery}
@@ -326,6 +398,19 @@ export default function EventsListClient({
             placeholder={t('searchPlaceholder')}
             className="px-3 py-2 border border-border rounded-lg bg-surface-elevated text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary"
           />
+
+          <select
+            value={caseStatusFilter}
+            onChange={(e) => setCaseStatusFilter(e.target.value)}
+            className="px-3 py-2 border border-border rounded-lg bg-surface-elevated text-foreground text-sm"
+            aria-label={t('caseStatusLabel')}
+          >
+            <option value="ALL">{t('allCaseStatuses')}</option>
+            <option value="UNRESOLVED">{t('caseStatuses.UNRESOLVED')}</option>
+            <option value="INVESTIGATING">{t('caseStatuses.INVESTIGATING')}</option>
+            <option value="SOLVED">{t('caseStatuses.SOLVED')}</option>
+            <option value="SUSPENDED">{t('caseStatuses.SUSPENDED')}</option>
+          </select>
 
           <select
             value={statusFilter}
@@ -421,8 +506,30 @@ export default function EventsListClient({
               >
                 <div className="flex items-start justify-between gap-3 mb-2">
                   <div>
-                    <h3 className="text-lg font-bold text-foreground">{ev.title}</h3>
-                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {ev.caseCode && (
+                        <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-muted/60 border border-border font-semibold text-foreground">
+                          {ev.caseCode}
+                        </span>
+                      )}
+                      <h3 className="text-lg font-bold text-foreground">{ev.title}</h3>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                      {ev.caseStatus && (
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded ${
+                            CASE_STATUS_BADGE_CLASSES[ev.caseStatus] ||
+                            CASE_STATUS_BADGE_CLASSES.UNRESOLVED
+                          }`}
+                        >
+                          {t(`caseStatuses.${ev.caseStatus}`)}
+                        </span>
+                      )}
+                      {ev.crimeType && (
+                        <span className="text-xs px-2 py-0.5 rounded bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300 font-medium">
+                          ⚖️ {ev.crimeType}
+                        </span>
+                      )}
                       <span
                         className={`text-xs px-2 py-0.5 rounded font-medium ${STATUS_BADGE_CLASSES[ev.status]}`}
                       >

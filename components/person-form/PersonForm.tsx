@@ -15,6 +15,7 @@ import {
 } from '../../lib/field-configs';
 import PhotoSection from './PhotoSection';
 import PersonalInfoSection from './PersonalInfoSection';
+import InvestigationSection from './InvestigationSection';
 import WorkInfoSection from './WorkInfoSection';
 import GroupsSection from './GroupsSection';
 import LastContactSection from './LastContactSection';
@@ -107,6 +108,17 @@ export interface PersonFormProps {
       templateId: string;
       value: string;
     }>;
+    citizenId?: string | null;
+    citizenIdIssueDate?: Date | null;
+    citizenIdIssuePlace?: string | null;
+    residenceStatus?: string | null;
+    managementLevel?: string | null;
+    heightCm?: number | null;
+    weightKg?: number | null;
+    bloodType?: string | null;
+    threatLevel?: string | null;
+    modusOperandi?: string | null;
+    riskNotes?: string | null;
   };
   customFieldTemplates?: CustomFieldTemplate[];
   groups: Array<{
@@ -392,6 +404,30 @@ export default function PersonForm({
 
       const payload = {
         ...formData,
+        heightCm: formData.heightCm ? parseInt(formData.heightCm, 10) : null,
+        weightKg: formData.weightKg ? parseInt(formData.weightKg, 10) : null,
+        citizenIdIssueDate: formData.citizenIdIssueDate || null,
+        citizenId: formData.citizenId.trim() || null,
+        citizenIdIssuePlace: formData.citizenIdIssuePlace.trim() || null,
+        residenceStatus: formData.residenceStatus.trim() || null,
+        bloodType: formData.bloodType.trim() || null,
+        modusOperandi: formData.modusOperandi.trim() || null,
+        riskNotes: formData.riskNotes.trim() || null,
+        ...(mode === 'create' &&
+        formData.initialBankName.trim() &&
+        formData.initialAccountNumber.trim()
+          ? {
+              bankAccounts: [
+                {
+                  bankName: formData.initialBankName.trim(),
+                  accountNumber: formData.initialAccountNumber.trim(),
+                  accountHolder: formData.initialAccountHolder.trim() || null,
+                  accountType: formData.initialAccountType || 'OWNER',
+                  isPrimary: true,
+                },
+              ],
+            }
+          : {}),
         importantDates,
         phoneNumbers,
         emails,
@@ -539,6 +575,16 @@ export default function PersonForm({
           relationshipTypes={relationshipTypes}
           availableEvents={availableEvents}
           nameOrder={nameOrder}
+        />
+      </Section>
+
+      {/* Investigation / Subject Monitoring Section */}
+      <Section>
+        <SectionHeader>{t('sectionInvestigation')}</SectionHeader>
+        <InvestigationSection
+          formData={formData}
+          onFormDataChange={setFormData}
+          mode={mode}
         />
       </Section>
 

@@ -66,6 +66,7 @@ model User {
 
   journalEntries        JournalEntry[]
   events                Event[]
+  gangs                 Gang[]
 
   @@unique([provider, providerAccountId])
   @@map("users")
@@ -111,6 +112,19 @@ model Person {
   gender                      String?               // GENDER
   anniversary                 DateTime?             // ANNIVERSARY
 
+  // Investigation & Subject Monitoring Fields
+  citizenId                   String?               // Số CCCD / CMND
+  citizenIdIssueDate          DateTime?             // Ngày cấp CCCD
+  citizenIdIssuePlace         String?               // Nơi cấp CCCD
+  residenceStatus             String?               // "PERMANENT" | "TEMPORARY" | "TRANSIENT" | "ABSENT" | "WANTED"
+  managementLevel             String?               @default("NORMAL") // "NORMAL" | "SURVEILLANCE" | "KEY_TARGET"
+  heightCm                    Int?                  // Chiều cao (cm)
+  weightKg                    Int?                  // Cân nặng (kg)
+  bloodType                   String?               // Nhóm máu
+  threatLevel                 String?               @default("LOW") // "LOW" | "MEDIUM" | "HIGH" | "ARMED_DANGEROUS"
+  modusOperandi               String?               @db.Text // Phương thức thủ đoạn
+  riskNotes                   String?               @db.Text // Ghi chú cảnh giác / tiếp cận
+
   // Relations
   user               User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   relationshipToUser RelationshipType?      @relation("UserRelationship", fields: [relationshipToUserId], references: [id])
@@ -131,6 +145,11 @@ model Person {
   dismissalsAsB      DuplicateDismissal[]   @relation("DismissalPersonB")
   journalEntries     JournalEntryPerson[]
   events             PersonEvent[]
+  vehicles           SuspectVehicle[]
+  physicalMarks      PhysicalMark[]
+  criminalRecords    CriminalRecord[]
+  gangMemberships    GangMembership[]
+  bankAccounts       SuspectBankAccount[]
 
   @@index([userId])
   @@index([relationshipToUserId])
@@ -142,6 +161,9 @@ model Person {
   @@index([userId, nickname]) // For nickname sorting/search
   @@index([contactReminderEnabled, lastContact]) // For contact reminder queries
   @@index([userId, deletedAt]) // For soft delete filtering
+  @@index([citizenId])
+  @@index([managementLevel])
+  @@index([threatLevel])
   @@unique([userId, uid])
   @@map("people")
 }
@@ -1076,6 +1098,13 @@ model Event {
   updatedAt   DateTime    @updatedAt
   deletedAt   DateTime?
 
+  // Investigation & Case Management Fields
+  caseCode          String?               // Mã số vụ việc / Số thụ lý hồ sơ (VD: VV-2026-001)
+  crimeType         String?               // Phân loại tội danh: TRỘM CẮP, CƯỚP GIẬT, GÂY RỐI, MA TÚY...
+  caseStatus        String?               @default("UNRESOLVED") // "UNRESOLVED" (Chưa rõ đối tượng) | "INVESTIGATING" | "SOLVED" | "SUSPENDED"
+  incidentTimeNotes String?               // Ghi chú thời điểm
+  damageAssessment  String?               @db.Text // Thiệt hại tài sản / thương tích
+
   // Relations
   user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   groups            EventGroup[]
@@ -1091,6 +1120,9 @@ model Event {
   @@index([userId, startDate])
   @@index([userId, title])
   @@index([userId, deletedAt])
+  @@index([caseCode])
+  @@index([caseStatus])
+  @@index([crimeType])
   @@map("events")
 }
 
@@ -1176,6 +1208,8 @@ model PersonEvent {
   verificationStatus String    @default("HYPOTHESIS") // "HYPOTHESIS" | "INVESTIGATING" | "CONFIRMED" | "RULED_OUT"
   confidence         String?                          // "HIGH" | "MEDIUM" | "LOW"
   role               String?   // Specific role description
+  reasonForSuspicion String?   @db.Text // Căn cứ đưa vào diện nghi vấn
+  alibi              String?   @db.Text // Lời khai ngoại phạm / Xác minh ngoại phạm
   notes              String?   @db.Text // Evidence or alibi notes
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
@@ -1213,4 +1247,145 @@ model EventRelationship {
   @@index([toEventId, deletedAt])
   @@map("event_relationships")
 }
+
+// ============================================
+// CRIMINAL INVESTIGATION & SUBJECT MODULES
+// ============================================
+
+// SuspectVehicle - Vehicles used or owned by a Person
+model SuspectVehicle {
+  id                  String    @id @default(cuid())
+  personId            String
+  plateNumber         String    // Biển số xe (VD: 29A-123.45)
+  vehicleType         String    // Xe máy, ô tô, xe tải, xe đạp điện...
+  brandModel          String?   // Honda Wave, Toyota Vios...
+  color               String?   // Màu sơn
+  identifyingFeatures String?   // Vết trầy, decal, mâm xe...
+  registeredOwner     String?   // Tên chủ sở hữu trên đăng ký
+  isSuspicious        Boolean   @default(false) // Xe có nghi vấn liên quan vụ án
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deletedAt           DateTime?
+
+  // Relations
+  person Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@index([personId])
+  @@index([plateNumber])
+  @@index([personId, deletedAt])
+  @@map("suspect_vehicles")
+}
+
+// PhysicalMark - Distinguishing physical features: tattoos, scars, deformities
+model PhysicalMark {
+  id          String    @id @default(cuid())
+  personId    String
+  type        String    // "TATTOO" | "SCAR" | "DEFORMITY" | "MOLE" | "OTHER"
+  location    String    // Vị trí (VD: Bắp tay phải, cổ, ngực, sau gáy)
+  description String    @db.Text // Mô tả chi tiết (VD: Xăm rồng quấn kiếm, sẹo dài 3cm)
+  photoUrl    String?   // Ảnh chụp cận cảnh dấu vết (lưu local qua photo-storage)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  // Relations
+  person Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@index([personId])
+  @@index([type])
+  @@index([personId, deletedAt])
+  @@map("physical_marks")
+}
+
+// CriminalRecord - Prior convictions and administrative violations
+model CriminalRecord {
+  id             String    @id @default(cuid())
+  personId       String
+  charge         String    // Tội danh / Hành vi vi phạm (VD: Trộm cắp tài sản)
+  recordType     String    @default("CONVICTION") // "CONVICTION" (Tiền án) | "ADMIN_VIOLATION" (Tiền sự)
+  sentenceDetail String?   // Bản án / Mức phạt (VD: 3 năm tù giam, Phạt 2 triệu)
+  adjudicatedBy  String?   // Cơ quan ra quyết định (TAND quận X, Công an huyện Y)
+  incidentDate   DateTime? // Thời gian vi phạm
+  verdictDate    DateTime? // Ngày ra bản án / quyết định
+  isPardoned     Boolean   @default(false) // Đã được xóa án tích / hoàn lương
+  notes          String?   @db.Text
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  // Relations
+  person Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@index([personId])
+  @@index([recordType])
+  @@index([personId, deletedAt])
+  @@map("criminal_records")
+}
+
+// Gang - Crime syndicate / Criminal gang on the territory
+model Gang {
+  id          String           @id @default(cuid())
+  userId      String
+  name        String           // Tên băng nhóm (VD: Băng nhóm Xã Đàn)
+  description String?          @db.Text
+  turf        String?          // Địa bàn hoạt động / bảo kê
+  color       String?          // Màu hiển thị trên graph
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  deletedAt   DateTime?
+
+  // Relations
+  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  members GangMembership[]
+
+  @@index([userId])
+  @@index([userId, deletedAt])
+  @@map("gangs")
+}
+
+// GangMembership - Member role within a Gang
+model GangMembership {
+  id        String    @id @default(cuid())
+  gangId    String
+  personId  String
+  role      String    @default("MEMBER") // "LEADER", "SECOND_IN_COMMAND", "ENFORCER", "MEMBER"
+  notes     String?   @db.Text
+  joinedAt  DateTime?
+  leftAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Relations
+  gang   Gang   @relation(fields: [gangId], references: [id], onDelete: Cascade)
+  person Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@unique([gangId, personId])
+  @@index([gangId])
+  @@index([personId])
+  @@map("gang_memberships")
+}
+
+// SuspectBankAccount - Bank accounts associated with or used by a Person
+model SuspectBankAccount {
+  id            String    @id @default(cuid())
+  personId      String
+  bankName      String    // Tên ngân hàng (VD: Vietcombank, Techcombank, MB...)
+  accountNumber String    // Số tài khoản
+  accountHolder String?   // Tên chủ tài khoản (nếu là tài khoản mượn, mua, thuê)
+  accountType   String    @default("OWNER") // "OWNER" (Chính chủ) | "MULE" (Thuê/Mua/Mượn) | "SUSPICIOUS" (Nghi vấn nhận tiền phạm pháp)
+  isPrimary     Boolean   @default(false)
+  notes         String?   @db.Text
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  // Relations
+  person Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@index([personId])
+  @@index([accountNumber])
+  @@index([personId, deletedAt])
+  @@map("suspect_bank_accounts")
+}
+
 

@@ -174,6 +174,15 @@ export const POST = withAuth(async (request, session) => {
       cardDavSyncEnabled: _cardDavSyncEnabled,
     } = validation.data;
 
+    // Relationship type is required when creating a person unless connected via an event
+    if (!relationshipToUserId && !connectedEventId) {
+      if (connectedThroughId) {
+        return apiResponse.error('Relationship type is required for person-to-person connections');
+      } else {
+        return apiResponse.error('Relationship to user is required');
+      }
+    }
+
     // If connectedThroughId is provided, verify the person exists and belongs to user
     if (connectedThroughId) {
       const basePerson = await prisma.person.findUnique({

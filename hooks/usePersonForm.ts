@@ -71,6 +71,21 @@ export interface FormData {
   connectedEventRole: string;
   connectedEventInvolvementType: string;
   connectedEventVerificationStatus: string;
+  citizenId: string;
+  citizenIdIssueDate: string;
+  citizenIdIssuePlace: string;
+  residenceStatus: string;
+  managementLevel: 'NORMAL' | 'SURVEILLANCE' | 'KEY_TARGET';
+  heightCm: string;
+  weightKg: string;
+  bloodType: string;
+  threatLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'ARMED_DANGEROUS';
+  modusOperandi: string;
+  riskNotes: string;
+  initialBankName: string;
+  initialAccountNumber: string;
+  initialAccountHolder: string;
+  initialAccountType: 'OWNER' | 'MULE' | 'SUSPICIOUS';
 }
 
 export interface PersonFormState {
@@ -212,6 +227,17 @@ interface PersonProp {
   }>;
   urls?: Array<{ id?: string; type: string; url: string }>;
   customFieldValues?: Array<{ templateId: string; value: string }>;
+  citizenId?: string | null;
+  citizenIdIssueDate?: Date | null;
+  citizenIdIssuePlace?: string | null;
+  residenceStatus?: string | null;
+  managementLevel?: string | null;
+  heightCm?: number | null;
+  weightKg?: number | null;
+  bloodType?: string | null;
+  threatLevel?: string | null;
+  modusOperandi?: string | null;
+  riskNotes?: string | null;
 }
 
 interface AvailablePerson {
@@ -307,6 +333,23 @@ function buildInitialState(params: {
       connectedEventRole: '',
       connectedEventInvolvementType: 'SUSPECT',
       connectedEventVerificationStatus: 'HYPOTHESIS',
+      citizenId: person?.citizenId || '',
+      citizenIdIssueDate: person?.citizenIdIssueDate
+        ? new Date(person.citizenIdIssueDate).toISOString().split('T')[0]
+        : '',
+      citizenIdIssuePlace: person?.citizenIdIssuePlace || '',
+      residenceStatus: person?.residenceStatus || '',
+      managementLevel: (person?.managementLevel as FormData['managementLevel']) || 'NORMAL',
+      heightCm: person?.heightCm ? String(person.heightCm) : '',
+      weightKg: person?.weightKg ? String(person.weightKg) : '',
+      bloodType: person?.bloodType || '',
+      threatLevel: (person?.threatLevel as FormData['threatLevel']) || 'LOW',
+      modusOperandi: person?.modusOperandi || '',
+      riskNotes: person?.riskNotes || '',
+      initialBankName: '',
+      initialAccountNumber: '',
+      initialAccountHolder: '',
+      initialAccountType: 'OWNER',
     },
     importantDates:
       person?.importantDates?.map((d) => ({

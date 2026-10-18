@@ -357,6 +357,25 @@ export async function savePhotoFromBuffer(
 }
 
 /**
+ * Save a physical mark photo (tattoo, scar, etc.) without overwriting avatar.
+ */
+export async function saveMarkPhoto(
+  userId: string,
+  markId: string,
+  buffer: Buffer
+): Promise<string> {
+  const { data, hasAlpha } = await processPhoto(buffer);
+  const dirPath = await ensureUserPhotoDir(userId);
+  const ext = hasAlpha ? 'png' : 'jpg';
+  const filename = `mark_${markId}_${crypto.randomBytes(6).toString('hex')}.${ext}`;
+  const filePath = path.join(dirPath, filename);
+  validateFilePath(filePath, getPhotoStoragePath());
+
+  await atomicWrite(filePath, data);
+  return filename;
+}
+
+/**
  * Delete a specific photo file
  */
 export async function deletePhoto(userId: string, filename: string): Promise<void> {

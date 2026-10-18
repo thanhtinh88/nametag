@@ -181,6 +181,87 @@ export const customFieldValuesArraySchema = z
   .max(200)
   .optional();
 
+// ============================================
+// Investigation schemas
+// ============================================
+
+export const suspectVehicleSchema = z.object({
+  id: z.string().optional(),
+  plateNumber: z.string().trim().min(1, 'Plate number is required').max(30),
+  vehicleType: z.string().trim().min(1, 'Vehicle type is required').max(50),
+  brandModel: z.string().max(100).nullable().optional(),
+  color: z.string().max(50).nullable().optional(),
+  identifyingFeatures: z.string().max(500).nullable().optional(),
+  registeredOwner: z.string().max(100).nullable().optional(),
+  isSuspicious: z.boolean().optional().default(false),
+});
+export const createSuspectVehicleSchema = suspectVehicleSchema.omit({ id: true });
+export const updateSuspectVehicleSchema = suspectVehicleSchema.partial();
+
+export const physicalMarkSchema = z.object({
+  id: z.string().optional(),
+  type: z.string().trim().min(1, 'Type is required').max(50),
+  location: z.string().trim().min(1, 'Location is required').max(100),
+  description: z.string().trim().min(1, 'Description is required').max(2000),
+  photoUrl: z.string().nullable().optional(),
+});
+export const createPhysicalMarkSchema = physicalMarkSchema.omit({ id: true });
+export const updatePhysicalMarkSchema = physicalMarkSchema.partial();
+
+export const criminalRecordSchema = z.object({
+  id: z.string().optional(),
+  charge: z.string().trim().min(1, 'Charge is required').max(200),
+  recordType: z.string().optional().default('CONVICTION'),
+  sentenceDetail: z.string().max(500).nullable().optional(),
+  adjudicatedBy: z.string().max(200).nullable().optional(),
+  incidentDate: z.preprocess(
+    (val) => (val === '' ? null : val),
+    z.iso.date({ error: 'Invalid date' }).nullable().optional(),
+  ),
+  verdictDate: z.preprocess(
+    (val) => (val === '' ? null : val),
+    z.iso.date({ error: 'Invalid date' }).nullable().optional(),
+  ),
+  isPardoned: z.boolean().optional().default(false),
+  notes: z.string().max(5000).nullable().optional(),
+});
+export const createCriminalRecordSchema = criminalRecordSchema.omit({ id: true });
+export const updateCriminalRecordSchema = criminalRecordSchema.partial();
+
+export const suspectBankAccountSchema = z.object({
+  id: z.string().optional(),
+  bankName: z.string().trim().min(1, 'Bank name is required').max(100),
+  accountNumber: z.string().trim().min(1, 'Account number is required').max(50),
+  accountHolder: z.string().max(100).nullable().optional(),
+  accountType: z.string().optional().default('OWNER'),
+  isPrimary: z.boolean().optional().default(false),
+  notes: z.string().max(2000).nullable().optional(),
+});
+export const createSuspectBankAccountSchema = suspectBankAccountSchema.omit({ id: true });
+export const updateSuspectBankAccountSchema = suspectBankAccountSchema.partial();
+
+export const createGangSchema = z.object({
+  name: z.string().trim().min(1, 'Name is required').max(150),
+  description: z.string().max(5000).nullable().optional(),
+  turf: z.string().max(200).nullable().optional(),
+  color: hexColorSchema,
+});
+export const updateGangSchema = createGangSchema.partial();
+
+export const gangMemberSchema = z.object({
+  personId: z.string().min(1, 'Person ID is required'),
+  role: z.string().max(100).optional().default('MEMBER'),
+  notes: z.string().max(2000).nullable().optional(),
+  joinedAt: z.preprocess(
+    (val) => (val === '' ? null : val),
+    z.iso.date({ error: 'Invalid date' }).nullable().optional(),
+  ),
+  leftAt: z.preprocess(
+    (val) => (val === '' ? null : val),
+    z.iso.date({ error: 'Invalid date' }).nullable().optional(),
+  ),
+});
+
 export const createPersonSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
   surname: z.string().max(100).nullable().optional(),
@@ -244,6 +325,29 @@ export const createPersonSchema = z.object({
   locations: z.array(locationSchema).optional(),
   customFields: z.array(customFieldSchema).optional(),
   customFieldValues: customFieldValuesArraySchema,
+
+  // Investigation & Subject Monitoring fields
+  citizenId: z.string().max(50).nullable().optional(),
+  citizenIdIssueDate: z.preprocess(
+    (val) => (val === '' ? null : val),
+    z.iso.date({ error: 'Invalid date' }).nullable().optional(),
+  ),
+  citizenIdIssuePlace: z.string().max(200).nullable().optional(),
+  residenceStatus: z.string().max(50).nullable().optional(),
+  managementLevel: z.enum(['NORMAL', 'SURVEILLANCE', 'KEY_TARGET']).optional(),
+  heightCm: z.preprocess(
+    (val) => (val === '' || val == null ? null : typeof val === 'string' ? Number(val) : val),
+    z.number().int().min(30).max(250).nullable().optional(),
+  ),
+  weightKg: z.preprocess(
+    (val) => (val === '' || val == null ? null : typeof val === 'string' ? Number(val) : val),
+    z.number().int().min(10).max(300).nullable().optional(),
+  ),
+  bloodType: z.string().max(10).nullable().optional(),
+  threatLevel: z.enum(['LOW', 'MEDIUM', 'HIGH', 'ARMED_DANGEROUS']).optional(),
+  modusOperandi: z.string().max(10000).nullable().optional(),
+  riskNotes: z.string().max(5000).nullable().optional(),
+  bankAccounts: z.array(createSuspectBankAccountSchema).optional(),
 });
 
 export const updatePersonSchema = createPersonSchema.partial();
@@ -761,6 +865,8 @@ export const eventPersonInputSchema = z.object({
   involvementType: involvementTypeSchema.optional().default('SUSPECT'),
   verificationStatus: verificationStatusSchema.optional().default('HYPOTHESIS'),
   confidence: confidenceLevelSchema.nullable().optional(),
+  reasonForSuspicion: z.string().max(2000).nullable().optional(),
+  alibi: z.string().max(2000).nullable().optional(),
   notes: z.string().max(2000).nullable().optional(),
 });
 
@@ -784,6 +890,13 @@ export const createEventSchema = z.object({
   urls: z.array(urlSchema).optional(),
   customFields: z.array(customFieldSchema).optional(),
   participants: z.array(eventPersonInputSchema).optional(),
+
+  // Investigation & Case Management fields
+  caseCode: z.string().max(50).nullable().optional(),
+  crimeType: z.string().max(100).nullable().optional(),
+  caseStatus: z.string().max(50).optional(),
+  incidentTimeNotes: z.string().max(200).nullable().optional(),
+  damageAssessment: z.string().max(5000).nullable().optional(),
 });
 
 export const updateEventSchema = createEventSchema.partial();
@@ -794,6 +907,8 @@ export const createPersonEventSchema = z.object({
   involvementType: involvementTypeSchema.optional().default('SUSPECT'),
   verificationStatus: verificationStatusSchema.optional().default('HYPOTHESIS'),
   confidence: confidenceLevelSchema.nullable().optional(),
+  reasonForSuspicion: z.string().max(2000).nullable().optional(),
+  alibi: z.string().max(2000).nullable().optional(),
   notes: z.string().max(2000).nullable().optional(),
 });
 
@@ -804,6 +919,8 @@ export const updatePersonEventSchema = z.object({
   involvementType: involvementTypeSchema.optional(),
   verificationStatus: verificationStatusSchema.optional(),
   confidence: confidenceLevelSchema.nullable().optional(),
+  reasonForSuspicion: z.string().max(2000).nullable().optional(),
+  alibi: z.string().max(2000).nullable().optional(),
   notes: z.string().max(2000).nullable().optional(),
 }).refine((data) => Boolean(data.id || data.personId), {
   message: 'Either id or personId is required',

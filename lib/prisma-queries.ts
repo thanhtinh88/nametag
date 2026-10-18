@@ -141,6 +141,21 @@ export function personDetailsInclude() {
       where: { deletedAt: null },
       select: { id: true },
     },
+    vehicles: {
+      where: { deletedAt: null },
+      orderBy: { createdAt: 'desc' as const },
+    },
+    physicalMarks: {
+      where: { deletedAt: null },
+      orderBy: { createdAt: 'desc' as const },
+    },
+    criminalRecords: {
+      where: { deletedAt: null },
+      orderBy: { createdAt: 'desc' as const },
+    },
+    gangMemberships: {
+      include: { gang: true },
+    },
     ...multiValueFieldsInclude(),
     ...importantDatesInclude(),
   } as const;

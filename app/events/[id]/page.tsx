@@ -13,6 +13,7 @@ import EventPeopleManager from '@/components/EventPeopleManager';
 import EventRelationshipManager from '@/components/EventRelationshipManager';
 import EventDeleteButton from '@/components/EventDeleteButton';
 import ImmichGallerySection from '@/components/ImmichGallerySection';
+import SuspectMatcherModal from '@/components/investigation/SuspectMatcherModal';
 
 export default async function EventDetailPage({
   params,
@@ -150,6 +151,21 @@ export default async function EventDetailPage({
     }
   };
 
+  const caseStatusBadgeClass = (status?: string | null) => {
+    switch (status) {
+      case 'UNRESOLVED':
+        return 'bg-red-500/15 text-red-700 dark:text-red-300 border border-red-500/30 font-semibold';
+      case 'INVESTIGATING':
+        return 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 font-medium';
+      case 'SOLVED':
+        return 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 font-medium';
+      case 'SUSPENDED':
+        return 'bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/30 font-medium';
+      default:
+        return 'bg-muted/30 text-muted-foreground border border-border';
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Navigation
@@ -176,9 +192,23 @@ export default async function EventDetailPage({
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
               <div>
                 <div className="flex items-center gap-3 flex-wrap">
+                  {event.caseCode && (
+                    <span className="font-mono text-xs px-2 py-0.5 rounded bg-muted/40 border border-border font-semibold text-foreground">
+                      {event.caseCode}
+                    </span>
+                  )}
                   <h1 className="text-3xl font-bold text-foreground">
                     {event.title}
                   </h1>
+                  {event.caseStatus && (
+                    <span
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs ${caseStatusBadgeClass(
+                        event.caseStatus
+                      )}`}
+                    >
+                      {t(`caseStatuses.${event.caseStatus}`)}
+                    </span>
+                  )}
                   <span
                     className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusBadgeClass(
                       event.status
@@ -188,22 +218,38 @@ export default async function EventDetailPage({
                   </span>
                 </div>
 
-                {event.category && (
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {event.category}
-                  </p>
-                )}
+                <div className="flex flex-wrap items-center gap-2 mt-2">
+                  {event.crimeType && (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300">
+                      ⚖️ {event.crimeType}
+                    </span>
+                  )}
+                  {event.category && (
+                    <span className="text-sm text-muted-foreground">
+                      {event.crimeType ? '• ' : ''}{event.category}
+                    </span>
+                  )}
+                </div>
 
-                {(event.startDate || event.endDate) && (
-                  <p className="text-sm text-muted-foreground mt-2">
-                    📅{' '}
-                    {event.startDate
-                      ? formatDate(new Date(event.startDate), dateFormat)
-                      : ''}
-                    {event.endDate
-                      ? ` - ${formatDate(new Date(event.endDate), dateFormat)}`
-                      : ''}
-                  </p>
+                {(event.startDate || event.endDate || event.incidentTimeNotes) && (
+                  <div className="text-sm text-muted-foreground mt-2 space-y-0.5">
+                    {(event.startDate || event.endDate) && (
+                      <p>
+                        📅{' '}
+                        {event.startDate
+                          ? formatDate(new Date(event.startDate), dateFormat)
+                          : ''}
+                        {event.endDate
+                          ? ` - ${formatDate(new Date(event.endDate), dateFormat)}`
+                          : ''}
+                      </p>
+                    )}
+                    {event.incidentTimeNotes && (
+                      <p className="text-xs text-amber-700 dark:text-amber-400">
+                        ⏱️ {t('incidentTimeNotesLabel')}: {event.incidentTimeNotes}
+                      </p>
+                    )}
+                  </div>
                 )}
 
                 {event.groups.length > 0 && (
@@ -222,9 +268,27 @@ export default async function EventDetailPage({
                     ))}
                   </div>
                 )}
+
+                {event.damageAssessment && (
+                  <div className="mt-4 p-3 rounded-lg border border-amber-500/20 bg-amber-500/5">
+                    <h3 className="text-xs font-semibold text-amber-800 dark:text-amber-300 uppercase tracking-wide mb-1">
+                      💥 {t('damageAssessmentLabel')}
+                    </h3>
+                    <p className="text-sm text-foreground whitespace-pre-line">
+                      {event.damageAssessment}
+                    </p>
+                  </div>
+                )}
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <SuspectMatcherModal
+                  eventId={event.id}
+                  eventTitle={event.title}
+                  crimeType={event.crimeType}
+                  nameOrder={nameOrder}
+                  nameDisplayFormat={nameDisplayFormat}
+                />
                 <Link href={`/events/${event.id}/edit`}>
                   <Button variant="secondary">{tCommon('edit')}</Button>
                 </Link>

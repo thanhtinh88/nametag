@@ -58,6 +58,11 @@ export default async function EditEventPage({
     endDate: event.endDate ? event.endDate.toISOString() : null,
     hasTime: event.hasTime,
     description: event.description,
+    caseCode: event.caseCode,
+    crimeType: event.crimeType,
+    caseStatus: event.caseStatus,
+    incidentTimeNotes: event.incidentTimeNotes,
+    damageAssessment: event.damageAssessment,
     groups: event.groups.map((g) => ({ groupId: g.groupId })),
     addresses: event.addresses.map((address) => ({
       id: address.id,

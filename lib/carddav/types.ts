@@ -33,9 +33,35 @@ type SerializablePersonAddress = Omit<PersonAddress, 'latitude' | 'longitude'> &
  * Person with all relations loaded (for vCard export)
  */
 export interface PersonWithRelations
-  extends Omit<Person, 'immichPersonId' | 'immichAlbumId'> {
+  extends Omit<
+    Person,
+    | 'immichPersonId'
+    | 'immichAlbumId'
+    | 'citizenId'
+    | 'citizenIdIssueDate'
+    | 'citizenIdIssuePlace'
+    | 'residenceStatus'
+    | 'managementLevel'
+    | 'heightCm'
+    | 'weightKg'
+    | 'bloodType'
+    | 'threatLevel'
+    | 'modusOperandi'
+    | 'riskNotes'
+  > {
   immichPersonId?: string | null;
   immichAlbumId?: string | null;
+  citizenId?: string | null;
+  citizenIdIssueDate?: Date | null;
+  citizenIdIssuePlace?: string | null;
+  residenceStatus?: string | null;
+  managementLevel?: string | null;
+  heightCm?: number | null;
+  weightKg?: number | null;
+  bloodType?: string | null;
+  threatLevel?: string | null;
+  modusOperandi?: string | null;
+  riskNotes?: string | null;
   phoneNumbers: PersonPhone[];
   emails: PersonEmail[];
   addresses: SerializablePersonAddress[];

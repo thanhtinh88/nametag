@@ -12,6 +12,14 @@ export interface SearchDocument {
   organization: string | null;
   jobTitle: string | null;
   notes: string | null;
+  citizenId?: string | null;
+  aliases?: string | null;
+  vehicles?: string;
+  physicalMarks?: string;
+  criminalRecords?: string;
+  gangs?: string;
+  bankAccounts?: string;
+  modusOperandi?: string | null;
   phones: string;
   emails: string;
   addresses: string;
@@ -32,10 +40,17 @@ export interface PersonSearchResult {
   displayNameOverride: string | null;
   photo: string | null;
   score: number;
+  citizenId?: string | null;
+  vehicles?: string | null;
+  physicalMarks?: string | null;
+  criminalRecords?: string | null;
+  gangs?: string | null;
+  bankAccounts?: string | null;
 }
 
 const INDEXED_FIELDS = [
   'name', 'surname', 'middleName', 'secondLastName', 'nickname', 'displayNameOverride',
+  'citizenId', 'aliases', 'vehicles', 'physicalMarks', 'criminalRecords', 'gangs', 'bankAccounts', 'modusOperandi',
   'organization', 'jobTitle', 'notes',
   'phones', 'emails', 'addresses', 'urls', 'imHandles',
   'groups', 'customFields',
@@ -43,6 +58,7 @@ const INDEXED_FIELDS = [
 
 const STORED_FIELDS = [
   'id', 'name', 'surname', 'middleName', 'secondLastName', 'nickname', 'displayNameOverride', 'photo',
+  'citizenId', 'vehicles', 'physicalMarks', 'criminalRecords', 'gangs', 'bankAccounts',
 ];
 
 export function createSearchIndex(documents: SearchDocument[]): MiniSearch<SearchDocument> {
@@ -79,5 +95,10 @@ export function searchIndex(
     displayNameOverride: (result.displayNameOverride as string | null) ?? null,
     photo: (result.photo as string | null) ?? null,
     score: result.score,
+    citizenId: (result.citizenId as string | null) ?? null,
+    vehicles: (result.vehicles as string | null) ?? null,
+    physicalMarks: (result.physicalMarks as string | null) ?? null,
+    criminalRecords: (result.criminalRecords as string | null) ?? null,
+    gangs: (result.gangs as string | null) ?? null,
   }));
 }

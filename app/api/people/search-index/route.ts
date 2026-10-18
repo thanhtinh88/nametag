@@ -19,6 +19,28 @@ export const GET = withAuth(async (_request, session) => {
       jobTitle: true,
       notes: true,
       photo: true,
+      citizenId: true,
+      modusOperandi: true,
+      vehicles: {
+        where: { deletedAt: null },
+        select: { plateNumber: true, brandModel: true, color: true },
+      },
+      physicalMarks: {
+        where: { deletedAt: null },
+        select: { type: true, location: true, description: true },
+      },
+      criminalRecords: {
+        where: { deletedAt: null },
+        select: { charge: true, sentenceDetail: true },
+      },
+      gangMemberships: {
+        where: { gang: { deletedAt: null } },
+        include: { gang: { select: { name: true, turf: true } } },
+      },
+      bankAccounts: {
+        where: { deletedAt: null },
+        select: { bankName: true, accountNumber: true, accountHolder: true },
+      },
       phoneNumbers: { select: { number: true } },
       emails: { select: { email: true } },
       addresses: {
@@ -57,6 +79,23 @@ export const GET = withAuth(async (_request, session) => {
     jobTitle: person.jobTitle,
     notes: person.notes,
     photo: person.photo,
+    citizenId: person.citizenId,
+    modusOperandi: person.modusOperandi,
+    vehicles: (person.vehicles ?? [])
+      .map((v) => [v.plateNumber, v.brandModel, v.color].filter(Boolean).join(' '))
+      .join(', '),
+    physicalMarks: (person.physicalMarks ?? [])
+      .map((m) => [m.type, m.location, m.description].filter(Boolean).join(' '))
+      .join(', '),
+    criminalRecords: (person.criminalRecords ?? [])
+      .map((c) => [c.charge, c.sentenceDetail].filter(Boolean).join(' '))
+      .join(', '),
+    gangs: (person.gangMemberships ?? [])
+      .map((gm) => [gm.gang.name, gm.gang.turf].filter(Boolean).join(' '))
+      .join(', '),
+    bankAccounts: (person.bankAccounts ?? [])
+      .map((b) => [b.bankName, b.accountNumber, b.accountHolder].filter(Boolean).join(' '))
+      .join(', '),
     phones: person.phoneNumbers.map((p) => p.number).join(' '),
     emails: person.emails.map((e) => e.email).join(' '),
     addresses: person.addresses

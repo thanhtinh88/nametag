@@ -23,6 +23,7 @@ export default async function PeoplePage({
     order?: string;
     group?: string;
     relationship?: string;
+    managementLevel?: string;
     cf?: string;
   }>;
 }) {
@@ -46,6 +47,7 @@ export default async function PeoplePage({
   const order = params.order || 'asc';
   const groupFilter = params.group || '';
   const relationshipFilter = params.relationship || '';
+  const managementFilter = params.managementLevel || '';
   const cfParam = params.cf || '';
   let cfFilter: { slug: string; value: string } | null = null;
   if (cfParam) {
@@ -62,6 +64,7 @@ export default async function PeoplePage({
     deletedAt: null;
     groups?: { none: Record<string, never> } | { some: { groupId: string } };
     relationshipToUserId?: string | null;
+    managementLevel?: 'NORMAL' | 'SURVEILLANCE' | 'KEY_TARGET' | { in: Array<'SURVEILLANCE' | 'KEY_TARGET'> };
     customFieldValues?: {
       some: {
         value: { equals: string; mode: 'insensitive' };
@@ -83,6 +86,12 @@ export default async function PeoplePage({
     peopleWhere.relationshipToUserId = null;
   } else if (relationshipFilter) {
     peopleWhere.relationshipToUserId = relationshipFilter;
+  }
+
+  if (managementFilter === 'monitored') {
+    peopleWhere.managementLevel = { in: ['SURVEILLANCE', 'KEY_TARGET'] };
+  } else if (managementFilter === 'KEY_TARGET' || managementFilter === 'SURVEILLANCE' || managementFilter === 'NORMAL') {
+    peopleWhere.managementLevel = managementFilter;
   }
 
   if (cfFilter) {
@@ -268,6 +277,7 @@ export default async function PeoplePage({
                 order={order}
                 groupFilter={groupFilter}
                 relationshipFilter={relationshipFilter}
+                managementFilter={managementFilter}
                 cfFilter={cfFilter}
                 dateFormat={dateFormat}
                 availableGroups={allGroups}

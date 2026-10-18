@@ -20,11 +20,19 @@ import PersonAutocomplete from '@/components/PersonAutocomplete';
 import { Button } from '@/components/ui/Button';
 
 export type EventStatusType = 'PLANNED' | 'ONGOING' | 'COMPLETED' | 'CANCELLED';
+export type CaseStatus = 'UNRESOLVED' | 'INVESTIGATING' | 'SOLVED' | 'SUSPENDED';
+export type InvolvementType = 'SUSPECT' | 'PERSON_OF_INTEREST' | 'ACCOMPLICE' | 'WITNESS' | 'VICTIM' | 'INFORMANT';
+export type VerificationStatus = 'HYPOTHESIS' | 'INVESTIGATING' | 'CONFIRMED' | 'RULED_OUT';
 
 export interface EventParticipantInput {
   personId: string;
   personName: string;
   role: string;
+  involvementType: string;
+  verificationStatus: string;
+  confidence?: string | null;
+  reasonForSuspicion?: string;
+  alibi?: string;
   notes: string;
 }
 
@@ -39,6 +47,11 @@ export interface EventFormProps {
     endDate: string | null;
     hasTime: boolean;
     description: string | null;
+    caseCode?: string | null;
+    crimeType?: string | null;
+    caseStatus?: string | null;
+    incidentTimeNotes?: string | null;
+    damageAssessment?: string | null;
     groups: Array<{ groupId: string }>;
     addresses: PersonAddress[];
     urls: PersonUrl[];
@@ -99,6 +112,11 @@ export default function EventForm({
     formatDateInput(event?.endDate, event?.hasTime ?? false)
   );
   const [description, setDescription] = useState(event?.description || '');
+  const [caseCode, setCaseCode] = useState(event?.caseCode || '');
+  const [crimeType, setCrimeType] = useState(event?.crimeType || '');
+  const [caseStatus, setCaseStatus] = useState(event?.caseStatus || 'UNRESOLVED');
+  const [incidentTimeNotes, setIncidentTimeNotes] = useState(event?.incidentTimeNotes || '');
+  const [damageAssessment, setDamageAssessment] = useState(event?.damageAssessment || '');
   const [groupIds, setGroupIds] = useState<string[]>(
     event?.groups.map((g) => g.groupId) || []
   );
@@ -113,6 +131,10 @@ export default function EventForm({
   const [selectedPersonId, setSelectedPersonId] = useState('');
   const [selectedPersonName, setSelectedPersonName] = useState('');
   const [participantRole, setParticipantRole] = useState('');
+  const [participantInvolvementType, setParticipantInvolvementType] = useState('SUSPECT');
+  const [participantVerificationStatus, setParticipantVerificationStatus] = useState('HYPOTHESIS');
+  const [participantReasonForSuspicion, setParticipantReasonForSuspicion] = useState('');
+  const [participantAlibi, setParticipantAlibi] = useState('');
   const [participantNotes, setParticipantNotes] = useState('');
 
   const handleAddParticipant = () => {
@@ -126,12 +148,20 @@ export default function EventForm({
         personId: selectedPersonId,
         personName: selectedPersonName,
         role: participantRole.trim(),
+        involvementType: participantInvolvementType,
+        verificationStatus: participantVerificationStatus,
+        reasonForSuspicion: participantReasonForSuspicion.trim(),
+        alibi: participantAlibi.trim(),
         notes: participantNotes.trim(),
       },
     ]);
     setSelectedPersonId('');
     setSelectedPersonName('');
     setParticipantRole('');
+    setParticipantInvolvementType('SUSPECT');
+    setParticipantVerificationStatus('HYPOTHESIS');
+    setParticipantReasonForSuspicion('');
+    setParticipantAlibi('');
     setParticipantNotes('');
   };
 
@@ -157,6 +187,11 @@ export default function EventForm({
         title: title.trim(),
         category: category.trim() || null,
         status,
+        caseCode: caseCode.trim() || null,
+        crimeType: crimeType.trim() || null,
+        caseStatus: caseStatus || 'UNRESOLVED',
+        incidentTimeNotes: incidentTimeNotes.trim() || null,
+        damageAssessment: damageAssessment.trim() || null,
         hasTime,
         startDate: startDate ? new Date(startDate).toISOString() : null,
         endDate: endDate ? new Date(endDate).toISOString() : null,
@@ -170,6 +205,10 @@ export default function EventForm({
               participants: participants.map((p) => ({
                 personId: p.personId,
                 role: p.role || null,
+                involvementType: p.involvementType || 'SUSPECT',
+                verificationStatus: p.verificationStatus || 'HYPOTHESIS',
+                reasonForSuspicion: p.reasonForSuspicion || null,
+                alibi: p.alibi || null,
                 notes: p.notes || null,
               })),
             }
@@ -242,6 +281,62 @@ export default function EventForm({
           </div>
 
           <div>
+            <label htmlFor="event-case-code" className="block text-sm font-medium text-muted mb-1">
+              {t('caseCodeLabel')}
+            </label>
+            <input
+              id="event-case-code"
+              type="text"
+              value={caseCode}
+              onChange={(e) => setCaseCode(e.target.value)}
+              placeholder={t('caseCodePlaceholder')}
+              className={inputClass}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="event-case-status" className="block text-sm font-medium text-muted mb-1">
+              {t('caseStatusLabel')}
+            </label>
+            <select
+              id="event-case-status"
+              value={caseStatus}
+              onChange={(e) => setCaseStatus(e.target.value as CaseStatus)}
+              className={inputClass}
+            >
+              <option value="UNRESOLVED">{t('caseStatuses.UNRESOLVED')}</option>
+              <option value="INVESTIGATING">{t('caseStatuses.INVESTIGATING')}</option>
+              <option value="SOLVED">{t('caseStatuses.SOLVED')}</option>
+              <option value="SUSPENDED">{t('caseStatuses.SUSPENDED')}</option>
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="event-crime-type" className="block text-sm font-medium text-muted mb-1">
+              {t('crimeTypeLabel')}
+            </label>
+            <input
+              id="event-crime-type"
+              type="text"
+              list="event-crime-type-presets"
+              value={crimeType}
+              onChange={(e) => setCrimeType(e.target.value)}
+              placeholder={t('crimeTypePlaceholder')}
+              className={inputClass}
+            />
+            <datalist id="event-crime-type-presets">
+              <option value={t('crimeTypes.THEFT')} />
+              <option value={t('crimeTypes.ROBBERY')} />
+              <option value={t('crimeTypes.ASSAULT')} />
+              <option value={t('crimeTypes.FRAUD')} />
+              <option value={t('crimeTypes.GAMBLING')} />
+              <option value={t('crimeTypes.DRUGS')} />
+              <option value={t('crimeTypes.PUBLIC_DISORDER')} />
+              <option value={t('crimeTypes.OTHER')} />
+            </datalist>
+          </div>
+
+          <div>
             <label htmlFor="event-category" className="block text-sm font-medium text-muted mb-1">
               {t('categoryLabel')}
             </label>
@@ -265,7 +360,7 @@ export default function EventForm({
             </datalist>
           </div>
 
-          <div>
+          <div className="md:col-span-2">
             <label htmlFor="event-status" className="block text-sm font-medium text-muted mb-1">
               {t('statusLabel')}
             </label>
@@ -322,6 +417,34 @@ export default function EventForm({
               />
             </div>
           </div>
+
+          <div>
+            <label htmlFor="event-incident-time-notes" className="block text-sm font-medium text-muted mb-1">
+              {t('incidentTimeNotesLabel')}
+            </label>
+            <input
+              id="event-incident-time-notes"
+              type="text"
+              value={incidentTimeNotes}
+              onChange={(e) => setIncidentTimeNotes(e.target.value)}
+              placeholder={t('incidentTimeNotesPlaceholder')}
+              className={inputClass}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="event-damage-assessment" className="block text-sm font-medium text-muted mb-1">
+              {t('damageAssessmentLabel')}
+            </label>
+            <textarea
+              id="event-damage-assessment"
+              rows={2}
+              value={damageAssessment}
+              onChange={(e) => setDamageAssessment(e.target.value)}
+              placeholder={t('damageAssessmentPlaceholder')}
+              className={inputClass}
+            />
+          </div>
         </div>
       </div>
 
@@ -345,29 +468,97 @@ export default function EventForm({
           <h3 className="text-lg font-semibold text-foreground">{t('sectionParticipants')}</h3>
           <p className="text-xs text-muted">{t('participantsHelp')}</p>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-            <div>
-              <PersonAutocomplete
-                people={unselectedPeople}
-                value={selectedPersonId}
-                onChange={(id, name) => {
-                  setSelectedPersonId(id);
-                  setSelectedPersonName(name);
-                }}
-                placeholder={t('searchPersonPlaceholder')}
-                nameOrder={nameOrder}
-              />
+          <div className="p-3 bg-surface-elevated rounded-lg space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-muted mb-1">
+                  {t('searchPersonPlaceholder')} *
+                </label>
+                <PersonAutocomplete
+                  people={unselectedPeople}
+                  value={selectedPersonId}
+                  onChange={(id, name) => {
+                    setSelectedPersonId(id);
+                    setSelectedPersonName(name);
+                  }}
+                  placeholder={t('searchPersonPlaceholder')}
+                  nameOrder={nameOrder}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-muted mb-1">
+                  {t('involvementTypeLabel')}
+                </label>
+                <select
+                  value={participantInvolvementType}
+                  onChange={(e) => setParticipantInvolvementType(e.target.value as InvolvementType)}
+                  className={inputClass}
+                >
+                  <option value="SUSPECT">{t('involvementTypes.SUSPECT')}</option>
+                  <option value="PERSON_OF_INTEREST">{t('involvementTypes.PERSON_OF_INTEREST')}</option>
+                  <option value="ACCOMPLICE">{t('involvementTypes.ACCOMPLICE')}</option>
+                  <option value="WITNESS">{t('involvementTypes.WITNESS')}</option>
+                  <option value="VICTIM">{t('involvementTypes.VICTIM')}</option>
+                  <option value="INFORMANT">{t('involvementTypes.INFORMANT')}</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-muted mb-1">
+                  {t('verificationStatusLabel')}
+                </label>
+                <select
+                  value={participantVerificationStatus}
+                  onChange={(e) => setParticipantVerificationStatus(e.target.value as VerificationStatus)}
+                  className={inputClass}
+                >
+                  <option value="HYPOTHESIS">{t('verificationStatuses.HYPOTHESIS')}</option>
+                  <option value="INVESTIGATING">{t('verificationStatuses.INVESTIGATING')}</option>
+                  <option value="CONFIRMED">{t('verificationStatuses.CONFIRMED')}</option>
+                  <option value="RULED_OUT">{t('verificationStatuses.RULED_OUT')}</option>
+                </select>
+              </div>
             </div>
-            <div>
-              <input
-                type="text"
-                value={participantRole}
-                onChange={(e) => setParticipantRole(e.target.value)}
-                placeholder={t('rolePlaceholder')}
-                className={inputClass}
-              />
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-muted mb-1">
+                  {t('rolePlaceholder')}
+                </label>
+                <input
+                  type="text"
+                  value={participantRole}
+                  onChange={(e) => setParticipantRole(e.target.value)}
+                  placeholder={t('rolePlaceholder')}
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-muted mb-1">
+                  {t('reasonForSuspicionLabel')}
+                </label>
+                <input
+                  type="text"
+                  value={participantReasonForSuspicion}
+                  onChange={(e) => setParticipantReasonForSuspicion(e.target.value)}
+                  placeholder={t('reasonForSuspicionPlaceholder')}
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-muted mb-1">
+                  {t('alibiLabel')}
+                </label>
+                <input
+                  type="text"
+                  value={participantAlibi}
+                  onChange={(e) => setParticipantAlibi(e.target.value)}
+                  placeholder={t('alibiPlaceholder')}
+                  className={inputClass}
+                />
+              </div>
             </div>
-            <div className="flex gap-2">
+
+            <div className="flex gap-2 items-center">
               <input
                 type="text"
                 value={participantNotes}
@@ -391,24 +582,42 @@ export default function EventForm({
               {participants.map((p) => (
                 <div
                   key={p.personId}
-                  className="flex items-center justify-between p-2.5 bg-surface-elevated rounded-lg text-sm"
+                  className="p-3 bg-surface-elevated rounded-lg text-sm space-y-1.5"
                 >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium text-foreground">{p.personName}</span>
-                    {p.role && (
-                      <span className="px-2 py-0.5 text-xs rounded bg-primary/15 text-primary font-medium">
-                        {p.role}
+                  <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-foreground">{p.personName}</span>
+                      <span className="px-2 py-0.5 text-xs rounded bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300 font-medium">
+                        {t(`involvementTypes.${p.involvementType}`)}
                       </span>
-                    )}
-                    {p.notes && <span className="text-muted text-xs">— {p.notes}</span>}
+                      <span className="px-2 py-0.5 text-xs rounded bg-surface border border-border text-foreground font-medium">
+                        {t(`verificationStatuses.${p.verificationStatus}`)}
+                      </span>
+                      {p.role && (
+                        <span className="px-2 py-0.5 text-xs rounded bg-primary/15 text-primary font-medium">
+                          {p.role}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveParticipant(p.personId)}
+                      className="text-xs text-red-600 dark:text-red-400 hover:underline"
+                    >
+                      {tPeopleForm('addresses.remove')}
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveParticipant(p.personId)}
-                    className="text-xs text-red-600 dark:text-red-400 hover:underline"
-                  >
-                    {tPeopleForm('addresses.remove')}
-                  </button>
+                  {p.reasonForSuspicion && (
+                    <div className="text-xs text-amber-700 dark:text-amber-400">
+                      <span className="font-medium">{t('reasonForSuspicionLabel')}:</span> {p.reasonForSuspicion}
+                    </div>
+                  )}
+                  {p.alibi && (
+                    <div className="text-xs text-emerald-700 dark:text-emerald-400">
+                      <span className="font-medium">{t('alibiLabel')}:</span> {p.alibi}
+                    </div>
+                  )}
+                  {p.notes && <div className="text-muted text-xs">— {p.notes}</div>}
                 </div>
               ))}
             </div>

@@ -27,6 +27,8 @@ interface Participant {
   involvementType?: string;
   verificationStatus?: string;
   confidence?: string | null;
+  reasonForSuspicion?: string | null;
+  alibi?: string | null;
   notes: string | null;
   person: Person;
 }
@@ -107,6 +109,8 @@ export default function EventPeopleManager({
     involvementType: 'SUSPECT',
     verificationStatus: 'HYPOTHESIS',
     confidence: '',
+    reasonForSuspicion: '',
+    alibi: '',
     notes: '',
   });
 
@@ -140,6 +144,8 @@ export default function EventPeopleManager({
           involvementType: formData.involvementType || 'SUSPECT',
           verificationStatus: formData.verificationStatus || 'HYPOTHESIS',
           confidence: formData.confidence || null,
+          reasonForSuspicion: formData.reasonForSuspicion.trim() || null,
+          alibi: formData.alibi.trim() || null,
           notes: formData.notes.trim() || null,
         }),
       });
@@ -160,6 +166,8 @@ export default function EventPeopleManager({
         involvementType: 'SUSPECT',
         verificationStatus: 'HYPOTHESIS',
         confidence: '',
+        reasonForSuspicion: '',
+        alibi: '',
         notes: '',
       });
       router.refresh();
@@ -189,6 +197,8 @@ export default function EventPeopleManager({
           involvementType: formData.involvementType || 'SUSPECT',
           verificationStatus: formData.verificationStatus || 'HYPOTHESIS',
           confidence: formData.confidence || null,
+          reasonForSuspicion: formData.reasonForSuspicion.trim() || null,
+          alibi: formData.alibi.trim() || null,
           notes: formData.notes.trim() || null,
         }),
       });
@@ -278,6 +288,8 @@ export default function EventPeopleManager({
       involvementType: participant.involvementType || 'SUSPECT',
       verificationStatus: participant.verificationStatus || 'HYPOTHESIS',
       confidence: participant.confidence || '',
+      reasonForSuspicion: participant.reasonForSuspicion || '',
+      alibi: participant.alibi || '',
       notes: participant.notes || '',
     });
     setError('');
@@ -330,6 +342,8 @@ export default function EventPeopleManager({
                 involvementType: 'SUSPECT',
                 verificationStatus: 'HYPOTHESIS',
                 confidence: '',
+                reasonForSuspicion: '',
+                alibi: '',
                 notes: '',
               });
               setError('');
@@ -373,7 +387,7 @@ export default function EventPeopleManager({
                       size={36}
                     />
                   </Link>
-                  <div>
+                  <div className="space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <Link
                         href={`/people/${participant.person.id}`}
@@ -414,8 +428,18 @@ export default function EventPeopleManager({
                         </span>
                       )}
                     </div>
+                    {participant.reasonForSuspicion && (
+                      <p className="text-xs text-amber-700 dark:text-amber-400">
+                        <span className="font-medium">{tEvents('reasonForSuspicionLabel')}:</span> {participant.reasonForSuspicion}
+                      </p>
+                    )}
+                    {participant.alibi && (
+                      <p className="text-xs text-emerald-700 dark:text-emerald-400">
+                        <span className="font-medium">{tEvents('alibiLabel')}:</span> {participant.alibi}
+                      </p>
+                    )}
                     {participant.notes && (
-                      <p className="text-xs text-muted-foreground mt-1.5 whitespace-pre-line">
+                      <p className="text-xs text-muted-foreground whitespace-pre-line">
                         📋 {participant.notes}
                       </p>
                     )}
@@ -571,6 +595,42 @@ export default function EventPeopleManager({
 
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">
+                  {tEvents('reasonForSuspicionLabel')}
+                </label>
+                <input
+                  type="text"
+                  value={formData.reasonForSuspicion}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      reasonForSuspicion: e.target.value,
+                    }))
+                  }
+                  placeholder={tEvents('reasonForSuspicionPlaceholder')}
+                  className={inputClass}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">
+                  {tEvents('alibiLabel')}
+                </label>
+                <input
+                  type="text"
+                  value={formData.alibi}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      alibi: e.target.value,
+                    }))
+                  }
+                  placeholder={tEvents('alibiPlaceholder')}
+                  className={inputClass}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">
                   {tEvents('evidenceNotesLabel')}
                 </label>
                 <textarea
@@ -702,6 +762,42 @@ export default function EventPeopleManager({
                     className={inputClass}
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">
+                  {tEvents('reasonForSuspicionLabel')}
+                </label>
+                <input
+                  type="text"
+                  value={formData.reasonForSuspicion}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      reasonForSuspicion: e.target.value,
+                    }))
+                  }
+                  placeholder={tEvents('reasonForSuspicionPlaceholder')}
+                  className={inputClass}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">
+                  {tEvents('alibiLabel')}
+                </label>
+                <input
+                  type="text"
+                  value={formData.alibi}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      alibi: e.target.value,
+                    }))
+                  }
+                  placeholder={tEvents('alibiPlaceholder')}
+                  className={inputClass}
+                />
               </div>
 
               <div>

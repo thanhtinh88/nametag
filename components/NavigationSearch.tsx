@@ -17,6 +17,12 @@ interface Person {
   nickname?: string | null;
   displayNameOverride?: string | null;
   photo?: string | null;
+  citizenId?: string | null;
+  vehicles?: string | null;
+  physicalMarks?: string | null;
+  criminalRecords?: string | null;
+  gangs?: string | null;
+  bankAccounts?: string | null;
 }
 
 interface NavigationSearchProps {
@@ -258,9 +264,20 @@ export default function NavigationSearch({ autoFocus, onClose }: NavigationSearc
               }`}
               onMouseEnter={() => setHighlightedIndex(index)}
             >
-              <div className="flex items-center gap-2 text-foreground font-medium">
-                <PersonAvatar personId={person.id} name={formatFullName(person, nameOrder)} photo={person.photo} size={24} />
-                {formatFullName(person, nameOrder)}
+              <div className="flex items-center gap-2.5 text-foreground font-medium">
+                <PersonAvatar personId={person.id} name={formatFullName(person, nameOrder)} photo={person.photo} size={28} />
+                <div className="min-w-0">
+                  <div className="truncate">{formatFullName(person, nameOrder)}</div>
+                  {(person.citizenId || person.vehicles || person.physicalMarks || person.gangs || person.bankAccounts) && (
+                    <div className="text-[11px] text-muted flex flex-wrap gap-x-2 gap-y-0.5 mt-0.5 font-normal">
+                      {person.citizenId && <span>🆔 {person.citizenId}</span>}
+                      {person.vehicles && <span>🚗 {person.vehicles}</span>}
+                      {person.physicalMarks && <span>🔍 {person.physicalMarks}</span>}
+                      {person.gangs && <span>👥 {person.gangs}</span>}
+                      {person.bankAccounts && <span>💳 STK: {person.bankAccounts}</span>}
+                    </div>
+                  )}
+                </div>
               </div>
             </button>
           ))}

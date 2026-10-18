@@ -227,6 +227,20 @@ export async function createPerson(userId: string, data: PersonInput) {
       contactReminderIntervalUnit: contactReminderEnabled ? contactReminderIntervalUnit : null,
       cardDavSyncEnabled: cardDavSyncEnabled ?? true,
       displayNameOverride: sanitizedDisplayNameOverride,
+
+      // Investigation fields
+      citizenId: data.citizenId ?? null,
+      citizenIdIssueDate: data.citizenIdIssueDate ? new Date(data.citizenIdIssueDate) : null,
+      citizenIdIssuePlace: data.citizenIdIssuePlace ?? null,
+      residenceStatus: data.residenceStatus ?? null,
+      managementLevel: data.managementLevel ?? 'NORMAL',
+      heightCm: data.heightCm ?? null,
+      weightKg: data.weightKg ?? null,
+      bloodType: data.bloodType ?? null,
+      threatLevel: data.threatLevel ?? 'LOW',
+      modusOperandi: data.modusOperandi ?? null,
+      riskNotes: data.riskNotes ?? null,
+
       groups: groupIds
         ? { create: groupIds.map((groupId) => ({ groupId })) }
         : undefined,
@@ -297,6 +311,19 @@ export async function createPerson(userId: string, data: PersonInput) {
                 key: f.key,
                 value: f.value,
                 type: f.type ?? null,
+              })),
+            }
+          : undefined,
+      bankAccounts:
+        data.bankAccounts && data.bankAccounts.length > 0
+          ? {
+              create: data.bankAccounts.map((b) => ({
+                bankName: b.bankName.trim(),
+                accountNumber: b.accountNumber.trim(),
+                accountHolder: b.accountHolder?.trim() || null,
+                accountType: b.accountType || 'OWNER',
+                isPrimary: b.isPrimary ?? false,
+                notes: b.notes?.trim() || null,
               })),
             }
           : undefined,
@@ -412,8 +439,21 @@ export async function updatePerson(id: string, userId: string, data: PersonUpdat
   if (photo !== undefined) updateData.photo = photo ?? null;
   if (gender !== undefined) updateData.gender = gender ?? null;
   if (anniversary !== undefined) updateData.anniversary = anniversary ? new Date(anniversary) : null;
-  if (lastContact !== undefined) updateData.lastContact = lastContact ? new Date(lastContact) : null;
   if (notes !== undefined) updateData.notes = sanitizedNotes;
+
+  // Investigation fields
+  if (data.citizenId !== undefined) updateData.citizenId = data.citizenId ?? null;
+  if (data.citizenIdIssueDate !== undefined)
+    updateData.citizenIdIssueDate = data.citizenIdIssueDate ? new Date(data.citizenIdIssueDate) : null;
+  if (data.citizenIdIssuePlace !== undefined) updateData.citizenIdIssuePlace = data.citizenIdIssuePlace ?? null;
+  if (data.residenceStatus !== undefined) updateData.residenceStatus = data.residenceStatus ?? null;
+  if (data.managementLevel !== undefined) updateData.managementLevel = data.managementLevel ?? 'NORMAL';
+  if (data.heightCm !== undefined) updateData.heightCm = data.heightCm ?? null;
+  if (data.weightKg !== undefined) updateData.weightKg = data.weightKg ?? null;
+  if (data.bloodType !== undefined) updateData.bloodType = data.bloodType ?? null;
+  if (data.threatLevel !== undefined) updateData.threatLevel = data.threatLevel ?? 'LOW';
+  if (data.modusOperandi !== undefined) updateData.modusOperandi = data.modusOperandi ?? null;
+  if (data.riskNotes !== undefined) updateData.riskNotes = data.riskNotes ?? null;
 
   if (contactReminderEnabled !== undefined) {
     updateData.contactReminderEnabled = contactReminderEnabled;

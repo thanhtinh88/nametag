@@ -38,6 +38,8 @@ interface PersonEventEntry {
   involvementType?: string;
   verificationStatus?: string;
   confidence?: string | null;
+  reasonForSuspicion?: string | null;
+  alibi?: string | null;
   notes: string | null;
   event: EventItem;
 }
@@ -120,6 +122,8 @@ export default function PersonEventsManager({
     involvementType: 'SUSPECT',
     verificationStatus: 'HYPOTHESIS',
     confidence: '',
+    reasonForSuspicion: '',
+    alibi: '',
     notes: '',
   });
 
@@ -189,6 +193,8 @@ export default function PersonEventsManager({
           involvementType: formData.involvementType || 'SUSPECT',
           verificationStatus: formData.verificationStatus || 'HYPOTHESIS',
           confidence: formData.confidence || null,
+          reasonForSuspicion: formData.reasonForSuspicion.trim() || null,
+          alibi: formData.alibi.trim() || null,
           notes: formData.notes.trim() || null,
         }),
       });
@@ -208,6 +214,8 @@ export default function PersonEventsManager({
         involvementType: 'SUSPECT',
         verificationStatus: 'HYPOTHESIS',
         confidence: '',
+        reasonForSuspicion: '',
+        alibi: '',
         notes: '',
       });
       router.refresh();
@@ -298,6 +306,8 @@ export default function PersonEventsManager({
                   involvementType: 'SUSPECT',
                   verificationStatus: 'HYPOTHESIS',
                   confidence: '',
+                  reasonForSuspicion: '',
+                  alibi: '',
                   notes: '',
                 });
                 setError('');
@@ -327,7 +337,7 @@ export default function PersonEventsManager({
                       : 'bg-surface-elevated border-border'
                   }`}
                 >
-                  <div>
+                  <div className="space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <Link
                         href={`/events/${pe.event.id}`}
@@ -369,8 +379,18 @@ export default function PersonEventsManager({
                         </span>
                       )}
                     </div>
+                    {pe.reasonForSuspicion && (
+                      <p className="text-xs text-amber-700 dark:text-amber-400">
+                        <span className="font-medium">{tEvents('reasonForSuspicionLabel')}:</span> {pe.reasonForSuspicion}
+                      </p>
+                    )}
+                    {pe.alibi && (
+                      <p className="text-xs text-emerald-700 dark:text-emerald-400">
+                        <span className="font-medium">{tEvents('alibiLabel')}:</span> {pe.alibi}
+                      </p>
+                    )}
                     {pe.notes && (
-                      <p className="text-xs text-muted mt-1">📋 {pe.notes}</p>
+                      <p className="text-xs text-muted whitespace-pre-line">📋 {pe.notes}</p>
                     )}
                   </div>
                   <div className="flex items-center gap-2 self-end sm:self-center">
@@ -578,6 +598,42 @@ export default function PersonEventsManager({
                     className={inputClass}
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">
+                  {tEvents('reasonForSuspicionLabel')}
+                </label>
+                <input
+                  type="text"
+                  value={formData.reasonForSuspicion}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      reasonForSuspicion: e.target.value,
+                    }))
+                  }
+                  placeholder={tEvents('reasonForSuspicionPlaceholder')}
+                  className={inputClass}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">
+                  {tEvents('alibiLabel')}
+                </label>
+                <input
+                  type="text"
+                  value={formData.alibi}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      alibi: e.target.value,
+                    }))
+                  }
+                  placeholder={tEvents('alibiPlaceholder')}
+                  className={inputClass}
+                />
               </div>
 
               <div>

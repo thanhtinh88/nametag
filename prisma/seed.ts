@@ -9,7 +9,7 @@ async function main() {
   // Dynamically import prisma after env is loaded. The seed wipes and rebuilds
   // the database, so it uses the client that sees soft-deleted rows too.
   const { prismaIncludingDeleted: prisma } = await import('../lib/prisma');
-  console.log('🌱 Bắt đầu khởi tạo dữ liệu mẫu điều tra vụ án & đối tượng (Investigation Demo)...');
+  console.log('🌱 Bắt đầu khởi tạo dữ liệu mẫu điều tra vụ án & đối tượng (Investigation Demo System)...');
 
   // Clear existing data in foreign-key-safe order
   await prisma.journalEntryEvent.deleteMany();
@@ -22,6 +22,16 @@ async function main() {
   await prisma.eventUrl.deleteMany();
   await prisma.eventCustomField.deleteMany();
   await prisma.event.deleteMany();
+
+  // Clear investigation sub-entities
+  await prisma.suspectBankAccount.deleteMany();
+  await prisma.suspectVehicle.deleteMany();
+  await prisma.physicalMark.deleteMany();
+  await prisma.criminalRecord.deleteMany();
+  await prisma.gangMembership.deleteMany();
+  await prisma.gang.deleteMany();
+
+  // Clear person sub-entities
   await prisma.personCustomFieldValue.deleteMany();
   await prisma.customFieldTemplate.deleteMany();
   await prisma.personAddress.deleteMany();
@@ -39,7 +49,9 @@ async function main() {
   await prisma.person.deleteMany();
   await prisma.group.deleteMany();
 
-  // 1. Upsert Demo Investigator User (preserving user.id so active browser sessions stay valid)
+  console.log('✓ Đã dọn sạch cơ sở dữ liệu cũ');
+
+  // 1. Upsert Demo Investigator User
   const hashedPassword = await bcrypt.hash('password123', 10);
   await prisma.user.upsert({
     where: { email: 'demo@nametag.one' },
@@ -67,1313 +79,1823 @@ async function main() {
     },
   });
 
-  // Seed investigation data for ALL existing users (including demo@nametag.one and any custom account)
+  // Seed investigation data for all users in the DB
   await prisma.user.updateMany({
     data: { nameOrder: 'EASTERN' },
   });
   const allUsers = await prisma.user.findMany();
+
   for (const user of allUsers) {
     console.log(`\n👤 Đang nạp dữ liệu điều tra mẫu cho tài khoản: ${user.email} (ID: ${user.id})...`);
 
-  // 2. Create Investigation Relationship Types
-  const bossType = await prisma.relationshipType.create({
-    data: {
-      userId: user.id,
-      name: 'BOSS',
-      label: 'Cầm đầu / Chỉ đạo',
-      color: '#EF4444',
-    },
-  });
+    // 2. Create Investigation Relationship Types
+    const bossType = await prisma.relationshipType.create({
+      data: {
+        userId: user.id,
+        name: 'BOSS',
+        label: 'Cầm đầu / Chỉ đạo',
+        color: '#EF4444',
+      },
+    });
 
-  const subordinateType = await prisma.relationshipType.create({
-    data: {
-      userId: user.id,
-      name: 'SUBORDINATE',
-      label: 'Đàn em / Chân rết',
-      color: '#F97316',
-      inverseId: bossType.id,
-    },
-  });
+    const subordinateType = await prisma.relationshipType.create({
+      data: {
+        userId: user.id,
+        name: 'SUBORDINATE',
+        label: 'Đàn em / Chân rết',
+        color: '#F97316',
+        inverseId: bossType.id,
+      },
+    });
 
-  await prisma.relationshipType.update({
-    where: { id: bossType.id },
-    data: { inverseId: subordinateType.id },
-  });
+    await prisma.relationshipType.update({
+      where: { id: bossType.id },
+      data: { inverseId: subordinateType.id },
+    });
 
-  const accompliceType = await prisma.relationshipType.create({
-    data: {
-      userId: user.id,
-      name: 'ACCOMPLICE',
-      label: 'Đồng bọn / Chiến hữu',
-      color: '#F59E0B',
-    },
-  });
-  await prisma.relationshipType.update({
-    where: { id: accompliceType.id },
-    data: { inverseId: accompliceType.id },
-  });
+    const accompliceType = await prisma.relationshipType.create({
+      data: {
+        userId: user.id,
+        name: 'ACCOMPLICE',
+        label: 'Đồng bọn / Chiến hữu',
+        color: '#F59E0B',
+      },
+    });
+    await prisma.relationshipType.update({
+      where: { id: accompliceType.id },
+      data: { inverseId: accompliceType.id },
+    });
 
-  const fenceType = await prisma.relationshipType.create({
-    data: {
-      userId: user.id,
-      name: 'FENCE',
-      label: 'Đầu mối tiêu thụ',
-      color: '#8B5CF6',
-    },
-  });
-  await prisma.relationshipType.update({
-    where: { id: fenceType.id },
-    data: { inverseId: fenceType.id },
-  });
+    const fenceType = await prisma.relationshipType.create({
+      data: {
+        userId: user.id,
+        name: 'FENCE',
+        label: 'Đầu mối tiêu thụ',
+        color: '#8B5CF6',
+      },
+    });
+    await prisma.relationshipType.update({
+      where: { id: fenceType.id },
+      data: { inverseId: fenceType.id },
+    });
 
-  const spouseType = await prisma.relationshipType.create({
-    data: {
-      userId: user.id,
-      name: 'SPOUSE',
-      label: 'Vợ / Chồng / Nhân tình',
-      color: '#EC4899',
-    },
-  });
-  await prisma.relationshipType.update({
-    where: { id: spouseType.id },
-    data: { inverseId: spouseType.id },
-  });
+    const spouseType = await prisma.relationshipType.create({
+      data: {
+        userId: user.id,
+        name: 'SPOUSE',
+        label: 'Vợ / Chồng / Nhân tình',
+        color: '#EC4899',
+      },
+    });
+    await prisma.relationshipType.update({
+      where: { id: spouseType.id },
+      data: { inverseId: spouseType.id },
+    });
 
-  const siblingType = await prisma.relationshipType.create({
-    data: {
-      userId: user.id,
-      name: 'SIBLING',
-      label: 'Anh / Chị / Em ruột',
-      color: '#6366F1',
-    },
-  });
-  await prisma.relationshipType.update({
-    where: { id: siblingType.id },
-    data: { inverseId: siblingType.id },
-  });
+    const siblingType = await prisma.relationshipType.create({
+      data: {
+        userId: user.id,
+        name: 'SIBLING',
+        label: 'Anh / Chị / Em ruột',
+        color: '#6366F1',
+      },
+    });
+    await prisma.relationshipType.update({
+      where: { id: siblingType.id },
+      data: { inverseId: siblingType.id },
+    });
 
-  const friendType = await prisma.relationshipType.create({
-    data: {
-      userId: user.id,
-      name: 'FRIEND',
-      label: 'Quan hệ xã hội',
-      color: '#3B82F6',
-    },
-  });
-  await prisma.relationshipType.update({
-    where: { id: friendType.id },
-    data: { inverseId: friendType.id },
-  });
+    const friendType = await prisma.relationshipType.create({
+      data: {
+        userId: user.id,
+        name: 'FRIEND',
+        label: 'Quan hệ xã hội',
+        color: '#3B82F6',
+      },
+    });
+    await prisma.relationshipType.update({
+      where: { id: friendType.id },
+      data: { inverseId: friendType.id },
+    });
 
-  const colleagueType = await prisma.relationshipType.create({
-    data: {
-      userId: user.id,
-      name: 'COLLEAGUE',
-      label: 'Làm ăn chung / Đồng nghiệp',
-      color: '#10B981',
-    },
-  });
-  await prisma.relationshipType.update({
-    where: { id: colleagueType.id },
-    data: { inverseId: colleagueType.id },
-  });
+    console.log('✓ Đã tạo các loại mối quan hệ nghiệp vụ');
 
-  const informantType = await prisma.relationshipType.create({
-    data: {
-      userId: user.id,
-      name: 'INFORMANT',
-      label: 'Cơ sở / Nguồn tin',
-      color: '#06B6D4',
-    },
-  });
-  await prisma.relationshipType.update({
-    where: { id: informantType.id },
-    data: { inverseId: informantType.id },
-  });
+    // 3. Create Criminal Gangs (Băng nhóm tội phạm)
+    const gangLongBien = await prisma.gang.create({
+      data: {
+        userId: user.id,
+        name: 'Băng nhóm Hùng Sói (Long Biên)',
+        turf: 'Long Biên, Hoàn Kiếm, Gia Lâm',
+        description: 'Ổ nhóm chuyên đột nhập ban đêm, vô hiệu hóa hệ thống báo động các cửa hàng kim hoàn và kho hàng.',
+        color: '#EF4444',
+      },
+    });
 
-  console.log('✓ Đã tạo 9 loại mối quan hệ nghiệp vụ');
+    const gangCauGiay = await prisma.gang.create({
+      data: {
+        userId: user.id,
+        name: 'Băng nhóm Cầu Giấy (Khánh Chột)',
+        turf: 'Cầu Giấy, Nam Từ Liêm, Bắc Từ Liêm',
+        description: 'Chuyên cướp giật tài sản, cắt khóa kho xưởng công nghệ cao và đe dọa đòi nợ thuê.',
+        color: '#F59E0B',
+      },
+    });
 
-  // 3. Create Groups (Task Forces / Criminal Rings / Categories)
-  const taskForceGroup = await prisma.group.create({
-    data: {
-      userId: user.id,
-      name: 'Chuyên án VA-2026A (Trộm tiệm vàng & Kho hàng)',
-      description: 'Các đối tượng và vụ án thuộc diện theo dõi đặc biệt của Chuyên án VA-2026A',
-      color: '#EF4444',
-    },
-  });
+    const gangPhoHue = await prisma.gang.create({
+      data: {
+        userId: user.id,
+        name: 'Đường dây Tiêu thụ & Tín dụng đen Phố Huế',
+        turf: 'Hai Bà Trưng, Đống Đa, Hoàng Mai',
+        description: 'Cơ sở cầm đồ trá hình, chuyên thu mua vàng trộm cắp nấu chảy và cho vay nặng lãi cưỡng đoạt.',
+        color: '#8B5CF6',
+      },
+    });
 
-  const longBienGangGroup = await prisma.group.create({
-    data: {
-      userId: user.id,
-      name: 'Băng nhóm Hùng Sói (Long Biên)',
-      description: 'Ổ nhóm chuyên đột nhập ban đêm, vô hiệu hóa hệ thống báo động tại Hà Nội',
-      color: '#F59E0B',
-    },
-  });
+    console.log('✓ Đã tạo 3 băng nhóm tội phạm địa bàn');
 
-  const fenceRingGroup = await prisma.group.create({
-    data: {
-      userId: user.id,
-      name: 'Đường dây tiêu thụ tài sản gian',
-      description: 'Các cơ sở cầm đồ, tiệm vàng, cửa hàng điện thoại nghi vấn tiêu thụ tang vật',
-      color: '#8B5CF6',
-    },
-  });
+    // 4. Create Groups (Chuyên án & Danh mục quản lý)
+    const taskForceGroup = await prisma.group.create({
+      data: {
+        userId: user.id,
+        name: 'Chuyên án VA-2026A (Trộm tiệm vàng & Kho hàng)',
+        description: 'Các đối tượng và vụ án thuộc diện theo dõi đặc biệt của Ban chuyên án',
+        color: '#EF4444',
+      },
+    });
 
-  const witnessGroup = await prisma.group.create({
-    data: {
-      userId: user.id,
-      name: 'Nhân chứng & Nguồn tin cơ sở',
-      description: 'Nhân chứng hiện trường, bị hại và quần chúng cung cấp tin báo có giá trị',
-      color: '#10B981',
-    },
-  });
+    const fenceRingGroup = await prisma.group.create({
+      data: {
+        userId: user.id,
+        name: 'Đường dây tiêu thụ tài sản gian',
+        description: 'Các cơ sở cầm đồ, tiệm vàng, cửa hàng điện thoại nghi vấn tiêu thụ tang vật',
+        color: '#8B5CF6',
+      },
+    });
 
-  console.log('✓ Đã tạo 4 nhóm chuyên án & phân loại đối tượng');
+    // 5. Create 22 People (Subjects & Witnesses) with Full Dossiers
+    // Subject 1: Nguyễn Văn Hùng ("Hùng Sói") - Ringleader
+    const hungSoi = await prisma.person.create({
+      data: {
+        userId: user.id,
+        surname: 'Nguyễn',
+        middleName: 'Văn',
+        name: 'Hùng',
+        nickname: 'Hùng Sói',
+        organization: 'Tự do',
+        jobTitle: 'Đối tượng cầm đầu ổ nhóm',
+        citizenId: '001086012491',
+        residenceStatus: 'TEMPORARY',
+        managementLevel: 'KEY_TARGET',
+        threatLevel: 'HIGH',
+        heightCm: 174,
+        weightKg: 68,
+        bloodType: 'O',
+        modusOperandi: 'Chuyên cạy khóa, vô hiệu hóa báo động hồng ngoại đột nhập ban đêm các tiệm vàng và kho hàng giá trị cao.',
+        riskNotes: 'Rất cảnh giác, thường xuyên đổi số điện thoại và chỗ ở. Có mang theo hung khí khi hành sự.',
+        notes: 'Đối tượng cộm cán, có 2 tiền án trộm cắp tài sản. Thường xuyên di chuyển giữa Long Biên và khu phố cổ Hoàn Kiếm vào ban đêm.',
+        groups: { create: [{ groupId: taskForceGroup.id }] },
+        phoneNumbers: {
+          create: [
+            { type: 'mobile', number: '0912 345 678' },
+            { type: 'other', number: '0988 999 113' },
+          ],
+        },
+        addresses: {
+          create: [
+            {
+              type: 'other',
+              streetLine1: 'Số 18 Ngõ Đào Duy Từ, Phường Hàng Buồm',
+              locality: 'Quận Hoàn Kiếm',
+              region: 'Hà Nội',
+              country: 'Việt Nam',
+              latitude: 21.0362,
+              longitude: 105.8538,
+              geocodeStatus: 'success',
+              geocodedAt: new Date(),
+            },
+            {
+              type: 'home',
+              streetLine1: 'Số 142 Nguyễn Văn Cừ, Phường Bồ Đề',
+              locality: 'Quận Long Biên',
+              region: 'Hà Nội',
+              country: 'Việt Nam',
+              latitude: 21.0455,
+              longitude: 105.8752,
+              geocodeStatus: 'success',
+              geocodedAt: new Date(),
+            },
+          ],
+        },
+        vehicles: {
+          create: [
+            {
+              plateNumber: '29A-868.92',
+              vehicleType: 'Xe máy tay ga',
+              brandModel: 'Honda SH 150i',
+              color: 'Đen bóng',
+              identifyingFeatures: 'Mặt nạ độ SH Ý, bọc carbon tay dắt',
+              isSuspicious: true,
+            },
+          ],
+        },
+        bankAccounts: {
+          create: [
+            {
+              bankName: 'MB Bank',
+              accountNumber: '098877665544',
+              accountHolder: 'NGUYEN MANH HUNG',
+              accountType: 'OWNER',
+              isPrimary: true,
+              notes: 'Tài khoản chính chủ kinh doanh dịch vụ game net',
+            },
+            {
+              bankName: 'VPBank',
+              accountNumber: '9988112233',
+              accountHolder: 'TRAN THI HOA',
+              accountType: 'MULE',
+              isPrimary: false,
+              notes: 'Tài khoản rác mượn của bạn gái nhận chuyển tiền bảo kê',
+            },
+          ],
+        },
+        physicalMarks: {
+          create: [
+            {
+              type: 'TATTOO',
+              location: 'Bả vai trái',
+              description: 'Xăm hình đầu sói ngậm trăng khuyết kích thước 15x15cm',
+            },
+            {
+              type: 'SCAR',
+              location: 'Lông mày phải',
+              description: 'Vết sẹo rách dài 4cm cắt ngang lông mày',
+            },
+          ],
+        },
+        criminalRecords: {
+          create: [
+            {
+              charge: 'Trộm cắp tài sản',
+              recordType: 'CONVICTION',
+              sentenceDetail: '3 năm tù giam (TAND quận Long Biên)',
+              verdictDate: new Date('2018-06-15'),
+            },
+            {
+              charge: 'Trộm cắp tài sản',
+              recordType: 'CONVICTION',
+              sentenceDetail: '2 năm 6 tháng tù giam (TAND quận Hoàn Kiếm)',
+              verdictDate: new Date('2021-09-20'),
+            },
+          ],
+        },
+      },
+    });
 
-  // 4. Create Custom Field Templates (for filtering on Dashboard / People list)
-  const riskTemplate = await prisma.customFieldTemplate.create({
-    data: {
-      userId: user.id,
-      name: 'Mức độ nguy hiểm',
-      slug: 'muc-do-nguy-hiem',
-      type: 'SELECT',
-      options: ['Cao (Có vũ khí)', 'Trung bình', 'Thấp', 'Không nguy hiểm'],
-      order: 0,
-    },
-  });
+    // Subject 2: Lê Hoàng Hải ("Hải Cận") - Lock & Electronics Specialist
+    const haiCan = await prisma.person.create({
+      data: {
+        userId: user.id,
+        surname: 'Lê',
+        middleName: 'Hoàng',
+        name: 'Hải',
+        nickname: 'Hải Cận',
+        organization: 'Tiệm sửa khóa & Điện tử Hoàng Hải',
+        jobTitle: 'Thợ khóa / Kỹ thuật điện tử',
+        citizenId: '001089004112',
+        residenceStatus: 'PERMANENT',
+        managementLevel: 'KEY_TARGET',
+        threatLevel: 'MEDIUM',
+        heightCm: 168,
+        weightKg: 60,
+        modusOperandi: 'Dùng thiết bị điện tử giải mã khóa thẻ từ, dò mã két sắt số, ngắt nguồn dự phòng hộp báo động.',
+        notes: 'Am hiểu sâu về hệ thống báo động hồng ngoại, camera giám sát và két sắt điện tử.',
+        groups: { create: [{ groupId: taskForceGroup.id }] },
+        phoneNumbers: { create: [{ type: 'mobile', number: '0904 512 889' }] },
+        addresses: {
+          create: [
+            {
+              type: 'home',
+              streetLine1: 'Số 45 Phố Phúc Tân, Phường Phúc Tân',
+              locality: 'Quận Hoàn Kiếm',
+              region: 'Hà Nội',
+              latitude: 21.0378,
+              longitude: 105.8588,
+              geocodeStatus: 'success',
+              geocodedAt: new Date(),
+            },
+          ],
+        },
+        vehicles: {
+          create: [
+            {
+              plateNumber: '29B1-234.56',
+              vehicleType: 'Xe máy',
+              brandModel: 'Yamaha Exciter 150',
+              color: 'Xanh GP',
+              identifyingFeatures: 'Bô độ nổ giòn, mất chắn bùn sau',
+              isSuspicious: true,
+            },
+          ],
+        },
+        physicalMarks: {
+          create: [
+            {
+              type: 'MOLE',
+              location: 'Đuôi mắt trái',
+              description: 'Nốt ruồi đen nổi rõ cách đuôi mắt 1cm',
+            },
+            {
+              type: 'SCAR',
+              location: 'Mu bàn tay phải',
+              description: 'Sẹo bỏng chì hàn hình tròn đường kính 2cm',
+            },
+          ],
+        },
+        criminalRecords: {
+          create: [
+            {
+              charge: 'Trộm cắp tài sản',
+              recordType: 'CONVICTION',
+              sentenceDetail: '2 năm tù giam (TAND quận Ba Đình)',
+              verdictDate: new Date('2020-04-10'),
+            },
+          ],
+        },
+      },
+    });
 
-  const priorRecordTemplate = await prisma.customFieldTemplate.create({
-    data: {
-      userId: user.id,
-      name: 'Có tiền án tiền sự',
-      slug: 'co-tien-an-tien-su',
-      type: 'BOOLEAN',
-      options: [],
-      order: 1,
-    },
-  });
+    // Subject 3: Phạm Quốc Tuấn ("Tuấn Xế") - Driver / Lookout
+    const tuanXe = await prisma.person.create({
+      data: {
+        userId: user.id,
+        surname: 'Phạm',
+        middleName: 'Quốc',
+        name: 'Tuấn',
+        nickname: 'Tuấn Xế',
+        organization: 'Lái xe dịch vụ tự do',
+        citizenId: '001091008873',
+        residenceStatus: 'PERMANENT',
+        managementLevel: 'SURVEILLANCE',
+        threatLevel: 'MEDIUM',
+        heightCm: 172,
+        weightKg: 70,
+        modusOperandi: 'Lái xe bán tải gắn biển giả chở đồng bọn và tẩu tán tang vật lúc nửa đêm, cảnh giới từ xa qua bộ đàm.',
+        groups: { create: [{ groupId: taskForceGroup.id }] },
+        phoneNumbers: { create: [{ type: 'mobile', number: '0978 654 321' }] },
+        addresses: {
+          create: [
+            {
+              type: 'home',
+              streetLine1: 'Ngõ 12 Phố Hàng Buồm, Phường Hàng Buồm',
+              locality: 'Quận Hoàn Kiếm',
+              region: 'Hà Nội',
+              latitude: 21.0355,
+              longitude: 105.8512,
+              geocodeStatus: 'success',
+              geocodedAt: new Date(),
+            },
+          ],
+        },
+        vehicles: {
+          create: [
+            {
+              plateNumber: '29H-512.68',
+              vehicleType: 'Ô tô bán tải',
+              brandModel: 'Ford Ranger XLS',
+              color: 'Đen mờ',
+              identifyingFeatures: 'Thùng sau có nắp cuộn kéo, dán decal Offroad',
+              isSuspicious: true,
+            },
+            {
+              plateNumber: '29E1-456.78',
+              vehicleType: 'Xe máy',
+              brandModel: 'Honda Wave Alpha',
+              color: 'Đỏ cờ',
+              isSuspicious: false,
+            },
+          ],
+        },
+        criminalRecords: {
+          create: [
+            {
+              charge: 'Gây rối trật tự công cộng',
+              recordType: 'ADMIN_VIOLATION',
+              sentenceDetail: 'Phạt hành chính 3.500.000 VNĐ',
+              verdictDate: new Date('2023-08-14'),
+            },
+          ],
+        },
+      },
+    });
 
-  const vehiclePlateTemplate = await prisma.customFieldTemplate.create({
-    data: {
-      userId: user.id,
-      name: 'Biển số phương tiện',
-      slug: 'bien-so-phuong-tien',
-      type: 'TEXT',
-      options: [],
-      order: 2,
-    },
-  });
+    // Subject 4: Đặng Thị Mai ("Mai Vàng") - Pawnshop / Stolen Assets Fence
+    const maiVang = await prisma.person.create({
+      data: {
+        userId: user.id,
+        surname: 'Đặng',
+        middleName: 'Thị',
+        name: 'Mai',
+        nickname: 'Mai Vàng',
+        organization: 'Dịch vụ Cầm đồ Ánh Mai',
+        jobTitle: 'Chủ cơ sở cầm đồ',
+        citizenId: '001185002234',
+        residenceStatus: 'PERMANENT',
+        managementLevel: 'KEY_TARGET',
+        threatLevel: 'MEDIUM',
+        heightCm: 160,
+        weightKg: 55,
+        modusOperandi: 'Nhận vàng trộm cắp nấu chảy thành thỏi nhỏ ngay trong đêm; cho vay lãi nặng siết nợ.',
+        groups: { create: [{ groupId: fenceRingGroup.id }] },
+        phoneNumbers: { create: [{ type: 'work', number: '0913 222 888' }] },
+        addresses: {
+          create: [
+            {
+              type: 'work',
+              streetLine1: 'Số 215 Phố Huế, Phường Phố Huế',
+              locality: 'Quận Hai Bà Trưng',
+              region: 'Hà Nội',
+              latitude: 21.0165,
+              longitude: 105.8515,
+              geocodeStatus: 'success',
+              geocodedAt: new Date(),
+            },
+          ],
+        },
+        vehicles: {
+          create: [
+            {
+              plateNumber: '29A-999.88',
+              vehicleType: 'Ô tô 5 chỗ',
+              brandModel: 'Mercedes-Benz C200',
+              color: 'Trắng ngọc trai',
+              isSuspicious: false,
+            },
+          ],
+        },
+        bankAccounts: {
+          create: [
+            {
+              bankName: 'Vietcombank',
+              accountNumber: '0011004455667',
+              accountHolder: 'DANG THI MAI',
+              accountType: 'OWNER',
+              isPrimary: true,
+              notes: 'Tài khoản chính chủ tiệm cầm đồ Ánh Mai',
+            },
+            {
+              bankName: 'ACB',
+              accountNumber: '8888999922',
+              accountHolder: 'NGUYEN VAN TRUONG',
+              accountType: 'SUSPICIOUS',
+              isPrimary: false,
+              notes: 'Nghi vấn nhận tiền chuyển khoản thanh toán vàng tang vật không hóa đơn',
+            },
+            {
+              bankName: 'TPBank',
+              accountNumber: '03344556677',
+              accountHolder: 'LE THI LIEN',
+              accountType: 'MULE',
+              isPrimary: false,
+              notes: 'Tài khoản gom tiền mua crypto chuyển ra nước ngoài',
+            },
+          ],
+        },
+        criminalRecords: {
+          create: [
+            {
+              charge: 'Chứa chấp hoặc tiêu thụ tài sản do người khác phạm tội mà có',
+              recordType: 'CONVICTION',
+              sentenceDetail: '18 tháng tù treo (TAND quận Hai Bà Trưng)',
+              verdictDate: new Date('2022-11-05'),
+            },
+          ],
+        },
+      },
+    });
 
-  const idNumberTemplate = await prisma.customFieldTemplate.create({
-    data: {
-      userId: user.id,
-      name: 'Số CCCD / Định danh',
-      slug: 'so-cccd-dinh-danh',
-      type: 'TEXT',
-      options: [],
-      order: 3,
-    },
-  });
+    // Subject 5: Vũ Đình Khánh ("Khánh Chột") - Enforcer & Warehouse Cutter
+    const khanhChot = await prisma.person.create({
+      data: {
+        userId: user.id,
+        surname: 'Vũ',
+        middleName: 'Đình',
+        name: 'Khánh',
+        nickname: 'Khánh Chột',
+        organization: 'Bảo kê tự do',
+        citizenId: '001088006655',
+        residenceStatus: 'TEMPORARY',
+        managementLevel: 'KEY_TARGET',
+        threatLevel: 'ARMED_DANGEROUS',
+        heightCm: 178,
+        weightKg: 82,
+        modusOperandi: 'Dùng kìm cộng lực thủy lực cắt khóa cửa cuốn kho hàng; manh động chống trả khi bị vây bắt.',
+        groups: { create: [{ groupId: taskForceGroup.id }] },
+        phoneNumbers: { create: [{ type: 'mobile', number: '0966 888 999' }] },
+        addresses: {
+          create: [
+            {
+              type: 'home',
+              streetLine1: 'Ngõ 165 Đường Cầu Giấy, Phường Dịch Vọng',
+              locality: 'Quận Cầu Giấy',
+              region: 'Hà Nội',
+              latitude: 21.0335,
+              longitude: 105.7925,
+              geocodeStatus: 'success',
+              geocodedAt: new Date(),
+            },
+          ],
+        },
+        vehicles: {
+          create: [
+            {
+              plateNumber: '29X1-678.90',
+              vehicleType: 'Xe máy',
+              brandModel: 'Honda Winner X',
+              color: 'Đen nhám',
+              identifyingFeatures: 'Bọc tem rằn ri quân đội, mâm sơn vàng đồng',
+              isSuspicious: true,
+            },
+          ],
+        },
+        physicalMarks: {
+          create: [
+            {
+              type: 'SCAR',
+              location: 'Khóe mắt trái',
+              description: 'Vết chém dài làm hỏng một phần mí mắt trái (chột mắt)',
+            },
+            {
+              type: 'TATTOO',
+              location: 'Ngực trước',
+              description: 'Xăm hình mặt hổ vằn nhe nanh',
+            },
+          ],
+        },
+        criminalRecords: {
+          create: [
+            {
+              charge: 'Cố ý gây thương tích',
+              recordType: 'CONVICTION',
+              sentenceDetail: '4 năm tù giam (TAND quận Cầu Giấy)',
+              verdictDate: new Date('2017-03-12'),
+            },
+            {
+              charge: 'Cướp tài sản',
+              recordType: 'CONVICTION',
+              sentenceDetail: '5 năm tù giam (TAND TP Hà Nội)',
+              verdictDate: new Date('2021-08-25'),
+            },
+          ],
+        },
+      },
+    });
 
-  console.log('✓ Đã tạo 4 trường tùy chỉnh (Custom Fields) phục vụ bộ lọc điều tra');
+    // Subject 6: Trần Minh Đức ("Đức Đen") - Electronics Fence
+    const ducDen = await prisma.person.create({
+      data: {
+        userId: user.id,
+        surname: 'Trần',
+        middleName: 'Minh',
+        name: 'Đức',
+        nickname: 'Đức Đen',
+        organization: 'Cửa hàng Điện thoại Đức Mobile',
+        citizenId: '001092003344',
+        residenceStatus: 'PERMANENT',
+        managementLevel: 'SURVEILLANCE',
+        threatLevel: 'LOW',
+        groups: { create: [{ groupId: fenceRingGroup.id }] },
+        phoneNumbers: { create: [{ type: 'work', number: '0936 123 789' }] },
+        addresses: {
+          create: [
+            {
+              type: 'work',
+              streetLine1: 'Số 78 Phố Chùa Bộc, Phường Quang Trung',
+              locality: 'Quận Đống Đa',
+              region: 'Hà Nội',
+              latitude: 21.0085,
+              longitude: 105.8285,
+              geocodeStatus: 'success',
+              geocodedAt: new Date(),
+            },
+          ],
+        },
+        vehicles: {
+          create: [
+            {
+              plateNumber: '29D1-345.67',
+              vehicleType: 'Xe máy tay ga',
+              brandModel: 'Vespa Sprint',
+              color: 'Xám xi măng',
+              isSuspicious: false,
+            },
+          ],
+        },
+        criminalRecords: {
+          create: [
+            {
+              charge: 'Tiêu thụ tài sản không rõ nguồn gốc',
+              recordType: 'ADMIN_VIOLATION',
+              sentenceDetail: 'Xử phạt hành chính 15.000.000 VNĐ',
+              verdictDate: new Date('2024-02-18'),
+            },
+          ],
+        },
+      },
+    });
 
-  // 5. Create Subjects (People) — independent network (no "relationshipToUserId" required)
-  // Coordinates are placed accurately around Hanoi (Hoàn Kiếm, Hai Bà Trưng, Đống Đa, Cầu Giấy, Long Biên)
-  // so 500m / 1km / 2km / 5km proximity rings on the Map immediately highlight relevant subjects.
+    // Subject 7: Hoàng Văn Nam ("Nam Béo") - Ruled Out Suspect
+    const namBeo = await prisma.person.create({
+      data: {
+        userId: user.id,
+        surname: 'Hoàng',
+        middleName: 'Văn',
+        name: 'Nam',
+        nickname: 'Nam Béo',
+        citizenId: '001087009988',
+        residenceStatus: 'PERMANENT',
+        managementLevel: 'SURVEILLANCE',
+        threatLevel: 'LOW',
+        notes: 'Có tiền án trộm cắp nhưng đã hoàn lương, được loại trừ nghi vấn vụ Kim Bảo do đang nằm viện mổ ruột thừa.',
+        addresses: {
+          create: [
+            {
+              type: 'home',
+              streetLine1: 'Số 88 Phố Ngô Gia Tự, Phường Đức Giang',
+              locality: 'Quận Long Biên',
+              region: 'Hà Nội',
+              latitude: 21.0585,
+              longitude: 105.8895,
+              geocodeStatus: 'success',
+              geocodedAt: new Date(),
+            },
+          ],
+        },
+        vehicles: {
+          create: [
+            {
+              plateNumber: '29K1-789.01',
+              vehicleType: 'Xe máy',
+              brandModel: 'Honda Lead',
+              color: 'Vàng cát',
+              isSuspicious: false,
+            },
+          ],
+        },
+        criminalRecords: {
+          create: [
+            {
+              charge: 'Trộm cắp tài sản',
+              recordType: 'CONVICTION',
+              sentenceDetail: '18 tháng tù (đã chấp hành xong năm 2019)',
+              isPardoned: true,
+              verdictDate: new Date('2018-01-10'),
+            },
+          ],
+        },
+      },
+    });
 
-  // Subject 1: Nguyễn Văn Hùng ("Hùng Sói") - Ringleader
-  const hungSoi = await prisma.person.create({
-    data: {
-      userId: user.id,
-      surname: 'Nguyễn',
-      middleName: 'Văn',
-      name: 'Hùng',
-      nickname: 'Hùng Sói',
-      organization: 'Tự do (Băng nhóm Long Biên)',
-      jobTitle: 'Đối tượng cầm đầu',
-      lastContact: new Date('2026-03-10'),
-      notes:
-        'Đối tượng có 2 tiền án về tội Trộm cắp tài sản (2018, 2021). Đặc điểm nhận dạng: Sẹo dài 4cm ở lông mày phải, xăm hình sói ở bả vai trái. Thường xuyên di chuyển giữa Long Biên và khu phố cổ Hoàn Kiếm vào ban đêm.',
-      groups: {
-        create: [{ groupId: taskForceGroup.id }, { groupId: longBienGangGroup.id }],
+    // Subject 8: Bùi Thanh Thảo ("Thảo Ngân") - Jewelry Store Teller (Victim / Coerced)
+    const thaoNgan = await prisma.person.create({
+      data: {
+        userId: user.id,
+        surname: 'Bùi',
+        middleName: 'Thanh',
+        name: 'Thảo',
+        nickname: 'Thảo Ngân',
+        organization: 'Tiệm vàng Kim Bảo',
+        jobTitle: 'Thu ngân chính',
+        citizenId: '001198005566',
+        residenceStatus: 'PERMANENT',
+        managementLevel: 'NORMAL',
+        threatLevel: 'LOW',
+        notes: 'Thu ngân tiệm vàng, nợ tiền lãi của Mai Vàng, nghi vấn bị ép buộc cung cấp mã bảo trì báo động.',
+        addresses: {
+          create: [
+            {
+              type: 'home',
+              streetLine1: 'Số 52 Phố Hàng Bạc, Phường Hàng Bạc',
+              locality: 'Quận Hoàn Kiếm',
+              region: 'Hà Nội',
+              latitude: 21.0342,
+              longitude: 105.8528,
+              geocodeStatus: 'success',
+              geocodedAt: new Date(),
+            },
+          ],
+        },
+        bankAccounts: {
+          create: [
+            {
+              bankName: 'VPBank',
+              accountNumber: '198888776655',
+              accountHolder: 'BUI THANH THAO',
+              accountType: 'OWNER',
+              isPrimary: true,
+              notes: 'Tài khoản nhận lương thu ngân tiệm vàng và trả tiền lãi nợ nóng',
+            },
+          ],
+        },
       },
-      phoneNumbers: {
-        create: [
-          { type: 'mobile', number: '0912 345 678' },
-          { type: 'other', number: '0988 999 113' },
-        ],
-      },
-      addresses: {
-        create: [
-          {
-            type: 'other',
-            streetLine1: 'Số 18 Ngõ Đào Duy Từ, Phường Hàng Buồm',
-            locality: 'Quận Hoàn Kiếm',
-            region: 'Hà Nội',
-            country: 'Việt Nam',
-            latitude: 21.0362,
-            longitude: 105.8538,
-            geocodeStatus: 'success',
-            geocodedAt: new Date(),
-          },
-          {
-            type: 'home',
-            streetLine1: 'Số 142 Nguyễn Văn Cừ, Phường Bồ Đề',
-            locality: 'Quận Long Biên',
-            region: 'Hà Nội',
-            country: 'Việt Nam',
-            latitude: 21.0455,
-            longitude: 105.8752,
-            geocodeStatus: 'success',
-            geocodedAt: new Date(),
-          },
-        ],
-      },
-      importantDates: {
-        create: [{ title: 'Ngày sinh', type: 'birthday', date: new Date('1986-04-15') }],
-      },
-      customFieldValues: {
-        create: [
-          { templateId: riskTemplate.id, value: 'Cao (Có vũ khí)' },
-          { templateId: priorRecordTemplate.id, value: 'true' },
-          { templateId: vehiclePlateTemplate.id, value: '29A-868.92 (Honda SH Đen)' },
-          { templateId: idNumberTemplate.id, value: '001086012491' },
-        ],
-      },
-    },
-  });
+    });
 
-  // Subject 2: Lê Hoàng Hải ("Hải Cận") - Lock & Alarm Specialist
-  const haiCan = await prisma.person.create({
-    data: {
-      userId: user.id,
-      surname: 'Lê',
-      middleName: 'Hoàng',
-      name: 'Hải',
-      nickname: 'Hải Cận',
-      organization: 'Tiệm sửa khóa & Điện tử Hoàng Hải',
-      jobTitle: 'Thợ khóa / Kỹ thuật điện tử',
-      lastContact: new Date('2026-03-08'),
-      notes:
-        'Am hiểu sâu về hệ thống báo động hồng ngoại, camera giám sát và két sắt điện tử. Có quan hệ mật thiết với Hùng Sói từ thời chấp hành án tại Trại giam Số 3.',
-      groups: {
-        create: [{ groupId: taskForceGroup.id }, { groupId: longBienGangGroup.id }],
+    // Subject 9: Đỗ Văn Bình ("Bình Xe Ôm") - Eyewitness
+    const binhXeOm = await prisma.person.create({
+      data: {
+        userId: user.id,
+        surname: 'Đỗ',
+        middleName: 'Văn',
+        name: 'Bình',
+        nickname: 'Bình Xe Ôm',
+        organization: 'Tài xế xe ôm công nghệ',
+        citizenId: '001075001122',
+        residenceStatus: 'PERMANENT',
+        managementLevel: 'NORMAL',
+        threatLevel: 'LOW',
+        notes: 'Nhân chứng cung cấp camera hành trình ghi lại chiếc Ford Ranger đón 2 đối tượng rời tiệm vàng.',
+        addresses: {
+          create: [
+            {
+              type: 'home',
+              streetLine1: 'Ngã tư Đinh Liệt - Hàng Bạc',
+              locality: 'Quận Hoàn Kiếm',
+              region: 'Hà Nội',
+              latitude: 21.0338,
+              longitude: 105.8522,
+              geocodeStatus: 'success',
+              geocodedAt: new Date(),
+            },
+          ],
+        },
       },
-      phoneNumbers: {
-        create: [{ type: 'mobile', number: '0904 512 889' }],
-      },
-      addresses: {
-        create: [
-          {
-            type: 'home',
-            streetLine1: 'Số 45 Phố Phúc Tân, Phường Phúc Tân',
-            locality: 'Quận Hoàn Kiếm',
-            region: 'Hà Nội',
-            country: 'Việt Nam',
-            latitude: 21.0378,
-            longitude: 105.8588,
-            geocodeStatus: 'success',
-            geocodedAt: new Date(),
-          },
-        ],
-      },
-      importantDates: {
-        create: [{ title: 'Ngày sinh', type: 'birthday', date: new Date('1991-08-22') }],
-      },
-      customFieldValues: {
-        create: [
-          { templateId: riskTemplate.id, value: 'Trung bình' },
-          { templateId: priorRecordTemplate.id, value: 'true' },
-          { templateId: vehiclePlateTemplate.id, value: '29C1-445.12 (Yamaha Exciter)' },
-          { templateId: idNumberTemplate.id, value: '001091008312' },
-        ],
-      },
-    },
-  });
+    });
 
-  // Subject 3: Phạm Quốc Tuấn ("Tuấn Xế") - Getaway Driver & Lookout
-  const tuanXe = await prisma.person.create({
-    data: {
-      userId: user.id,
-      surname: 'Phạm',
-      middleName: 'Quốc',
-      name: 'Tuấn',
-      nickname: 'Tuấn Xế',
-      organization: 'Bãi xe tự phát Cầu Giấy',
-      jobTitle: 'Lái xe tự do',
-      lastContact: new Date('2026-03-11'),
-      notes:
-        'Chuyên điều khiển xe tải nhỏ và xe bán tải vận chuyển hàng ban đêm. Thường xuyên sử dụng biển số giả khi di chuyển qua các tuyến phố trung tâm.',
-      groups: {
-        create: [
-          { groupId: taskForceGroup.id },
-          { groupId: longBienGangGroup.id },
-          { groupId: fenceRingGroup.id },
-        ],
+    // Subject 10: Trịnh Công Vinh ("Vinh Bạc") - Wanted Lock Decoder Smuggler
+    const vinhBac = await prisma.person.create({
+      data: {
+        userId: user.id,
+        surname: 'Trịnh',
+        middleName: 'Công',
+        name: 'Vinh',
+        nickname: 'Vinh Bạc',
+        citizenId: '001084007799',
+        residenceStatus: 'WANTED',
+        managementLevel: 'KEY_TARGET',
+        threatLevel: 'HIGH',
+        notes: 'Đang trốn nã tội Buôn lậu thiết bị công nghệ mở khóa. Cung cấp bộ giải mã két sắt cho Hải Cận.',
+        addresses: {
+          create: [
+            {
+              type: 'other',
+              streetLine1: 'Khu nhà trọ cũ Bến xe Nước Ngầm',
+              locality: 'Quận Hoàng Mai',
+              region: 'Hà Nội',
+              latitude: 20.9755,
+              longitude: 105.8415,
+              geocodeStatus: 'success',
+              geocodedAt: new Date(),
+            },
+          ],
+        },
+        vehicles: {
+          create: [
+            {
+              plateNumber: '29F1-888.66',
+              vehicleType: 'Xe máy',
+              brandModel: 'Honda AirBlade',
+              color: 'Đỏ đen',
+              isSuspicious: true,
+            },
+          ],
+        },
+        physicalMarks: {
+          create: [
+            {
+              type: 'TATTOO',
+              location: 'Cánh tay phải',
+              description: 'Xăm hình đại bàng tung cánh quắp quả địa cầu',
+            },
+          ],
+        },
+        criminalRecords: {
+          create: [
+            {
+              charge: 'Buôn lậu',
+              recordType: 'CONVICTION',
+              sentenceDetail: '3 năm 6 tháng tù (TAND TP Hải Phòng)',
+              verdictDate: new Date('2019-10-15'),
+            },
+          ],
+        },
       },
-      phoneNumbers: {
-        create: [{ type: 'mobile', number: '0977 234 556' }],
-      },
-      addresses: {
-        create: [
-          {
-            type: 'home',
-            streetLine1: 'Số 28 Đường Trần Nhật Duật, Phường Đồng Xuân',
-            locality: 'Quận Hoàn Kiếm',
-            region: 'Hà Nội',
-            country: 'Việt Nam',
-            latitude: 21.0389,
-            longitude: 105.8569,
-            geocodeStatus: 'success',
-            geocodedAt: new Date(),
-          },
-          {
-            type: 'work',
-            streetLine1: 'Ngõ 165 Cầu Giấy, Phường Dịch Vọng',
-            locality: 'Quận Cầu Giấy',
-            region: 'Hà Nội',
-            country: 'Việt Nam',
-            latitude: 21.0342,
-            longitude: 105.7931,
-            geocodeStatus: 'success',
-            geocodedAt: new Date(),
-          },
-        ],
-      },
-      importantDates: {
-        create: [{ title: 'Ngày sinh', type: 'birthday', date: new Date('1994-11-05') }],
-      },
-      customFieldValues: {
-        create: [
-          { templateId: riskTemplate.id, value: 'Trung bình' },
-          { templateId: priorRecordTemplate.id, value: 'true' },
-          { templateId: vehiclePlateTemplate.id, value: '29H-512.88 (Bán tải Ford Ranger Đen)' },
-          { templateId: idNumberTemplate.id, value: '001094025109' },
-        ],
-      },
-    },
-  });
+    });
 
-  // Subject 4: Đặng Thị Mai ("Mai Vàng") - Fence / Pawnshop Owner
-  const maiVang = await prisma.person.create({
-    data: {
-      userId: user.id,
-      surname: 'Đặng',
-      middleName: 'Thị',
-      name: 'Mai',
-      nickname: 'Mai Vàng',
-      organization: 'Tiệm cầm đồ & Thu mua vàng bạc Ánh Mai',
-      jobTitle: 'Chủ cơ sở cầm đồ',
-      lastContact: new Date('2026-03-09'),
-      notes:
-        'Chủ cơ sở cầm đồ Ánh Mai trên phố Huế. Có biểu hiện thu mua vàng nguyên liệu không rõ nguồn gốc và cho vay nặng lãi. Là nhân tình của Hùng Sói.',
-      groups: {
-        create: [{ groupId: taskForceGroup.id }, { groupId: fenceRingGroup.id }],
+    // Subject 11: Trần Văn Tặc ("Tặc Mắt Lé") - Key Proximity Burglary Suspect (50m from Kim Bảo!)
+    const tacMatLe = await prisma.person.create({
+      data: {
+        userId: user.id,
+        surname: 'Trần',
+        middleName: 'Văn',
+        name: 'Tặc',
+        nickname: 'Tặc Mắt Lé',
+        citizenId: '001089011223',
+        residenceStatus: 'TEMPORARY',
+        managementLevel: 'KEY_TARGET',
+        threatLevel: 'HIGH',
+        heightCm: 165,
+        weightKg: 58,
+        modusOperandi: 'Chuyên cạy cửa sổ, leo tum các phố cổ trộm cắp trang sức và tiền mặt.',
+        notes: 'Cư trú cách Tiệm vàng Kim Bảo chỉ 50 mét. Rất trùng khớp với hệ loại tội phạm của vụ án.',
+        addresses: {
+          create: [
+            {
+              type: 'home',
+              streetLine1: 'Số 22 Phố Hàng Bạc, Phường Hàng Bạc',
+              locality: 'Quận Hoàn Kiếm',
+              region: 'Hà Nội',
+              latitude: 21.0346,
+              longitude: 105.8530,
+              geocodeStatus: 'success',
+              geocodedAt: new Date(),
+            },
+          ],
+        },
+        vehicles: {
+          create: [
+            {
+              plateNumber: '29C1-555.55',
+              vehicleType: 'Xe máy',
+              brandModel: 'Honda Wave Alpha',
+              color: 'Xanh nhớt',
+              identifyingFeatures: 'Biển số ngũ quý 5 giả, pô cắt ngắn',
+              isSuspicious: true,
+            },
+          ],
+        },
+        physicalMarks: {
+          create: [
+            {
+              type: 'TATTOO',
+              location: 'Bắp tay phải',
+              description: 'Hình xăm rồng quấn thanh kiếm dài 20cm',
+            },
+            {
+              type: 'DEFORMITY',
+              location: 'Mắt trái',
+              description: 'Mắt trái bị lác ngoài bẩm sinh',
+            },
+          ],
+        },
+        criminalRecords: {
+          create: [
+            {
+              charge: 'Trộm cắp tài sản',
+              recordType: 'CONVICTION',
+              sentenceDetail: '2 năm tù giam (TAND quận Hoàn Kiếm)',
+              verdictDate: new Date('2022-04-18'),
+            },
+          ],
+        },
       },
-      phoneNumbers: {
-        create: [{ type: 'mobile', number: '0936 888 999' }],
-      },
-      addresses: {
-        create: [
-          {
-            type: 'work',
-            streetLine1: 'Số 215 Phố Huế, Phường Phố Huế',
-            locality: 'Quận Hai Bà Trưng',
-            region: 'Hà Nội',
-            country: 'Việt Nam',
-            latitude: 21.0165,
-            longitude: 105.8515,
-            geocodeStatus: 'success',
-            geocodedAt: new Date(),
-          },
-        ],
-      },
-      importantDates: {
-        create: [{ title: 'Ngày sinh', type: 'birthday', date: new Date('1989-02-14') }],
-      },
-      customFieldValues: {
-        create: [
-          { templateId: riskTemplate.id, value: 'Thấp' },
-          { templateId: priorRecordTemplate.id, value: 'false' },
-          { templateId: vehiclePlateTemplate.id, value: '30G-912.05 (Mercedes C200 Trắng)' },
-          { templateId: idNumberTemplate.id, value: '001189004521' },
-        ],
-      },
-    },
-  });
+    });
 
-  // Subject 5: Vũ Đình Khánh ("Khánh Chột") - Enforcer & Burglar
-  const khanhChot = await prisma.person.create({
-    data: {
-      userId: user.id,
-      surname: 'Vũ',
-      middleName: 'Đình',
-      name: 'Khánh',
-      nickname: 'Khánh Chột',
-      organization: 'CLB Bi-a Đêm Trắng Cầu Giấy',
-      jobTitle: 'Quản lý quán bi-a',
-      lastContact: new Date('2026-03-05'),
-      notes:
-        'Đối tượng cộm cán khu vực Cầu Giấy, có 1 tiền án Cướp giật tài sản và 1 tiền sự Cố ý gây thương tích. Thường tụ tập đàn em tại quán bi-a sau 23h đêm.',
-      groups: {
-        create: [{ groupId: taskForceGroup.id }, { groupId: longBienGangGroup.id }],
+    // Subject 12: Nguyễn Tiến Đạt ("Đạt Cỏ") - Drug Addict & Petty Thief (Near Crime Scene)
+    const datCo = await prisma.person.create({
+      data: {
+        userId: user.id,
+        surname: 'Nguyễn',
+        middleName: 'Tiến',
+        name: 'Đạt',
+        nickname: 'Đạt Cỏ',
+        citizenId: '001095007788',
+        residenceStatus: 'PERMANENT',
+        managementLevel: 'SURVEILLANCE',
+        threatLevel: 'MEDIUM',
+        heightCm: 170,
+        weightKg: 52,
+        modusOperandi: 'Trộm cắp vặt, sơ hở là bẻ khóa xe máy hoặc mò vào nhà dân lấy tài sản ban đêm để có tiền hút chích.',
+        addresses: {
+          create: [
+            {
+              type: 'home',
+              streetLine1: 'Số 34 Phố Hàng Mắm, Phường Hàng Buồm',
+              locality: 'Quận Hoàn Kiếm',
+              region: 'Hà Nội',
+              latitude: 21.0340,
+              longitude: 105.8550,
+              geocodeStatus: 'success',
+              geocodedAt: new Date(),
+            },
+          ],
+        },
+        vehicles: {
+          create: [
+            {
+              plateNumber: '29M1-987.65',
+              vehicleType: 'Xe máy',
+              brandModel: 'Yamaha Sirius',
+              color: 'Đen bạc',
+              isSuspicious: true,
+            },
+          ],
+        },
+        criminalRecords: {
+          create: [
+            {
+              charge: 'Sử dụng trái phép chất ma túy & Trộm cắp tài sản',
+              recordType: 'ADMIN_VIOLATION',
+              sentenceDetail: 'Cai nghiện bắt buộc 12 tháng tại Trung tâm số 2',
+              verdictDate: new Date('2023-01-20'),
+            },
+          ],
+        },
       },
-      phoneNumbers: {
-        create: [{ type: 'mobile', number: '0963 111 789' }],
-      },
-      addresses: {
-        create: [
-          {
-            type: 'home',
-            streetLine1: 'Số 82 Đường Quan Hoa, Phường Quan Hoa',
-            locality: 'Quận Cầu Giấy',
-            region: 'Hà Nội',
-            country: 'Việt Nam',
-            latitude: 21.0321,
-            longitude: 105.8012,
-            geocodeStatus: 'success',
-            geocodedAt: new Date(),
-          },
-        ],
-      },
-      importantDates: {
-        create: [{ title: 'Ngày sinh', type: 'birthday', date: new Date('1988-07-19') }],
-      },
-      customFieldValues: {
-        create: [
-          { templateId: riskTemplate.id, value: 'Cao (Có vũ khí)' },
-          { templateId: priorRecordTemplate.id, value: 'true' },
-          { templateId: vehiclePlateTemplate.id, value: '29B1-778.33 (Honda Winner Đỏ Đen)' },
-          { templateId: idNumberTemplate.id, value: '001088019302' },
-        ],
-      },
-    },
-  });
+    });
 
-  // Subject 6: Trần Minh Đức ("Đức Đen") - Electronics Fence
-  const ducDen = await prisma.person.create({
-    data: {
-      userId: user.id,
-      surname: 'Trần',
-      middleName: 'Minh',
-      name: 'Đức',
-      nickname: 'Đức Đen',
-      organization: 'Cửa hàng Điện thoại & Laptop Đức Minh',
-      jobTitle: 'Chủ cửa hàng thiết bị điện tử',
-      lastContact: new Date('2026-03-01'),
-      notes:
-        'Chuyên thu mua linh kiện điện tử, điện thoại, máy tính xách tay số lượng lớn không hóa đơn chứng từ, rã xác linh kiện để tiêu thụ đi các tỉnh.',
-      groups: {
-        create: [{ groupId: fenceRingGroup.id }],
+    // Subject 13: Lương Văn Lợi ("Lợi Búa") - Violent Robbery & Snatches
+    const loiBua = await prisma.person.create({
+      data: {
+        userId: user.id,
+        surname: 'Lương',
+        middleName: 'Văn',
+        name: 'Lợi',
+        nickname: 'Lợi Búa',
+        citizenId: '001083002211',
+        residenceStatus: 'TEMPORARY',
+        managementLevel: 'KEY_TARGET',
+        threatLevel: 'ARMED_DANGEROUS',
+        heightCm: 176,
+        weightKg: 78,
+        modusOperandi: 'Chạy xe phân khối lớn ép sát cướp giật túi xách, dây chuyền của du khách; mang theo búa đinh để chống trả.',
+        addresses: {
+          create: [
+            {
+              type: 'home',
+              streetLine1: 'Số 15 Phố Cầu Gỗ, Phường Hàng Bạc',
+              locality: 'Quận Hoàn Kiếm',
+              region: 'Hà Nội',
+              latitude: 21.0325,
+              longitude: 105.8535,
+              geocodeStatus: 'success',
+              geocodedAt: new Date(),
+            },
+          ],
+        },
+        vehicles: {
+          create: [
+            {
+              plateNumber: '29T1-112.23',
+              vehicleType: 'Xe máy',
+              brandModel: 'Yamaha Exciter 135',
+              color: 'Đỏ đen',
+              identifyingFeatures: 'Tháo gương, gập biển số lên gầm',
+              isSuspicious: true,
+            },
+          ],
+        },
+        physicalMarks: {
+          create: [
+            {
+              type: 'SCAR',
+              location: 'Cằm dưới bên trái',
+              description: 'Vết sẹo lồi to bằng hạt ngô do bị ngã xe rượt đuổi',
+            },
+          ],
+        },
+        criminalRecords: {
+          create: [
+            {
+              charge: 'Cướp giật tài sản',
+              recordType: 'CONVICTION',
+              sentenceDetail: '4 năm tù giam (TAND quận Ba Đình)',
+              verdictDate: new Date('2019-07-22'),
+            },
+          ],
+        },
       },
-      phoneNumbers: {
-        create: [{ type: 'mobile', number: '0945 678 123' }],
-      },
-      addresses: {
-        create: [
-          {
-            type: 'work',
-            streetLine1: 'Số 119 Phố Chùa Bộc, Phường Quang Trung',
-            locality: 'Quận Đống Đa',
-            region: 'Hà Nội',
-            country: 'Việt Nam',
-            latitude: 21.0082,
-            longitude: 105.8268,
-            geocodeStatus: 'success',
-            geocodedAt: new Date(),
-          },
-        ],
-      },
-      customFieldValues: {
-        create: [
-          { templateId: riskTemplate.id, value: 'Thấp' },
-          { templateId: priorRecordTemplate.id, value: 'false' },
-          { templateId: vehiclePlateTemplate.id, value: '30F-332.19 (Kia Cerato Bạc)' },
-          { templateId: idNumberTemplate.id, value: '001090031120' },
-        ],
-      },
-    },
-  });
+    });
 
-  // Subject 7: Hoàng Văn Nam ("Nam Béo") - Initial suspect, later RULED OUT due to hospital alibi
-  const namBeo = await prisma.person.create({
-    data: {
-      userId: user.id,
-      surname: 'Hoàng',
-      middleName: 'Văn',
-      name: 'Nam',
-      nickname: 'Nam Béo',
-      organization: 'Tự do',
-      jobTitle: 'Lao động tự do',
-      lastContact: new Date('2026-02-28'),
-      notes:
-        'Từng là đàn em cũ của Hùng Sói năm 2021. Đã xác minh có bằng chứng ngoại phạm rõ ràng trong đêm xảy ra vụ trộm tiệm vàng Kim Bảo (đang điều trị nội trú phẫu thuật ruột thừa tại BV Đức Giang).',
-      groups: {
-        create: [{ groupId: longBienGangGroup.id }],
+    // Subject 14: Vũ Mạnh Thắng ("Thắng Choắt") - Auto Parts & Mirrors Thief
+    const thangChoat = await prisma.person.create({
+      data: {
+        userId: user.id,
+        surname: 'Vũ',
+        middleName: 'Mạnh',
+        name: 'Thắng',
+        nickname: 'Thắng Choắt',
+        citizenId: '001096003322',
+        residenceStatus: 'PERMANENT',
+        managementLevel: 'SURVEILLANCE',
+        threatLevel: 'LOW',
+        addresses: {
+          create: [
+            {
+              type: 'home',
+              streetLine1: 'Số 80 Phố Mã Mây, Phường Hàng Buồm',
+              locality: 'Quận Hoàn Kiếm',
+              region: 'Hà Nội',
+              latitude: 21.0352,
+              longitude: 105.8532,
+              geocodeStatus: 'success',
+              geocodedAt: new Date(),
+            },
+          ],
+        },
+        vehicles: {
+          create: [
+            {
+              plateNumber: '29P1-334.45',
+              vehicleType: 'Xe máy',
+              brandModel: 'Honda Wave RSX',
+              color: 'Trắng đen',
+              isSuspicious: false,
+            },
+          ],
+        },
+        criminalRecords: {
+          create: [
+            {
+              charge: 'Trộm cắp phụ tùng ô tô',
+              recordType: 'ADMIN_VIOLATION',
+              sentenceDetail: 'Xử phạt hành chính 2.500.000 VNĐ',
+              verdictDate: new Date('2024-05-10'),
+            },
+          ],
+        },
       },
-      phoneNumbers: {
-        create: [{ type: 'mobile', number: '0918 222 334' }],
-      },
-      addresses: {
-        create: [
-          {
-            type: 'home',
-            streetLine1: 'Số 562 Nguyễn Văn Cừ, Phường Gia Thụy',
-            locality: 'Quận Long Biên',
-            region: 'Hà Nội',
-            country: 'Việt Nam',
-            latitude: 21.0488,
-            longitude: 105.8865,
-            geocodeStatus: 'success',
-            geocodedAt: new Date(),
-          },
-        ],
-      },
-      customFieldValues: {
-        create: [
-          { templateId: riskTemplate.id, value: 'Thấp' },
-          { templateId: priorRecordTemplate.id, value: 'true' },
-          { templateId: idNumberTemplate.id, value: '001087044218' },
-        ],
-      },
-    },
-  });
+    });
 
-  // Subject 8: Bùi Thanh Thảo ("Thảo Ngân") - Jewelry Store Cashier (Person of Interest / Insider)
-  const thaoNgan = await prisma.person.create({
-    data: {
-      userId: user.id,
-      surname: 'Bùi',
-      middleName: 'Thanh',
-      name: 'Thảo',
-      nickname: 'Thảo Ngân',
-      organization: 'Tiệm vàng Kim Bảo (Hàng Bạc)',
-      jobTitle: 'Nhân viên thu ngân & Quản lý kho quỹ',
-      lastContact: new Date('2026-03-12'),
-      notes:
-        'Nhân viên nắm mật mã bảo trì hệ thống báo động tại Tiệm vàng Kim Bảo. Qua trích xuất sao kê phát hiện có khoản nợ tín dụng đen tại tiệm cầm đồ Ánh Mai của Đặng Thị Mai.',
-      groups: {
-        create: [{ groupId: taskForceGroup.id }, { groupId: witnessGroup.id }],
+    // Subject 15: Dương Tuấn Kiệt ("Kiệt Lùn") - Cầu Giấy Gang Core Member
+    const kietLun = await prisma.person.create({
+      data: {
+        userId: user.id,
+        surname: 'Dương',
+        middleName: 'Tuấn',
+        name: 'Kiệt',
+        nickname: 'Kiệt Lùn',
+        citizenId: '001086009944',
+        residenceStatus: 'PERMANENT',
+        managementLevel: 'KEY_TARGET',
+        threatLevel: 'HIGH',
+        heightCm: 162,
+        weightKg: 65,
+        addresses: {
+          create: [
+            {
+              type: 'home',
+              streetLine1: 'Ngõ 68 Phố Cầu Giấy, Phường Quan Hoa',
+              locality: 'Quận Cầu Giấy',
+              region: 'Hà Nội',
+              latitude: 21.0320,
+              longitude: 105.7980,
+              geocodeStatus: 'success',
+              geocodedAt: new Date(),
+            },
+          ],
+        },
+        vehicles: {
+          create: [
+            {
+              plateNumber: '29S1-778.89',
+              vehicleType: 'Xe máy',
+              brandModel: 'Honda SH 150i',
+              color: 'Đen nhám',
+              isSuspicious: true,
+            },
+          ],
+        },
+        physicalMarks: {
+          create: [
+            {
+              type: 'TATTOO',
+              location: 'Lưng',
+              description: 'Xăm hình Kỳ lân đạp mây phủ kín lưng',
+            },
+          ],
+        },
+        criminalRecords: {
+          create: [
+            {
+              charge: 'Cướp tài sản có tổ chức',
+              recordType: 'CONVICTION',
+              sentenceDetail: '5 năm tù giam (TAND quận Cầu Giấy)',
+              verdictDate: new Date('2018-09-09'),
+            },
+          ],
+        },
       },
-      phoneNumbers: {
-        create: [{ type: 'mobile', number: '0982 765 432' }],
-      },
-      addresses: {
-        create: [
-          {
-            type: 'home',
-            streetLine1: 'Số 32 Phố Hàng Đào, Phường Hàng Đào',
-            locality: 'Quận Hoàn Kiếm',
-            region: 'Hà Nội',
-            country: 'Việt Nam',
-            latitude: 21.0332,
-            longitude: 105.8508,
-            geocodeStatus: 'success',
-            geocodedAt: new Date(),
-          },
-        ],
-      },
-      customFieldValues: {
-        create: [
-          { templateId: riskTemplate.id, value: 'Không nguy hiểm' },
-          { templateId: priorRecordTemplate.id, value: 'false' },
-          { templateId: idNumberTemplate.id, value: '001197015682' },
-        ],
-      },
-    },
-  });
+    });
 
-  // Subject 9: Đỗ Văn Bình ("Bình Xe Ôm") - Key Eyewitness & Informant
-  const binhXeOm = await prisma.person.create({
-    data: {
-      userId: user.id,
-      surname: 'Đỗ',
-      middleName: 'Văn',
-      name: 'Bình',
-      nickname: 'Bình Xe Ôm',
-      organization: 'Tổ tự quản an ninh trật tự Hoàn Kiếm',
-      jobTitle: 'Tài xế xe công nghệ ca đêm',
-      lastContact: new Date('2026-03-12'),
-      notes:
-        'Nguồn tin cơ sở uy tín tại khu vực phố cổ. Đã cung cấp hình ảnh camera hành trình ghi lại chiếc xe bán tải Ford Ranger màu đen đỗ gần ngã tư Hàng Bạc - Đinh Liệt lúc 02h15 sáng.',
-      groups: {
-        create: [{ groupId: witnessGroup.id }],
+    // Subject 16: Lê Văn Long ("Long Rồng") - Violent Ex-Convict
+    const longRong = await prisma.person.create({
+      data: {
+        userId: user.id,
+        surname: 'Lê',
+        middleName: 'Văn',
+        name: 'Long',
+        nickname: 'Long Rồng',
+        citizenId: '001082006611',
+        residenceStatus: 'PERMANENT',
+        managementLevel: 'KEY_TARGET',
+        threatLevel: 'ARMED_DANGEROUS',
+        heightCm: 180,
+        weightKg: 85,
+        addresses: {
+          create: [
+            {
+              type: 'home',
+              streetLine1: 'Số 12 Phố Dịch Vọng Hậu, Phường Dịch Vọng Hậu',
+              locality: 'Quận Cầu Giấy',
+              region: 'Hà Nội',
+              latitude: 21.0305,
+              longitude: 105.7890,
+              geocodeStatus: 'success',
+              geocodedAt: new Date(),
+            },
+          ],
+        },
+        vehicles: {
+          create: [
+            {
+              plateNumber: '29L1-666.99',
+              vehicleType: 'Mô tô phân khối lớn',
+              brandModel: 'Kawasaki Z1000',
+              color: 'Xanh đen',
+              isSuspicious: true,
+            },
+          ],
+        },
+        criminalRecords: {
+          create: [
+            {
+              charge: 'Cố ý gây thương tích dẫn đến chết người',
+              recordType: 'CONVICTION',
+              sentenceDetail: '10 năm tù giam (đã chấp hành xong năm 2022)',
+              verdictDate: new Date('2012-10-12'),
+            },
+          ],
+        },
       },
-      phoneNumbers: {
-        create: [{ type: 'mobile', number: '0903 112 233' }],
-      },
-      addresses: {
-        create: [
-          {
-            type: 'home',
-            streetLine1: 'Số 78 Phố Hàng Gai, Phường Hàng Gai',
-            locality: 'Quận Hoàn Kiếm',
-            region: 'Hà Nội',
-            country: 'Việt Nam',
-            latitude: 21.0325,
-            longitude: 105.8498,
-            geocodeStatus: 'success',
-            geocodedAt: new Date(),
-          },
-        ],
-      },
-      customFieldValues: {
-        create: [
-          { templateId: riskTemplate.id, value: 'Không nguy hiểm' },
-          { templateId: priorRecordTemplate.id, value: 'false' },
-          { templateId: vehiclePlateTemplate.id, value: '29E2-119.04 (Honda Wave Xanh)' },
-        ],
-      },
-    },
-  });
+    });
 
-  // Subject 10: Ngô Thế Vinh ("Vinh Bạc") - Fugitive / Unlocated Subject (for testing Unlocated Roster on Map)
-  const vinhBac = await prisma.person.create({
-    data: {
-      userId: user.id,
-      surname: 'Ngô',
-      middleName: 'Thế',
-      name: 'Vinh',
-      nickname: 'Vinh Bạc',
-      organization: 'Tự do (Lang thang không nơi ở cố định)',
-      jobTitle: 'Đối tượng cung cấp thiết bị phá khóa',
-      lastContact: new Date('2026-03-02'),
-      notes:
-        'Đối tượng chuyên nhập lậu bộ dò mã két sắt điện tử và thiết bị phá sóng báo động. Hiện đã rời khỏi nơi trọ cũ, chưa xác định được tọa độ nơi ẩn náu hiện tại.',
-      groups: {
-        create: [{ groupId: taskForceGroup.id }, { groupId: longBienGangGroup.id }],
+    // Subject 17: Nguyễn Thị Hồng Vân ("Vân Tín Dụng") - Loan Shark Phố Huế
+    const vanTinDung = await prisma.person.create({
+      data: {
+        userId: user.id,
+        surname: 'Nguyễn',
+        middleName: 'Thị Hồng',
+        name: 'Vân',
+        nickname: 'Vân Tín Dụng',
+        citizenId: '001188004477',
+        residenceStatus: 'PERMANENT',
+        managementLevel: 'SURVEILLANCE',
+        threatLevel: 'LOW',
+        addresses: {
+          create: [
+            {
+              type: 'home',
+              streetLine1: 'Số 180 Phố Huế, Phường Phố Huế',
+              locality: 'Quận Hai Bà Trưng',
+              region: 'Hà Nội',
+              latitude: 21.0150,
+              longitude: 105.8510,
+              geocodeStatus: 'success',
+              geocodedAt: new Date(),
+            },
+          ],
+        },
+        vehicles: {
+          create: [
+            {
+              plateNumber: '29B2-998.89',
+              vehicleType: 'Xe máy',
+              brandModel: 'Piaggio Liberty',
+              color: 'Trắng',
+              isSuspicious: false,
+            },
+          ],
+        },
+        criminalRecords: {
+          create: [
+            {
+              charge: 'Cho vay lãi nặng trong giao dịch dân sự',
+              recordType: 'ADMIN_VIOLATION',
+              sentenceDetail: 'Phạt tiền 30.000.000 VNĐ',
+              verdictDate: new Date('2023-12-02'),
+            },
+          ],
+        },
       },
-      phoneNumbers: {
-        create: [{ type: 'mobile', number: '0919 404 000' }],
-      },
-      customFieldValues: {
-        create: [
-          { templateId: riskTemplate.id, value: 'Cao (Có vũ khí)' },
-          { templateId: priorRecordTemplate.id, value: 'true' },
-          { templateId: idNumberTemplate.id, value: '001085099881' },
-        ],
-      },
-    },
-  });
+    });
 
-  console.log('✓ Đã tạo 10 hồ sơ đối tượng (9 đã có tọa độ GPS, 1 đang truy tìm chưa rõ tọa độ)');
+    // Subject 18: Đỗ Hoàng Phong ("Phong Đua") - Street Snatcher
+    const phongDua = await prisma.person.create({
+      data: {
+        userId: user.id,
+        surname: 'Đỗ',
+        middleName: 'Hoàng',
+        name: 'Phong',
+        nickname: 'Phong Đua',
+        citizenId: '001099001155',
+        residenceStatus: 'TEMPORARY',
+        managementLevel: 'SURVEILLANCE',
+        threatLevel: 'MEDIUM',
+        addresses: {
+          create: [
+            {
+              type: 'home',
+              streetLine1: 'Số 242 Phố Huế, Phường Phố Huế',
+              locality: 'Quận Hai Bà Trưng',
+              region: 'Hà Nội',
+              latitude: 21.0180,
+              longitude: 105.8520,
+              geocodeStatus: 'success',
+              geocodedAt: new Date(),
+            },
+          ],
+        },
+        vehicles: {
+          create: [
+            {
+              plateNumber: '29V1-445.56',
+              vehicleType: 'Xe máy',
+              brandModel: 'Honda Wave độ kiểng',
+              color: 'Tím mộng mơ',
+              identifyingFeatures: 'Pô nổ đanh, đèn LED chớp nháy',
+              isSuspicious: true,
+            },
+          ],
+        },
+        criminalRecords: {
+          create: [
+            {
+              charge: 'Gây rối trật tự công cộng (đua xe trái phép)',
+              recordType: 'ADMIN_VIOLATION',
+              sentenceDetail: 'Tạm giữ phương tiện 30 ngày',
+              verdictDate: new Date('2024-06-25'),
+            },
+          ],
+        },
+      },
+    });
 
-  // 6. Create Relationships between Subjects (Interconnected Network)
-  await prisma.relationship.createMany({
-    data: [
-      // Hải Cận <-> Vinh Bạc (Cung cấp thiết bị phá khóa)
-      {
-        personId: haiCan.id,
-        relatedPersonId: vinhBac.id,
-        relationshipTypeId: accompliceType.id,
-        notes: 'Mua bộ dò mã két sắt chuyên dụng từ Vinh Bạc trước vụ trộm Hàng Bạc',
+    // Subject 19: Phạm Văn Hùng ("Hùng Còi") - Motorbike Thief Đống Đa
+    const hungCoi = await prisma.person.create({
+      data: {
+        userId: user.id,
+        surname: 'Phạm',
+        middleName: 'Văn',
+        name: 'Hùng',
+        nickname: 'Hùng Còi',
+        citizenId: '001093005544',
+        residenceStatus: 'PERMANENT',
+        managementLevel: 'SURVEILLANCE',
+        threatLevel: 'LOW',
+        addresses: {
+          create: [
+            {
+              type: 'home',
+              streetLine1: 'Ngõ Thổ Quan, Phố Khâm Thiên',
+              locality: 'Quận Đống Đa',
+              region: 'Hà Nội',
+              latitude: 21.0190,
+              longitude: 105.8340,
+              geocodeStatus: 'success',
+              geocodedAt: new Date(),
+            },
+          ],
+        },
+        vehicles: {
+          create: [
+            {
+              plateNumber: '29X3-889.90',
+              vehicleType: 'Xe máy',
+              brandModel: 'Honda Dream Thái',
+              color: 'Nâu mận',
+              isSuspicious: false,
+            },
+          ],
+        },
+        criminalRecords: {
+          create: [
+            {
+              charge: 'Trộm cắp xe máy',
+              recordType: 'CONVICTION',
+              sentenceDetail: '18 tháng tù treo',
+              verdictDate: new Date('2023-04-10'),
+            },
+          ],
+        },
       },
-      {
-        personId: vinhBac.id,
-        relatedPersonId: haiCan.id,
-        relationshipTypeId: accompliceType.id,
-        notes: 'Cung cấp thiết bị phá khóa và dò mã báo động cho Hải Cận',
-      },
-      // Hùng Sói <-> Hải Cận (Cầm đầu <-> Đàn em)
-      {
-        personId: hungSoi.id,
-        relatedPersonId: haiCan.id,
-        relationshipTypeId: bossType.id,
-        notes: 'Chỉ đạo trực tiếp Hải Cận vô hiệu hóa báo động và phá khóa két sắt',
-      },
-      {
-        personId: haiCan.id,
-        relatedPersonId: hungSoi.id,
-        relationshipTypeId: subordinateType.id,
-        notes: 'Đàn em thân tín phụ trách kỹ thuật mở khóa cho Hùng Sói',
-      },
+    });
 
-      // Hùng Sói <-> Tuấn Xế (Cầm đầu <-> Đàn em)
-      {
-        personId: hungSoi.id,
-        relatedPersonId: tuanXe.id,
-        relationshipTypeId: bossType.id,
-        notes: 'Thuê Tuấn Xế làm tài xế cảnh giới và chở tang vật tẩu thoát',
+    // Subject 20: Nguyễn Bảo An - Normal Honest Citizen (Doctor)
+    const baoAn = await prisma.person.create({
+      data: {
+        userId: user.id,
+        surname: 'Nguyễn',
+        middleName: 'Bảo',
+        name: 'An',
+        organization: 'Bệnh viện Bạch Mai',
+        jobTitle: 'Bác sĩ Tim mạch',
+        citizenId: '001090001234',
+        residenceStatus: 'PERMANENT',
+        managementLevel: 'NORMAL',
+        threatLevel: 'LOW',
+        notes: 'Dân cư bình thường, không có tiền án tiền sự.',
+        addresses: {
+          create: [
+            {
+              type: 'home',
+              streetLine1: 'Số 78 Đường Giải Phóng, Phường Phương Mai',
+              locality: 'Quận Đống Đa',
+              region: 'Hà Nội',
+              latitude: 21.0020,
+              longitude: 105.8420,
+              geocodeStatus: 'success',
+              geocodedAt: new Date(),
+            },
+          ],
+        },
       },
-      {
-        personId: tuanXe.id,
-        relatedPersonId: hungSoi.id,
-        relationshipTypeId: subordinateType.id,
-        notes: 'Chuyên lái xe phục vụ các phi vụ của Hùng Sói',
-      },
+    });
 
-      // Hùng Sói <-> Khánh Chột (Đồng bọn / Chiến hữu)
-      {
-        personId: hungSoi.id,
-        relatedPersonId: khanhChot.id,
-        relationshipTypeId: accompliceType.id,
-        notes: 'Bạn tù cũ, phối hợp thực hiện các vụ đột nhập kho hàng khu vực phía Tây Hà Nội',
+    // Subject 21: Trần Thị Thu Trang - Normal Citizen (Teacher near Hoàn Kiếm)
+    const thuTrang = await prisma.person.create({
+      data: {
+        userId: user.id,
+        surname: 'Trần',
+        middleName: 'Thị Thu',
+        name: 'Trang',
+        organization: 'Trường Tiểu học Hoàn Kiếm',
+        jobTitle: 'Giáo viên',
+        citizenId: '001192004567',
+        residenceStatus: 'PERMANENT',
+        managementLevel: 'NORMAL',
+        threatLevel: 'LOW',
+        notes: 'Dân cư lương thiện cư trú gần hiện trường phố Hàng Bạc.',
+        addresses: {
+          create: [
+            {
+              type: 'home',
+              streetLine1: 'Số 10 Phố Hàng Bạc, Phường Hàng Bạc',
+              locality: 'Quận Hoàn Kiếm',
+              region: 'Hà Nội',
+              latitude: 21.0345,
+              longitude: 105.8520,
+              geocodeStatus: 'success',
+              geocodedAt: new Date(),
+            },
+          ],
+        },
       },
-      {
-        personId: khanhChot.id,
-        relatedPersonId: hungSoi.id,
-        relationshipTypeId: accompliceType.id,
-        notes: 'Bạn tù cũ, phối hợp thực hiện các vụ đột nhập kho hàng',
-      },
+    });
 
-      // Hùng Sói <-> Mai Vàng (Nhân tình & Tiêu thụ)
-      {
-        personId: hungSoi.id,
-        relatedPersonId: maiVang.id,
-        relationshipTypeId: spouseType.id,
-        notes: 'Quan hệ tình cảm, thường xuyên chuyển vàng trang sức cho Mai Vàng nấu chảy',
+    // Subject 22: Vũ Đức Thịnh - Normal Citizen (Software Engineer Cầu Giấy)
+    const ducThinh = await prisma.person.create({
+      data: {
+        userId: user.id,
+        surname: 'Vũ',
+        middleName: 'Đức',
+        name: 'Thịnh',
+        organization: 'Tập đoàn Công nghệ FPT',
+        jobTitle: 'Kỹ sư Phần mềm',
+        citizenId: '001085009876',
+        residenceStatus: 'PERMANENT',
+        managementLevel: 'NORMAL',
+        threatLevel: 'LOW',
+        addresses: {
+          create: [
+            {
+              type: 'home',
+              streetLine1: 'Tòa nhà Detech, Số 8 Tôn Thất Thuyết',
+              locality: 'Quận Cầu Giấy',
+              region: 'Hà Nội',
+              latitude: 21.0350,
+              longitude: 105.7850,
+              geocodeStatus: 'success',
+              geocodedAt: new Date(),
+            },
+          ],
+        },
       },
-      {
-        personId: maiVang.id,
-        relatedPersonId: hungSoi.id,
-        relationshipTypeId: spouseType.id,
-        notes: 'Nhân tình và là đầu mối tiêu thụ vàng bạc cho Hùng Sói',
-      },
+    });
 
-      // Hải Cận <-> Tuấn Xế (Đồng bọn)
-      {
-        personId: haiCan.id,
-        relatedPersonId: tuanXe.id,
-        relationshipTypeId: accompliceType.id,
-        notes: 'Cùng tham gia khảo sát địa bàn trước khi gây án',
-      },
-      {
-        personId: tuanXe.id,
-        relatedPersonId: haiCan.id,
-        relationshipTypeId: accompliceType.id,
-        notes: 'Cùng tham gia khảo sát địa bàn trước khi gây án',
-      },
+    console.log('✓ Đã tạo 22 đối tượng & nhân chứng với hồ sơ nghiệp vụ đầy đủ');
 
-      // Tuấn Xế <-> Đức Đen (Đầu mối tiêu thụ)
-      {
-        personId: tuanXe.id,
-        relatedPersonId: ducDen.id,
-        relationshipTypeId: fenceType.id,
-        notes: 'Trực tiếp chở lô hàng điện tử trộm cắp đến kho sau cửa hàng của Đức Đen',
-      },
-      {
-        personId: ducDen.id,
-        relatedPersonId: tuanXe.id,
-        relationshipTypeId: fenceType.id,
-        notes: 'Thu mua lô linh kiện và điện thoại do Tuấn Xế giao ban đêm',
-      },
+    // 6. Link Gang Memberships
+    await prisma.gangMembership.createMany({
+      data: [
+        { gangId: gangLongBien.id, personId: hungSoi.id, role: 'Cầm đầu / Chủ mưu' },
+        { gangId: gangLongBien.id, personId: haiCan.id, role: 'Kỹ thuật khóa & Báo động' },
+        { gangId: gangLongBien.id, personId: tuanXe.id, role: 'Tài xế vận chuyển' },
+        { gangId: gangLongBien.id, personId: tacMatLe.id, role: 'Thành viên trực tiếp đột nhập' },
 
-      // Mai Vàng <-> Đức Đen (Làm ăn chung)
-      {
-        personId: maiVang.id,
-        relatedPersonId: ducDen.id,
-        relationshipTypeId: colleagueType.id,
-        notes: 'Thường xuyên giới thiệu nguồn hàng cầm cố quá hạn và đồ trộm cắp cho nhau',
-      },
-      {
-        personId: ducDen.id,
-        relatedPersonId: maiVang.id,
-        relationshipTypeId: colleagueType.id,
-        notes: 'Đối tác tiêu thụ tài sản cầm cố và hàng trộm cắp',
-      },
+        { gangId: gangCauGiay.id, personId: khanhChot.id, role: 'Cầm đầu ổ nhóm' },
+        { gangId: gangCauGiay.id, personId: kietLun.id, role: 'Đàn em đắc lực' },
+        { gangId: gangCauGiay.id, personId: longRong.id, role: 'Bảo kê / Đâm thuê chém mướn' },
 
-      // Mai Vàng <-> Thảo Ngân (Chủ nợ - Con nợ)
-      {
-        personId: maiVang.id,
-        relatedPersonId: thaoNgan.id,
-        relationshipTypeId: friendType.id,
-        notes: 'Cho Thảo Ngân vay lãi nặng 350 triệu đồng, nghi vấn ép cung cấp sơ đồ camera tiệm vàng',
-      },
-      {
-        personId: thaoNgan.id,
-        relatedPersonId: maiVang.id,
-        relationshipTypeId: friendType.id,
-        notes: 'Vay nợ tại tiệm cầm đồ Ánh Mai của Đặng Thị Mai',
-      },
+        { gangId: gangPhoHue.id, personId: maiVang.id, role: 'Bà trùm đường dây cầm đồ' },
+        { gangId: gangPhoHue.id, personId: ducDen.id, role: 'Đầu mối tiêu thụ điện tử' },
+        { gangId: gangPhoHue.id, personId: vanTinDung.id, role: 'Thu hồi nợ & Cho vay lãi nặng' },
+        { gangId: gangPhoHue.id, personId: phongDua.id, role: 'Vận chuyển hàng lậu' },
+      ],
+    });
 
-      // Hùng Sói <-> Nam Béo (Quan hệ xã hội cũ)
-      {
-        personId: hungSoi.id,
-        relatedPersonId: namBeo.id,
-        relationshipTypeId: friendType.id,
-        notes: 'Đàn em cũ nhưng đã tách nhóm từ cuối năm 2024',
-      },
-      {
-        personId: namBeo.id,
-        relatedPersonId: hungSoi.id,
-        relationshipTypeId: friendType.id,
-        notes: 'Từng đi theo Hùng Sói trước năm 2024',
-      },
+    console.log('✓ Đã kết nạp các đối tượng vào các băng nhóm tội phạm');
 
-      // Bình Xe Ôm <-> Tuấn Xế (Nguồn tin phát hiện)
-      {
-        personId: binhXeOm.id,
-        relatedPersonId: tuanXe.id,
-        relationshipTypeId: informantType.id,
-        notes: 'Nhận diện được Tuấn Xế điều khiển xe bán tải Ford Ranger đen tại hiện trường Hàng Bạc',
-      },
-      {
-        personId: tuanXe.id,
-        relatedPersonId: binhXeOm.id,
-        relationshipTypeId: informantType.id,
-        notes: 'Bị ông Bình ghi hình camera hành trình lúc 02h15 sáng',
-      },
-    ],
-  });
+    // 7. Create Inter-Personal Relationships (Mối quan hệ đối tượng)
+    await prisma.relationship.createMany({
+      data: [
+        { personId: hungSoi.id, relatedPersonId: haiCan.id, relationshipTypeId: bossType.id },
+        { personId: haiCan.id, relatedPersonId: hungSoi.id, relationshipTypeId: subordinateType.id },
 
-  console.log('✓ Đã thiết lập mạng lưới quan hệ giữa các đối tượng');
+        { personId: hungSoi.id, relatedPersonId: tuanXe.id, relationshipTypeId: bossType.id },
+        { personId: tuanXe.id, relatedPersonId: hungSoi.id, relationshipTypeId: subordinateType.id },
 
-  // 7. Create Cases (Events) with Crime Scene GPS Coordinates
-  // Case 1: Active Investigation - Jewelry Store Burglary in Hoàn Kiếm
-  const caseKimBao = await prisma.event.create({
-    data: {
-      userId: user.id,
-      title: 'Vụ án #2026-01: Đột nhập Tiệm vàng Kim Bảo - Phố Hàng Bạc',
-      category: 'Tội phạm có tổ chức',
-      status: 'ONGOING',
-      startDate: new Date('2026-03-05T02:10:00.000Z'),
-      hasTime: true,
-      description:
-        '### Tóm tắt nội dung vụ án\nRạng sáng ngày 05/03/2026 (khoảng 02h10 - 02h45), kẻ gian đột nhập từ tum tầng 3 xuống Tiệm vàng Kim Bảo (Số 68 Hàng Bạc, Hoàn Kiếm). Đối tượng đã **ngắt chính xác nguồn dự phòng của hệ thống báo động hồng ngoại** và dùng thiết bị chuyên dụng mở khóa 02 két sắt chứa khoảng **85 lượng vàng SJC và trang sức** (ước tính thiệt hại 7,2 tỷ VNĐ).\n\n### Dấu vết & Phương thức thủ đoạn (MO)\n- Không có dấu hiệu cạy phá cửa chính; hệ thống báo động bị vô hiệu hóa bằng mã kỹ thuật nội bộ.\n- Camera nhà dân đối diện ghi nhận 02 đối tượng mặc áo mưa tối màu rời hiện trường lên xe bán tải **Ford Ranger màu đen** đỗ tại ngã tư Hàng Bạc - Đinh Liệt.',
-      groups: {
-        create: [{ groupId: taskForceGroup.id }, { groupId: longBienGangGroup.id }],
-      },
-      addresses: {
-        create: [
-          {
-            type: 'work',
-            streetLine1: 'Số 68 Phố Hàng Bạc, Phường Hàng Bạc',
-            locality: 'Quận Hoàn Kiếm',
-            region: 'Hà Nội',
-            country: 'Việt Nam',
-            latitude: 21.0341,
-            longitude: 105.8525,
-            geocodeStatus: 'success',
-            geocodedAt: new Date(),
-          },
-        ],
-      },
-      customFields: {
-        create: [
-          { key: 'Thiệt hại ước tính', value: '7.200.000.000 VNĐ (85 lượng vàng)' },
-          { key: 'Đơn vị thụ lý', value: 'Đội Cảnh sát Hình sự - PC02' },
-        ],
-      },
-    },
-  });
+        { personId: hungSoi.id, relatedPersonId: tacMatLe.id, relationshipTypeId: accompliceType.id },
+        { personId: tacMatLe.id, relatedPersonId: hungSoi.id, relationshipTypeId: accompliceType.id },
 
-  // Case 2: Active Investigation - Electronics Warehouse Burglary in Cầu Giấy
-  const caseCauGiay = await prisma.event.create({
-    data: {
-      userId: user.id,
-      title: 'Vụ án #2026-02: Trộm kho linh kiện điện tử công nghệ cao Cầu Giấy',
-      category: 'Hình sự / Trật tự xã hội',
-      status: 'ONGOING',
-      startDate: new Date('2026-02-19T01:30:00.000Z'),
-      hasTime: true,
-      description:
-        '### Tóm tắt nội dung vụ án\nRạng sáng 19/02/2026, kho hàng của Công ty TNHH Thiết bị Số Hà Thành (Phố Duy Tân, Cầu Giấy) bị cắt khóa cửa cuốn và vô hiệu hóa đầu ghi camera. Nhóm đối tượng bốc dỡ **120 máy tính xách tay và 200 điện thoại iPhone nguyên hộp** (trị giá khoảng 6,5 tỷ VNĐ) lên xe bán tải tối màu.\n\n### Nhận định điều tra\n- Thủ đoạn cắt nguồn dự phòng bộ báo động trùng khớp 100% với **Vụ án #2026-01 (Tiệm vàng Kim Bảo)**.\n- Phát hiện một số IMEI máy bị đánh cắp bắt đầu được kích hoạt lẻ tẻ qua đường dây thu mua của **Trần Minh Đức (Đức Đen)** tại Đống Đa.',
-      groups: {
-        create: [{ groupId: taskForceGroup.id }, { groupId: fenceRingGroup.id }],
-      },
-      addresses: {
-        create: [
-          {
-            type: 'work',
-            streetLine1: 'Số 36 Phố Duy Tân, Phường Dịch Vọng Hậu',
-            locality: 'Quận Cầu Giấy',
-            region: 'Hà Nội',
-            country: 'Việt Nam',
-            latitude: 21.0312,
-            longitude: 105.7845,
-            geocodeStatus: 'success',
-            geocodedAt: new Date(),
-          },
-        ],
-      },
-      customFields: {
-        create: [
-          { key: 'Thiệt hại ước tính', value: '6.500.000.000 VNĐ' },
-          { key: 'Phương thức thủ đoạn', value: 'Vô hiệu hóa báo động + Xe bán tải chở hàng đêm' },
-        ],
-      },
-    },
-  });
+        { personId: hungSoi.id, relatedPersonId: maiVang.id, relationshipTypeId: fenceType.id },
+        { personId: maiVang.id, relatedPersonId: hungSoi.id, relationshipTypeId: fenceType.id },
 
-  // Case 3: Newly Reported / Pending Verification - Stolen Assets & Pawnshop Money Laundering
-  const caseTieuThu = await prisma.event.create({
-    data: {
-      userId: user.id,
-      title: 'Vụ án #2026-03: Đường dây tiêu thụ tài sản gian & Tín dụng đen Phố Huế',
-      category: 'Kinh tế / Lừa đảo',
-      status: 'PLANNED',
-      startDate: new Date('2026-03-08T09:00:00.000Z'),
-      hasTime: false,
-      description:
-        '### Nguồn tin trinh sát\nQua công tác trinh sát địa bàn, phát hiện cơ sở cầm đồ **Ánh Mai (215 Phố Huế)** do **Đặng Thị Mai** làm chủ thường xuyên nấu chảy vàng trang sức vào ban đêm và giao dịch tiền mặt số lượng lớn với nhóm đối tượng hình sự ở Long Biên và Đống Đa.\n\n### Nhiệm vụ tiếp theo\n- Xác minh mối liên hệ tài chính giữa Đặng Thị Mai và thu ngân Bùi Thanh Thảo trước thời điểm xảy ra vụ đột nhập Tiệm vàng Kim Bảo.',
-      groups: {
-        create: [{ groupId: taskForceGroup.id }, { groupId: fenceRingGroup.id }],
-      },
-      addresses: {
-        create: [
-          {
-            type: 'work',
-            streetLine1: 'Số 215 Phố Huế, Phường Phố Huế',
-            locality: 'Quận Hai Bà Trưng',
-            region: 'Hà Nội',
-            country: 'Việt Nam',
-            latitude: 21.0165,
-            longitude: 105.8515,
-            geocodeStatus: 'success',
-            geocodedAt: new Date(),
-          },
-        ],
-      },
-    },
-  });
+        { personId: khanhChot.id, relatedPersonId: kietLun.id, relationshipTypeId: bossType.id },
+        { personId: kietLun.id, relatedPersonId: khanhChot.id, relationshipTypeId: subordinateType.id },
 
-  // Case 4: Solved / Closed Case - Long Biên Safe Burglary (Historical reference)
-  const caseLongBienClosed = await prisma.event.create({
-    data: {
-      userId: user.id,
-      title: 'Vụ án #2025-11: Cạy két sắt Văn phòng Vận tải Long Biên (Đã kết luận)',
-      category: 'Hình sự / Trật tự xã hội',
-      status: 'COMPLETED',
-      startDate: new Date('2025-11-12T03:00:00.000Z'),
-      endDate: new Date('2025-12-20T17:00:00.000Z'),
-      hasTime: true,
-      description:
-        'Vụ án trộm cắp két sắt tại Văn phòng Công ty Vận tải Bắc Hà (Long Biên) tháng 11/2025. Đã thu hồi một phần tang vật, phương thức mở khóa két sắt điện tử tương tự các vụ án đầu năm 2026.',
-      groups: {
-        create: [{ groupId: longBienGangGroup.id }],
-      },
-      addresses: {
-        create: [
-          {
-            type: 'work',
-            streetLine1: 'Số 410 Nguyễn Văn Cừ, Phường Ngọc Lâm',
-            locality: 'Quận Long Biên',
-            region: 'Hà Nội',
-            country: 'Việt Nam',
-            latitude: 21.0468,
-            longitude: 105.8795,
-            geocodeStatus: 'success',
-            geocodedAt: new Date(),
-          },
-        ],
-      },
-    },
-  });
+        { personId: khanhChot.id, relatedPersonId: longRong.id, relationshipTypeId: accompliceType.id },
+        { personId: longRong.id, relatedPersonId: khanhChot.id, relationshipTypeId: accompliceType.id },
 
-  console.log('✓ Đã tạo 4 hồ sơ Vụ án (2 Đang điều tra, 1 Mới tiếp nhận, 1 Đã kết luận)');
+        { personId: maiVang.id, relatedPersonId: ducDen.id, relationshipTypeId: accompliceType.id },
+        { personId: ducDen.id, relatedPersonId: maiVang.id, relationshipTypeId: accompliceType.id },
+      ],
+    });
 
-  // 8. Link Related Cases (EventRelationship)
-  await prisma.eventRelationship.createMany({
-    data: [
-      {
-        fromEventId: caseKimBao.id,
-        toEventId: caseCauGiay.id,
-        relationshipType: 'Cùng phương thức thủ đoạn (MO)',
-        notes: 'Cả 2 vụ đều ngắt nguồn dự phòng báo động hồng ngoại và dùng xe bán tải Ford Ranger đen tẩu thoát lúc 02h sáng.',
-      },
-      {
-        fromEventId: caseCauGiay.id,
-        toEventId: caseKimBao.id,
-        relationshipType: 'Cùng phương thức thủ đoạn (MO)',
-        notes: 'Cả 2 vụ đều ngắt nguồn dự phòng báo động hồng ngoại và dùng xe bán tải Ford Ranger đen tẩu thoát lúc 02h sáng.',
-      },
-      {
-        fromEventId: caseKimBao.id,
-        toEventId: caseTieuThu.id,
-        relationshipType: 'Đường dây tiêu thụ tang vật',
-        notes: 'Số vàng SJC và nữ trang bị lấy cắp tại Tiệm vàng Kim Bảo nghi vấn được tuồn về Tiệm cầm đồ Ánh Mai để nấu chảy.',
-      },
-      {
-        fromEventId: caseTieuThu.id,
-        toEventId: caseKimBao.id,
-        relationshipType: 'Đường dây tiêu thụ tang vật',
-        notes: 'Nơi tiêu thụ tang vật của vụ trộm Tiệm vàng Kim Bảo.',
-      },
-    ],
-  });
+    console.log('✓ Đã tạo mạng lưới quan hệ xã hội & tội phạm');
 
-  // 9. Create Investigative Hypotheses & Subject Links (PersonEvent)
-  // Note: Hùng Sói, Hải Cận, Tuấn Xế, and Mai Vàng are linked to >= 2 active cases
-  // so the Cross-Case Suspect Analysis panel immediately highlights them!
-  await prisma.personEvent.createMany({
-    data: [
-      // === CASE 1: Tiệm vàng Kim Bảo (ONGOING) ===
-      {
-        eventId: caseKimBao.id,
-        personId: vinhBac.id,
-        involvementType: 'ACCOMPLICE',
-        verificationStatus: 'HYPOTHESIS',
-        confidence: 'MEDIUM',
-        role: 'Nghi vấn cung cấp thiết bị dò mã két sắt (Đang truy tìm tọa độ)',
-        notes:
-          'Nguồn tin trinh sát báo Vinh Bạc vừa giao một bộ dò mã két sắt nhập lậu cho Hải Cận 3 ngày trước vụ án. Hiện đối tượng đã bỏ trốn khỏi nơi trọ cũ, chưa xác định được tọa độ GPS.',
+    // 8. Create 5 Cases (Events) with Crime Scene GPS Coordinates
+    // ========================================================
+    // CASE 1: [ÁN MỜ] Đột nhập Tiệm vàng Kim Bảo - Phố Hàng Bạc
+    // ========================================================
+    const caseKimBao = await prisma.event.create({
+      data: {
+        userId: user.id,
+        title: 'Vụ án #2026-01: Đột nhập Tiệm vàng Kim Bảo - Phố Hàng Bạc',
+        caseCode: 'TH-2026-01/HK',
+        crimeType: 'Trộm cắp tài sản',
+        caseStatus: 'UNRESOLVED',
+        category: 'Tội phạm có tổ chức',
+        status: 'ONGOING',
+        startDate: new Date('2026-03-05T02:10:00.000Z'),
+        hasTime: true,
+        incidentTimeNotes: 'Khoảng 02h10 - 02h45 sáng ngày 05/03/2026 (trời mưa phùn, tầm nhìn hạn chế)',
+        damageAssessment: '85 lượng vàng SJC và trang sức các loại (ước tính thiệt hại 7,2 tỷ VNĐ)',
+        description:
+          '### Tóm tắt nội dung vụ án\nRạng sáng ngày 05/03/2026, kẻ gian đột nhập từ tum tầng 3 xuống Tiệm vàng Kim Bảo (Số 68 Hàng Bạc, Hoàn Kiếm). Đối tượng đã ngắt nguồn dự phòng của hệ thống báo động hồng ngoại và dùng thiết bị chuyên dụng mở khóa 02 két sắt chứa khoảng **85 lượng vàng SJC và trang sức** (ước tính 7,2 tỷ VNĐ).\n\n### Dấu vết & Thủ đoạn (MO)\n- Không có dấu hiệu cạy phá cửa chính; hệ thống báo động bị vô hiệu hóa bằng mã kỹ thuật nội bộ.\n- Camera nhà dân ghi nhận 02 đối tượng áo mưa rời hiện trường lên xe bán tải Ford Ranger đen.',
+        groups: { create: [{ groupId: taskForceGroup.id }] },
+        addresses: {
+          create: [
+            {
+              type: 'work',
+              streetLine1: 'Số 68 Phố Hàng Bạc, Phường Hàng Bạc',
+              locality: 'Quận Hoàn Kiếm',
+              region: 'Hà Nội',
+              latitude: 21.0341,
+              longitude: 105.8525,
+              geocodeStatus: 'success',
+              geocodedAt: new Date(),
+            },
+          ],
+        },
       },
-      {
-        eventId: caseKimBao.id,
-        personId: hungSoi.id,
-        involvementType: 'SUSPECT',
-        verificationStatus: 'CONFIRMED',
-        confidence: 'HIGH',
-        role: 'Chủ mưu & Trực tiếp đột nhập',
-        notes:
-          'Dấu giày tại tum tầng 3 và dữ liệu trạm BTS điện thoại di động khẳng định Hùng Sói có mặt tại số 68 Hàng Bạc từ 01h55 đến 02h45 ngày 05/03/2026.',
-      },
-      {
-        eventId: caseKimBao.id,
-        personId: haiCan.id,
-        involvementType: 'SUSPECT',
-        verificationStatus: 'INVESTIGATING',
-        confidence: 'HIGH',
-        role: 'Kỹ thuật vô hiệu hóa báo động & mở két',
-        notes:
-          'Thủ đoạn mở khóa 2 két sắt điện tử không để lại vết cạy phá trùng khớp với kỹ năng chuyên môn của Hải Cận. Đang trưng cầu giám định dấu vân tay trên hộp kỹ thuật.',
-      },
-      {
-        eventId: caseKimBao.id,
-        personId: tuanXe.id,
-        involvementType: 'ACCOMPLICE',
-        verificationStatus: 'CONFIRMED',
-        confidence: 'HIGH',
-        role: 'Tài xế cảnh giới & Tẩu thoát',
-        notes:
-          'Camera hành trình của nhân chứng Đỗ Văn Bình ghi rõ chiếc Ford Ranger đen của Tuấn Xế đỗ chờ tại ngã tư Hàng Bạc - Đinh Liệt lúc 02h15.',
-      },
-      {
-        eventId: caseKimBao.id,
-        personId: maiVang.id,
-        involvementType: 'ACCOMPLICE',
-        verificationStatus: 'INVESTIGATING',
-        confidence: 'MEDIUM',
-        role: 'Tiêu thụ vàng trộm cắp & Môi giới nội gián',
-        notes:
-          'Sáng 05/03/2026 (chỉ 4 tiếng sau vụ án), Hùng Sói đã di chuyển thẳng về cơ sở cầm đồ của Mai Vàng tại 215 Phố Huế.',
-      },
-      {
-        eventId: caseKimBao.id,
-        personId: thaoNgan.id,
-        involvementType: 'PERSON_OF_INTEREST',
-        verificationStatus: 'HYPOTHESIS',
-        confidence: 'MEDIUM',
-        role: 'Nghi vấn nội gián cung cấp mã báo động',
-        notes:
-          'Giả thuyết: Thảo Ngân bị Mai Vàng ép cung cấp mã bảo trì báo động và lịch trực bảo vệ để trừ khoản nợ lãi cao 350 triệu đồng.',
-      },
-      {
-        eventId: caseKimBao.id,
-        personId: binhXeOm.id,
-        involvementType: 'WITNESS',
-        verificationStatus: 'CONFIRMED',
-        confidence: 'HIGH',
-        role: 'Nhân chứng hiện trường & Cung cấp camera hành trình',
-        notes:
-          'Đã giao nộp thẻ nhớ camera hành trình ghi lại cảnh 2 đối tượng xách túi đen lên xe bán tải lúc 02h42 sáng.',
-      },
-      {
-        eventId: caseKimBao.id,
-        personId: namBeo.id,
-        involvementType: 'SUSPECT',
-        verificationStatus: 'RULED_OUT',
-        confidence: 'HIGH',
-        role: 'Nghi vấn ban đầu (Đã loại trừ)',
-        notes:
-          'ĐÃ LOẠI TRỪ: Xác minh bệnh án và camera Bệnh viện Đa khoa Đức Giang xác nhận Nam Béo đang nằm viện sau ca mổ ruột thừa từ 03/03 đến 07/03/2026.',
-      },
+    });
 
-      // === CASE 2: Kho linh kiện điện tử Cầu Giấy (ONGOING) ===
-      {
-        eventId: caseCauGiay.id,
-        personId: hungSoi.id,
-        involvementType: 'SUSPECT',
-        verificationStatus: 'INVESTIGATING',
-        confidence: 'HIGH',
-        role: 'Chỉ đạo vụ đột nhập',
-        notes:
-          'Số điện thoại phụ 0988 999 113 của Hùng Sói phát sóng tại trạm BTS Phố Duy Tân (Cầu Giấy) cùng khung giờ xảy ra vụ trộm kho hàng.',
+    // ========================================================
+    // CASE 2: [ĐANG ĐIỀU TRA] Trộm kho linh kiện điện tử Cầu Giấy
+    // ========================================================
+    const caseCauGiay = await prisma.event.create({
+      data: {
+        userId: user.id,
+        title: 'Vụ án #2026-02: Trộm kho linh kiện điện tử công nghệ cao Cầu Giấy',
+        caseCode: 'TH-2026-02/CG',
+        crimeType: 'Trộm cắp tài sản',
+        caseStatus: 'INVESTIGATING',
+        category: 'Hình sự / Trật tự xã hội',
+        status: 'ONGOING',
+        startDate: new Date('2026-02-19T01:30:00.000Z'),
+        hasTime: true,
+        incidentTimeNotes: '01h30 sáng ngày 19/02/2026',
+        damageAssessment: '120 máy tính xách tay ThinkPad & 200 điện thoại iPhone nguyên hộp (trị giá 6,5 tỷ VNĐ)',
+        description:
+          '### Tóm tắt nội dung vụ án\nKho hàng Công ty Thiết bị Số Hà Thành bị cắt khóa cửa cuốn bằng kìm thủy lực và ngắt camera. Nhóm đối tượng bốc dỡ lô hàng công nghệ lên xe bán tải tối màu chở đi tẩu tán.',
+        groups: { create: [{ groupId: taskForceGroup.id }] },
+        addresses: {
+          create: [
+            {
+              type: 'work',
+              streetLine1: 'Số 36 Phố Duy Tân, Phường Dịch Vọng Hậu',
+              locality: 'Quận Cầu Giấy',
+              region: 'Hà Nội',
+              latitude: 21.0312,
+              longitude: 105.7845,
+              geocodeStatus: 'success',
+              geocodedAt: new Date(),
+            },
+          ],
+        },
       },
-      {
-        eventId: caseCauGiay.id,
-        personId: khanhChot.id,
-        involvementType: 'SUSPECT',
-        verificationStatus: 'CONFIRMED',
-        confidence: 'HIGH',
-        role: 'Trực tiếp cắt khóa kho hàng & Bốc xếp',
-        notes:
-          'Hình ảnh camera ngõ 165 Cầu Giấy nhận diện rõ vết sẹo và dáng đi của Khánh Chột khi điều phối bốc hàng lên xe bán tải.',
-      },
-      {
-        eventId: caseCauGiay.id,
-        personId: haiCan.id,
-        involvementType: 'ACCOMPLICE',
-        verificationStatus: 'HYPOTHESIS',
-        confidence: 'MEDIUM',
-        role: 'Vô hiệu hóa đầu ghi camera',
-        notes:
-          'Giả thuyết: Hải Cận đi cùng nhóm để ngắt hệ thống cảnh báo qua mạng của kho hàng trước khi Khánh Chột cắt cửa cuốn.',
-      },
-      {
-        eventId: caseCauGiay.id,
-        personId: tuanXe.id,
-        involvementType: 'ACCOMPLICE',
-        verificationStatus: 'CONFIRMED',
-        confidence: 'HIGH',
-        role: 'Vận chuyển lô hàng điện tử trộm cắp',
-        notes:
-          'Xe bán tải Ford Ranger của Tuấn Xế được camera giao thông ghi nhận di chuyển từ Duy Tân về phố Chùa Bộc lúc 03h10 sáng 19/02/2026.',
-      },
-      {
-        eventId: caseCauGiay.id,
-        personId: ducDen.id,
-        involvementType: 'SUSPECT',
-        verificationStatus: 'INVESTIGATING',
-        confidence: 'HIGH',
-        role: 'Tiêu thụ lô laptop & iPhone trộm cắp',
-        notes:
-          'Phát hiện 05 máy iPhone thuộc lô hàng bị mất tại kho Cầu Giấy được rao bán không hộp tại cửa hàng của Đức Đen.',
-      },
+    });
 
-      // === CASE 3: Đường dây tiêu thụ tài sản gian Phố Huế (PLANNED) ===
-      {
-        eventId: caseTieuThu.id,
-        personId: maiVang.id,
-        involvementType: 'SUSPECT',
-        verificationStatus: 'INVESTIGATING',
-        confidence: 'HIGH',
-        role: 'Chủ mưu đường dây tiêu thụ & Tín dụng đen',
-        notes:
-          'Đứng tên cơ sở cầm đồ Ánh Mai, trực tiếp thu mua vàng trộm cắp để nấu chảy thành vàng nguyên liệu.',
+    // ========================================================
+    // CASE 3: [ÁN MỜ] Cướp giật tài sản trước Tràng Tiền Plaza
+    // ========================================================
+    const caseCuopTrangTien = await prisma.event.create({
+      data: {
+        userId: user.id,
+        title: 'Vụ án #2026-03: Cướp giật tài sản du khách trước Tràng Tiền Plaza',
+        caseCode: 'CG-2026-05/HK',
+        crimeType: 'Cướp giật tài sản',
+        caseStatus: 'UNRESOLVED',
+        category: 'Hình sự / Trật tự xã hội',
+        status: 'ONGOING',
+        startDate: new Date('2026-03-14T21:15:00.000Z'),
+        hasTime: true,
+        incidentTimeNotes: '21h15 tối ngày 14/03/2026',
+        damageAssessment: '01 túi xách Chanel chứa 50 triệu VNĐ tiền mặt và 01 điện thoại iPhone 16 Pro Max',
+        description:
+          '### Tóm tắt vụ việc\n02 đối tượng đi xe máy Exciter côn tay không gương, tháo biển số, áp sát giật túi xách của nữ du khách quốc tế đang chụp ảnh tại ngã tư Hai Bà Trưng - Hàng Bài rồi phóng nhanh tẩu thoát về hướng cầu Chương Dương.',
+        addresses: {
+          create: [
+            {
+              type: 'work',
+              streetLine1: 'Số 24 Phố Hai Bà Trưng, Phường Tràng Tiền',
+              locality: 'Quận Hoàn Kiếm',
+              region: 'Hà Nội',
+              latitude: 21.0255,
+              longitude: 105.8530,
+              geocodeStatus: 'success',
+              geocodedAt: new Date(),
+            },
+          ],
+        },
       },
-      {
-        eventId: caseTieuThu.id,
-        personId: ducDen.id,
-        involvementType: 'ACCOMPLICE',
-        verificationStatus: 'INVESTIGATING',
-        confidence: 'MEDIUM',
-        role: 'Đầu mối tiêu thụ thiết bị điện tử',
-        notes:
-          'Phối hợp với Mai Vàng tiêu thụ tài sản giá trị cao (điện thoại, laptop, đồng hồ) do các băng nhóm trộm cắp mang tới.',
-      },
-      {
-        eventId: caseTieuThu.id,
-        personId: hungSoi.id,
-        involvementType: 'PERSON_OF_INTEREST',
-        verificationStatus: 'HYPOTHESIS',
-        confidence: 'HIGH',
-        role: 'Nguồn cung cấp tài sản trộm cắp',
-        notes:
-          'Cung cấp vàng và tài sản lấy được từ các vụ đột nhập cho Mai Vàng tiêu thụ.',
-      },
-      {
-        eventId: caseTieuThu.id,
-        personId: thaoNgan.id,
-        involvementType: 'VICTIM',
-        verificationStatus: 'INVESTIGATING',
-        confidence: 'HIGH',
-        role: 'Con nợ bị cưỡng ép',
-        notes:
-          'Vay 100 triệu đồng nhưng bị tính lãi cắt cổ lên 350 triệu đồng, bị đe dọa buộc phải hợp tác cung cấp thông tin nội bộ tiệm vàng.',
-      },
+    });
 
-      // === CASE 4: Vụ cạy két sắt Long Biên (COMPLETED) ===
-      {
-        eventId: caseLongBienClosed.id,
-        personId: hungSoi.id,
-        involvementType: 'SUSPECT',
-        verificationStatus: 'INVESTIGATING',
-        confidence: 'MEDIUM',
-        role: 'Nghi vấn liên đới',
-        notes: 'Có mặt gần khu vực Ngọc Lâm vào thời điểm xảy ra vụ án tháng 11/2025.',
+    // ========================================================
+    // CASE 4: [ĐANG ĐIỀU TRA] Đường dây tiêu thụ tài sản gian Phố Huế
+    // ========================================================
+    const caseTieuThu = await prisma.event.create({
+      data: {
+        userId: user.id,
+        title: 'Vụ án #2026-04: Đường dây tiêu thụ tài sản gian & Cho vay nặng lãi Phố Huế',
+        caseCode: 'KT-2026-03/HBT',
+        crimeType: 'Lừa đảo / Tiêu thụ tài sản gian',
+        caseStatus: 'INVESTIGATING',
+        category: 'Kinh tế / Tín dụng đen',
+        status: 'PLANNED',
+        startDate: new Date('2026-03-08T09:00:00.000Z'),
+        hasTime: false,
+        incidentTimeNotes: 'Hoạt động liên tục từ quý 4/2025 đến nay',
+        damageAssessment: 'Dòng tiền giao dịch phi pháp ước tính trên 15 tỷ VNĐ',
+        description:
+          '### Chuyên án trinh sát\nCơ sở cầm đồ Ánh Mai tại 215 Phố Huế do Đặng Thị Mai làm chủ thu mua vàng trộm cắp nấu chảy và cho vay nặng lãi siết nợ người dân.',
+        groups: { create: [{ groupId: fenceRingGroup.id }] },
+        addresses: {
+          create: [
+            {
+              type: 'work',
+              streetLine1: 'Số 215 Phố Huế, Phường Phố Huế',
+              locality: 'Quận Hai Bà Trưng',
+              region: 'Hà Nội',
+              latitude: 21.0165,
+              longitude: 105.8515,
+              geocodeStatus: 'success',
+              geocodedAt: new Date(),
+            },
+          ],
+        },
       },
-      {
-        eventId: caseLongBienClosed.id,
-        personId: namBeo.id,
-        involvementType: 'WITNESS',
-        verificationStatus: 'CONFIRMED',
-        confidence: 'MEDIUM',
-        role: 'Khai báo thông tin cũ',
-        notes: 'Cung cấp thông tin về thói quen hoạt động ban đêm của băng nhóm Long Biên.',
-      },
-    ],
-  });
+    });
 
-  console.log('✓ Đã tạo 18 liên kết giả thuyết điều tra (PersonEvent) giữa Đối tượng và Vụ án');
+    // ========================================================
+    // CASE 5: [ĐÃ LÀM RÕ] Vụ cạy két sắt Công ty Vận tải Bắc Hà
+    // ========================================================
+    const caseLongBienClosed = await prisma.event.create({
+      data: {
+        userId: user.id,
+        title: 'Vụ án #2025-11: Cạy két sắt Công ty Vận tải Bắc Hà (Đã kết luận)',
+        caseCode: 'TH-2025-88/LB',
+        crimeType: 'Trộm cắp tài sản',
+        caseStatus: 'SOLVED',
+        category: 'Hình sự / Trật tự xã hội',
+        status: 'COMPLETED',
+        startDate: new Date('2025-11-12T03:00:00.000Z'),
+        endDate: new Date('2025-12-20T17:00:00.000Z'),
+        hasTime: true,
+        incidentTimeNotes: '03h00 sáng ngày 12/11/2025',
+        damageAssessment: 'Đã thu hồi nguyên vẹn 1,2 tỷ VNĐ tiền mặt và 03 sổ tiết kiệm',
+        description:
+          'Vụ cạy két sắt tại Long Biên tháng 11/2025. Đã bắt giữ các đối tượng và thu hồi toàn bộ tang vật trao trả doanh nghiệp.',
+        addresses: {
+          create: [
+            {
+              type: 'work',
+              streetLine1: 'Số 410 Phố Nguyễn Văn Cừ, Phường Ngọc Lâm',
+              locality: 'Quận Long Biên',
+              region: 'Hà Nội',
+              latitude: 21.0468,
+              longitude: 105.8795,
+              geocodeStatus: 'success',
+              geocodedAt: new Date(),
+            },
+          ],
+        },
+      },
+    });
 
-  // 10. Create Investigation Log Entries (JournalEntry linked to both Cases & Subjects)
-  const logEntry1 = await prisma.journalEntry.create({
-    data: {
-      userId: user.id,
-      title: 'Biên bản khám nghiệm hiện trường & Trích xuất camera Vụ tiệm vàng Kim Bảo',
-      date: new Date('2026-03-05T08:30:00.000Z'),
-      hasTime: true,
-      body: `### Kết quả khám nghiệm hiện trường (68 Hàng Bạc)\n- Kẻ gian đột nhập qua lối thông gió tầng tum lúc **02h12 sáng 05/03/2026**.\n- Hộp điều khiển trung tâm báo động hồng ngoại bị ngắt nguồn dự phòng và nhập mã bảo trì kỹ thuật chính xác ngay lần đầu tiên -> **Nhận định có sự thông đồng hoặc rò rỉ thông tin từ nhân viên nội bộ**.\n- Thu giữ 02 vết giày cỡ 42 tại hành lang tầng 2 và 01 mẫu vân tay mờ trên nắp hộp kỹ thuật.\n\n### Trích xuất camera khu vực\n- Nguồn tin **Đỗ Văn Bình (Bình Xe Ôm)** cung cấp đoạn video từ camera hành trình lúc **02h42**: Có 02 đối tượng đội mũ trùm kín xách 02 ba lô đen lên xe bán tải **Ford Ranger màu đen** (biển số bị che bùn một phần, nhận diện được đầu số 29H-512.xx) do đối tượng giống **Phạm Quốc Tuấn (Tuấn Xế)** điều khiển.`,
-      people: {
-        create: [
-          { personId: hungSoi.id },
-          { personId: haiCan.id },
-          { personId: tuanXe.id },
-          { personId: binhXeOm.id },
-        ],
-      },
-      events: {
-        create: [{ eventId: caseKimBao.id }],
-      },
-    },
-  });
+    console.log('✓ Đã tạo 5 hồ sơ Vụ án (2 Án mờ chưa rõ đối tượng, 2 Đang điều tra, 1 Đã kết luận)');
 
-  const logEntry2 = await prisma.journalEntry.create({
-    data: {
-      userId: user.id,
-      title: 'Báo cáo xác minh ngoại phạm của Hoàng Văn Nam (Nam Béo) — Loại trừ nghi vấn',
-      date: new Date('2026-03-07T14:15:00.000Z'),
-      hasTime: true,
-      body: `### Nội dung xác minh\nTiến hành làm việc với Bệnh viện Đa khoa Đức Giang (Long Biên) để kiểm tra thông tin ngoại phạm của đối tượng **Hoàng Văn Nam (Nam Béo)**.\n\n### Kết luận\n- Hồ sơ bệnh án số #BA-2026-0892 và dữ liệu camera hành lang Khoa Ngoại tổng hợp xác nhận Hoàng Văn Nam nhập viện cấp cứu mổ ruột thừa lúc **19h30 ngày 03/03/2026** và nằm điều trị liên tục đến chiều **07/03/2026**.\n- **Quyết định**: Chuyển trạng thái của Hoàng Văn Nam trong Vụ án #2026-01 sang **Đã loại trừ (RULED_OUT)** để tập trung lực lượng vào mũi của **Nguyễn Văn Hùng (Hùng Sói)** và **Lê Hoàng Hải (Hải Cận)**.`,
-      people: {
-        create: [{ personId: namBeo.id }, { personId: hungSoi.id }],
-      },
-      events: {
-        create: [{ eventId: caseKimBao.id }],
-      },
-    },
-  });
+    // 9. Link Cross-Case Relationships
+    await prisma.eventRelationship.createMany({
+      data: [
+        {
+          fromEventId: caseKimBao.id,
+          toEventId: caseCauGiay.id,
+          relationshipType: 'Cùng phương thức thủ đoạn (MO)',
+          notes: 'Cả 2 vụ đều ngắt nguồn dự phòng báo động hồng ngoại và dùng xe bán tải Ford Ranger đen tẩu thoát lúc rạng sáng.',
+        },
+        {
+          fromEventId: caseKimBao.id,
+          toEventId: caseTieuThu.id,
+          relationshipType: 'Đường dây tiêu thụ tang vật',
+          notes: 'Vàng SJC lấy cắp tại Tiệm vàng Kim Bảo nghi vấn chuyển về Tiệm cầm đồ Ánh Mai để nấu chảy.',
+        },
+      ],
+    });
 
-  const logEntry3 = await prisma.journalEntry.create({
-    data: {
-      userId: user.id,
-      title: 'Báo cáo trinh sát liên chuyên án: Phát hiện điểm giao nhận hàng giữa Tuấn Xế, Mai Vàng và Đức Đen',
-      date: new Date('2026-03-10T22:00:00.000Z'),
-      hasTime: true,
-      body: `### Diễn biến giám sát\nTổ trinh sát mật phục tại khu vực Phố Huế và Chùa Bộc ghi nhận:\n1. Lúc **20h15 ngày 10/03/2026**, **Nguyễn Văn Hùng (Hùng Sói)** xuất hiện tại ngõ sau Tiệm cầm đồ Ánh Mai (215 Phố Huế) và gặp trực tiếp **Đặng Thị Mai (Mai Vàng)** trong khoảng 40 phút.\n2. Cùng ngày, xác minh tài khoản ngân hàng của thu ngân **Bùi Thanh Thảo (Thảo Ngân)** phát hiện nhiều giao dịch chuyển tiền trả lãi cho Đặng Thị Mai trước ngày 05/03/2026.\n3. Tại Quận Đống Đa, **Phạm Quốc Tuấn (Tuấn Xế)** và **Vũ Đình Khánh (Khánh Chột)** đã giao 02 thùng linh kiện điện tử thuộc lô hàng mất cắp tại **Kho Cầu Giấy (Vụ án #2026-02)** cho cửa hàng của **Trần Minh Đức (Đức Đen)**.\n\n### Đề xuất kế hoạch phá án\n- Đủ căn cứ xác lập mối liên hệ chặt chẽ giữa 3 vụ án (#2026-01, #2026-02, #2026-03).\n- Đề xuất triệu tập đồng loạt các đối tượng và khám xét khẩn cấp nơi ở tại Số 18 Ngõ Đào Duy Từ (Hoàn Kiếm) cùng Tiệm cầm đồ Ánh Mai (215 Phố Huế).`,
-      people: {
-        create: [
-          { personId: hungSoi.id },
-          { personId: maiVang.id },
-          { personId: thaoNgan.id },
-          { personId: tuanXe.id },
-          { personId: khanhChot.id },
-          { personId: ducDen.id },
-        ],
-      },
-      events: {
-        create: [
-          { eventId: caseKimBao.id },
-          { eventId: caseCauGiay.id },
-          { eventId: caseTieuThu.id },
-        ],
-      },
-    },
-  });
+    // 10. Link Suspects & People to Cases (PersonEvent with Hypotheses, Reasons, and Alibis)
+    await prisma.personEvent.createMany({
+      data: [
+        // Case 1: Tiệm vàng Kim Bảo
+        {
+          eventId: caseKimBao.id,
+          personId: hungSoi.id,
+          involvementType: 'SUSPECT',
+          verificationStatus: 'INVESTIGATING',
+          confidence: 'HIGH',
+          role: 'Chủ mưu trực tiếp đột nhập',
+          reasonForSuspicion: 'Dấu giày cỡ 42 khớp tại hiện trường, trạm BTS ghi nhận số điện thoại phụ lúc 02h15',
+          alibi: 'Khai ở nhà ngủ tại Bồ Đề nhưng không có người làm chứng',
+          notes: 'Cần trích xuất thêm camera ngã tư Đào Duy Từ',
+        },
+        {
+          eventId: caseKimBao.id,
+          personId: haiCan.id,
+          involvementType: 'SUSPECT',
+          verificationStatus: 'INVESTIGATING',
+          confidence: 'HIGH',
+          role: 'Kỹ thuật ngắt báo động & giải mã két',
+          reasonForSuspicion: 'Mã kỹ thuật nội bộ của hộp báo động bị vô hiệu hóa chính xác, chuyên môn của Hải Cận',
+          alibi: 'Khai sửa đồ điện tử qua đêm tại tiệm',
+        },
+        {
+          eventId: caseKimBao.id,
+          personId: tuanXe.id,
+          involvementType: 'ACCOMPLICE',
+          verificationStatus: 'CONFIRMED',
+          confidence: 'HIGH',
+          role: 'Tài xế cảnh giới & Tẩu thoát',
+          reasonForSuspicion: 'Xe Ford Ranger 29H-512.68 xuất hiện trên camera ngã tư Đinh Liệt lúc 02h42',
+          alibi: 'Đã xác minh lời khai ngoại phạm là giả mạo',
+        },
+        {
+          eventId: caseKimBao.id,
+          personId: thaoNgan.id,
+          involvementType: 'PERSON_OF_INTEREST',
+          verificationStatus: 'HYPOTHESIS',
+          confidence: 'MEDIUM',
+          role: 'Nghi vấn nội gián cung cấp mã kỹ thuật',
+          reasonForSuspicion: 'Nợ tiền lãi 350 triệu của Mai Vàng trước ngày xảy ra vụ án',
+          alibi: 'Khai ở phòng trọ ngủ cùng bạn gái',
+        },
+        {
+          eventId: caseKimBao.id,
+          personId: binhXeOm.id,
+          involvementType: 'WITNESS',
+          verificationStatus: 'CONFIRMED',
+          confidence: 'HIGH',
+          role: 'Nhân chứng cung cấp camera hành trình',
+        },
+        {
+          eventId: caseKimBao.id,
+          personId: namBeo.id,
+          involvementType: 'SUSPECT',
+          verificationStatus: 'RULED_OUT',
+          confidence: 'HIGH',
+          role: 'Nghi vấn ban đầu (Đã loại trừ)',
+          reasonForSuspicion: 'Có tiền án trộm cắp tài sản trên địa bàn',
+          alibi: 'Đang nằm viện cấp cứu mổ ruột thừa tại BV Đức Giang từ 03/03 đến 07/03/2026',
+        },
 
-  console.log(
-    `✓ Đã tạo 3 biên bản Nhật ký điều tra (${logEntry1.id}, ${logEntry2.id}, ${logEntry3.id}) gắn kết cả Vụ án và Đối tượng`
-  );
+        // Case 2: Kho linh kiện Cầu Giấy
+        {
+          eventId: caseCauGiay.id,
+          personId: khanhChot.id,
+          involvementType: 'SUSPECT',
+          verificationStatus: 'CONFIRMED',
+          confidence: 'HIGH',
+          role: 'Chỉ đạo cắt khóa & Bốc dỡ hàng',
+          reasonForSuspicion: 'Camera nhận diện vết sẹo khóe mắt và dáng đi khập khiễng',
+          alibi: 'Khai đi ăn đêm tại Xuân Thủy',
+        },
+        {
+          eventId: caseCauGiay.id,
+          personId: kietLun.id,
+          involvementType: 'ACCOMPLICE',
+          verificationStatus: 'INVESTIGATING',
+          confidence: 'HIGH',
+          role: 'Bốc xếp lô máy tính ThinkPad',
+          reasonForSuspicion: 'Đi xe SH đen nhám 29S1-778.89 đón Khánh Chột',
+        },
+        {
+          eventId: caseCauGiay.id,
+          personId: ducDen.id,
+          involvementType: 'ACCOMPLICE',
+          verificationStatus: 'INVESTIGATING',
+          confidence: 'HIGH',
+          role: 'Đầu mối tiêu thụ iPhone và Laptop',
+          reasonForSuspicion: 'Phát hiện 05 máy iPhone tang vật đang được rao bán tại tiệm Đức Mobile',
+        },
+
+        // Case 3: Cướp giật Tràng Tiền
+        {
+          eventId: caseCuopTrangTien.id,
+          personId: loiBua.id,
+          involvementType: 'SUSPECT',
+          verificationStatus: 'HYPOTHESIS',
+          confidence: 'MEDIUM',
+          role: 'Nghi vấn điều khiển xe Exciter cướp giật',
+          reasonForSuspicion: 'Nhân dạng sẹo lồi ở cằm và phương tiện Exciter đỏ đen trùng khớp lời khai bị hại',
+          alibi: 'Chưa có người làm chứng cho khoảng thời gian 21h-22h ngày 14/03',
+        },
+
+        // Case 4: Tiêu thụ tài sản gian Phố Huế
+        {
+          eventId: caseTieuThu.id,
+          personId: maiVang.id,
+          involvementType: 'SUSPECT',
+          verificationStatus: 'INVESTIGATING',
+          confidence: 'HIGH',
+          role: 'Chủ mưu thu mua vàng trộm cắp',
+          reasonForSuspicion: 'Lò nấu kim hoàn hoạt động bí mật sau nửa đêm',
+        },
+        {
+          eventId: caseTieuThu.id,
+          personId: vanTinDung.id,
+          involvementType: 'ACCOMPLICE',
+          verificationStatus: 'INVESTIGATING',
+          confidence: 'HIGH',
+          role: 'Thu nợ lãi cao và đe dọa các con nợ',
+        },
+
+        // Case 5: Cạy két sắt Bắc Hà Long Biên (Solved)
+        {
+          eventId: caseLongBienClosed.id,
+          personId: hungSoi.id,
+          involvementType: 'SUSPECT',
+          verificationStatus: 'CONFIRMED',
+          confidence: 'HIGH',
+          role: 'Thủ phạm đã thừa nhận hành vi',
+        },
+      ],
+    });
+
+    console.log('✓ Đã tạo 14 liên kết đối tượng vào các vụ án kèm căn cứ nghi vấn & ngoại phạm');
+
+    // 11. Create Sample Investigation Log (JournalEntry)
+    await prisma.journalEntry.create({
+      data: {
+        userId: user.id,
+        title: 'Báo cáo trinh sát thực địa: Khoanh vùng các ổ nhóm nghi vấn quanh phố Hàng Bạc',
+        date: new Date('2026-03-06T10:00:00.000Z'),
+        hasTime: true,
+        body: `### Kết quả rà soát địa bàn quanh Tiệm vàng Kim Bảo\n1. Sử dụng công cụ **Smart Matcher (Khoanh vùng nghi phạm)** trong bán kính 1.5km:\n- Phát hiện đối tượng **Trần Văn Tặc (Tặc Mắt Lé)** cư trú tại 22 Hàng Bạc (cách hiện trường 50m), có tiền án trộm cắp cạy khóa.\n- Đối tượng **Nguyễn Văn Hùng (Hùng Sói)** và **Lê Hoàng Hải (Hải Cận)** có nhiều dấu hiệu nghi vấn về kỹ thuật mở két và phương tiện bán tải.\n\n2. Đề xuất: Phối hợp Công an phường Hàng Buồm và Hàng Bạc gọi hỏi răn đe, xác minh di biến động trong đêm 05/03/2026.`,
+        people: {
+          create: [{ personId: hungSoi.id }, { personId: haiCan.id }, { personId: tacMatLe.id }],
+        },
+        events: {
+          create: [{ eventId: caseKimBao.id }],
+        },
+      },
+    });
+
+    console.log('✓ Đã tạo nhật ký điều tra liên kết Vụ án và Đối tượng');
   }
 
-  console.log('\n🎉 Khởi tạo cơ sở dữ liệu mẫu điều tra thành công!');
+  console.log('\n🎉 Hoàn thành nạp dữ liệu mẫu điều tra chuyên nghiệp (5 vụ án & 22 đối tượng)!');
   console.log('\nThông tin đăng nhập Demo:');
-  console.log('Email:    demo@nametag.one');
-  console.log('Mật khẩu: password123');
-  console.log('Ngôn ngữ: Tiếng Việt (vi-VN)');
+  console.log('📧 Email:    demo@nametag.one');
+  console.log('🔑 Mật khẩu: password123');
+  console.log('🌐 Ngôn ngữ: Tiếng Việt (vi-VN)');
 
   // Disconnect after successful seed
   await prisma.$disconnect();

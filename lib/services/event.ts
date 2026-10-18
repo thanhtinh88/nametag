@@ -105,6 +105,14 @@ export async function createEvent(userId: string, data: EventInput) {
       hasTime: hasTime ?? false,
       description: sanitizedDescription,
       photo: photo ?? null,
+
+      // Investigation & Case Management fields
+      caseCode: data.caseCode ?? null,
+      crimeType: data.crimeType ?? null,
+      caseStatus: data.caseStatus ?? 'UNRESOLVED',
+      incidentTimeNotes: data.incidentTimeNotes ?? null,
+      damageAssessment: data.damageAssessment ? sanitizeNotes(data.damageAssessment) : null,
+
       groups:
         groupIds && groupIds.length > 0
           ? { create: groupIds.map((groupId) => ({ groupId })) }
@@ -162,6 +170,8 @@ export async function createEvent(userId: string, data: EventInput) {
                 involvementType: p.involvementType ?? 'SUSPECT',
                 verificationStatus: p.verificationStatus ?? 'HYPOTHESIS',
                 confidence: p.confidence ?? null,
+                reasonForSuspicion: p.reasonForSuspicion ? sanitizeNotes(p.reasonForSuspicion) : null,
+                alibi: p.alibi ? sanitizeNotes(p.alibi) : null,
                 notes: p.notes ? sanitizeNotes(p.notes) : null,
               })),
             }
@@ -220,6 +230,14 @@ export async function updateEvent(id: string, userId: string, data: EventUpdateI
     updateData.description = description ? sanitizeNotes(description) : null;
   }
   if (photo !== undefined) updateData.photo = photo ?? null;
+
+  // Investigation & Case Management fields
+  if (data.caseCode !== undefined) updateData.caseCode = data.caseCode ?? null;
+  if (data.crimeType !== undefined) updateData.crimeType = data.crimeType ?? null;
+  if (data.caseStatus !== undefined) updateData.caseStatus = data.caseStatus ?? 'UNRESOLVED';
+  if (data.incidentTimeNotes !== undefined) updateData.incidentTimeNotes = data.incidentTimeNotes ?? null;
+  if (data.damageAssessment !== undefined)
+    updateData.damageAssessment = data.damageAssessment ? sanitizeNotes(data.damageAssessment) : null;
 
   if (groupIds !== undefined) {
     updateData.groups = {
@@ -286,6 +304,8 @@ export async function updateEvent(id: string, userId: string, data: EventUpdateI
         involvementType: p.involvementType ?? 'SUSPECT',
         verificationStatus: p.verificationStatus ?? 'HYPOTHESIS',
         confidence: p.confidence ?? null,
+        reasonForSuspicion: p.reasonForSuspicion ? sanitizeNotes(p.reasonForSuspicion) : null,
+        alibi: p.alibi ? sanitizeNotes(p.alibi) : null,
         notes: p.notes ? sanitizeNotes(p.notes) : null,
       })),
     };
