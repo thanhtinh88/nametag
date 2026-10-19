@@ -290,7 +290,7 @@ function buildInitialState(params: {
 
   const knownThroughName = initialKnownThroughPerson
     ? `${initialKnownThroughPerson.name}${initialKnownThroughPerson.surname ? ' ' + initialKnownThroughPerson.surname : ''}`
-    : youLabel;
+    : '';
 
   return {
     isLoading: false,
@@ -300,7 +300,7 @@ function buildInitialState(params: {
     pendingPhotoBlob: null,
     cropImageSrc: null,
     showPhotoSourceModal: false,
-    knownThroughId: initialKnownThrough || 'user',
+    knownThroughId: initialKnownThrough || '',
     knownThroughName,
     inheritGroups: false,
     showDropdown: false,

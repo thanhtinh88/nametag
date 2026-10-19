@@ -110,7 +110,9 @@ function drawEdge(rc: RenderContext, edge: SimulationEdge, highlighted: boolean)
   rc.ctx.setLineDash([]);
   rc.ctx.globalAlpha = 1;
 
-  if (highlighted || isEdgeRelated) drawArrowMarker(rc, src, tgt, edge.color || '#999');
+  if (highlighted || isEdgeRelated || edge.directionType === 'DIRECTED') {
+    drawArrowMarker(rc, src, tgt, edge.color || '#999');
+  }
 }
 
 function drawArrowMarker(

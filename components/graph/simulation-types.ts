@@ -38,6 +38,9 @@ export interface SimulationEdge {
   targetLabel?: string;
   lineStyle?: 'solid' | 'dashed' | 'dotted';
   verificationStatus?: string;
+  confidence?: string;
+  category?: string;
+  directionType?: 'BIDIRECTIONAL' | 'DIRECTED';
   involvementType?: string;
 }
 

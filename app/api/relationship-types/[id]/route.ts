@@ -54,7 +54,7 @@ export const PUT = withAuth(async (request, session, context) => {
       return validation.response;
     }
 
-    const { name, label, color, inverseId, inverseLabel, symmetric } = validation.data;
+    const { name, label, color, inverseId, inverseLabel, symmetric, category, directionType, lineStyle } = validation.data;
 
     const normalizedName = name.toUpperCase().replace(/\s+/g, '_');
 
@@ -79,6 +79,9 @@ export const PUT = withAuth(async (request, session, context) => {
         data: {
           name: normalizedName,
           label,
+          category: category ?? existing.category,
+          directionType: directionType ?? 'BIDIRECTIONAL',
+          lineStyle: lineStyle ?? existing.lineStyle,
           color: color ?? existing.color ?? getRandomColor(),
           inverseId: id, // Points to itself
         },
@@ -125,6 +128,9 @@ export const PUT = withAuth(async (request, session, context) => {
           userId: session.user.id,
           name: inverseName,
           label: inverseLabel,
+          category: category ?? existing.category,
+          directionType: directionType ?? 'DIRECTED',
+          lineStyle: lineStyle ?? existing.lineStyle,
           color: color || getRandomColor(),
           inverseId: id, // Link back to the type being edited
         },
@@ -138,6 +144,9 @@ export const PUT = withAuth(async (request, session, context) => {
       data: {
         name: normalizedName,
         label,
+        category: category ?? existing.category,
+        directionType: directionType ?? existing.directionType,
+        lineStyle: lineStyle ?? existing.lineStyle,
         color: color ?? existing.color ?? getRandomColor(),
         inverseId: finalInverseId,
       },

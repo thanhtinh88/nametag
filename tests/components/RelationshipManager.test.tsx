@@ -262,128 +262,24 @@ describe('RelationshipManager', () => {
       expect(preview.textContent).toContain('Child');
     });
 
-    it('should show "your" variant when currentUser is selected', () => {
-      const propsWithCurrentUser = {
-        ...propsWithAvailablePeople,
-        currentUser: {
-          id: 'user-1',
-          name: 'Me',
-          surname: 'User',
-          nickname: null,
-        },
-        hasUserRelationship: false,
-      };
-
-      render(
-        <Wrapper>
-          <RelationshipManager {...propsWithCurrentUser} />
-        </Wrapper>
-      );
-
-      // Open the add modal
-      fireEvent.click(screen.getByText('Add Relationship'));
-
-      // Simulate selecting the current user
-      act(() => {
-        if (capturedOnChange) {
-          capturedOnChange('user-1', 'Me User');
-        }
-      });
-
-      const preview = screen.getByTestId('relationship-preview');
-      // Preview: "You are Alice's Parent"
-      expect(preview.textContent).toContain('You');
-      expect(preview.textContent).toContain("Alice's");
-      expect(preview.textContent).toContain('Parent');
-    });
-
-    it('should show correct preview for symmetric types when currentUser is selected', () => {
-      const propsWithSymmetricType = {
-        ...propsWithAvailablePeople,
-        relationshipTypes: [
-          ...defaultProps.relationshipTypes,
-          {
-            id: 'type-relative',
-            name: 'RELATIVE',
-            label: 'Relative',
-            color: '#6366F1',
-            inverseId: null, // symmetric type with null inverseId
-          },
-        ],
-        currentUser: {
-          id: 'user-1',
-          name: 'Me',
-          surname: 'User',
-          nickname: null,
-        },
-        hasUserRelationship: false,
-      };
-
-      render(
-        <Wrapper>
-          <RelationshipManager {...propsWithSymmetricType} />
-        </Wrapper>
-      );
-
-      // Open the add modal
-      fireEvent.click(screen.getByText('Add Relationship'));
-
-      // Change relationship type to Relative
-      const typeSelect = screen.getByDisplayValue('Parent');
-      fireEvent.change(typeSelect, { target: { value: 'type-relative' } });
-
-      // Simulate selecting the current user
-      act(() => {
-        if (capturedOnChange) {
-          capturedOnChange('user-1', 'Me User');
-        }
-      });
-
-      const preview = screen.getByTestId('relationship-preview');
-      // Preview: "You are Alice's Relative"
-      expect(preview.textContent).toContain('You');
-      expect(preview.textContent).toContain("Alice's");
-      expect(preview.textContent).toContain('Relative');
-    });
-
-    it('should successfully submit symmetric type with null inverseId for user relationship', async () => {
+    it('should successfully submit person-to-person relationship', async () => {
       const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
-        new Response(JSON.stringify({ person: {} }), { status: 200 }),
+        new Response(JSON.stringify({ relationship: {} }), { status: 201 }),
       );
-
-      const propsWithSymmetricType = {
-        ...propsWithAvailablePeople,
-        relationshipTypes: [
-          {
-            id: 'type-relative',
-            name: 'RELATIVE',
-            label: 'Relative',
-            color: '#6366F1',
-            inverseId: null,
-          },
-        ],
-        currentUser: {
-          id: 'user-1',
-          name: 'Me',
-          surname: 'User',
-          nickname: null,
-        },
-        hasUserRelationship: false,
-      };
 
       render(
         <Wrapper>
-          <RelationshipManager {...propsWithSymmetricType} />
+          <RelationshipManager {...propsWithAvailablePeople} />
         </Wrapper>
       );
 
       // Open the add modal
       fireEvent.click(screen.getByText('Add Relationship'));
 
-      // Simulate selecting the current user
+      // Simulate selecting Bob Brown
       act(() => {
         if (capturedOnChange) {
-          capturedOnChange('user-1', 'Me User');
+          capturedOnChange('person-bob', 'Bob Brown');
         }
       });
 
@@ -393,12 +289,22 @@ describe('RelationshipManager', () => {
         fireEvent.click(submitButton);
       });
 
-      // Should have called fetch with the type's own id as fallback (not errored)
+      // Should have called POST /api/relationships
       expect(fetchSpy).toHaveBeenCalledWith(
-        expect.stringContaining('/api/people/person-alice'),
+        '/api/relationships',
         expect.objectContaining({
-          method: 'PUT',
-          body: JSON.stringify({ relationshipToUserId: 'type-relative' }),
+          method: 'POST',
+          body: JSON.stringify({
+            personId: 'person-bob',
+            relatedPersonId: 'person-alice',
+            relationshipTypeId: 'type-parent',
+            verificationStatus: 'CONFIRMED',
+            confidence: 'HIGH',
+            source: null,
+            startDate: null,
+            endDate: null,
+            notes: null,
+          }),
         }),
       );
 

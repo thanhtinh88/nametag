@@ -1042,6 +1042,7 @@
       "rosterPersons": "Subjects",
       "rosterSearchPlaceholder": "Search subjects, cases...",
       "rosterEmpty": "No results found",
+      "noResults": "No results found",
       "focusInGraph": "Focus in graph",
       "contextMenu": {
         "personTitle": "Investigation Subject",
@@ -1166,6 +1167,26 @@
     "relationshipDeleted": "Relationship deleted successfully",
     "noRelationshipsYet": "No relationships yet.",
     "relationshipType": "Relationship Type",
+    "verificationStatus": "Verification Status",
+    "verificationStatusHelp": "Evidence verification level for this relationship",
+    "verificationStatuses": {
+      "UNVERIFIED": "Intelligence / Unverified",
+      "INVESTIGATING": "Under Investigation",
+      "CONFIRMED": "Verified",
+      "RULED_OUT": "Ruled Out"
+    },
+    "confidenceLevel": "Confidence Level",
+    "confidenceLevels": {
+      "HIGH": "High",
+      "MEDIUM": "Medium",
+      "LOW": "Low"
+    },
+    "relationshipSource": "Basis / Intelligence Source",
+    "relationshipSourcePlaceholder": "Interrogation, surveillance report, case file...",
+    "relationshipStartDate": "Start Date",
+    "relationshipEndDate": "End Date",
+    "timeline": "Timeline",
+    "present": "Present",
     "person": "Person",
     "searchForPerson": "Search for a person...",
     "optionalNotes": "Optional notes...",
@@ -1979,12 +2000,37 @@
       "errorConnection": "Unable to connect to server. Please check your connection and try again.",
       "successCreated": "Relationship type \"{label}\" has been created",
       "successUpdated": "Relationship type \"{label}\" has been updated",
-      "generateRandomColor": "Generate random color"
+      "generateRandomColor": "Generate random color",
+      "categoryLabel": "Investigation Category *",
+      "categoryHelp": "Categorize the connection nature for link analysis and tactical graphs",
+      "directionLabel": "Direction Nature *",
+      "directionHelp": "Directed relationships represent command authority or financial fund flows",
+      "lineStyleLabel": "Graph Line Style",
+      "lineStyleHelp": "Line appearance on the network graph representing verification status"
     },
     "autocomplete": {
       "placeholder": "Search or create inverse relationship...",
       "createNew": "Press Enter to create new type: \"{searchTerm}\"",
       "willCreate": "✓ Will create new type: \"{value}\""
+    },
+    "category": "Category",
+    "allCategories": "All Categories",
+    "direction": "Direction",
+    "lineStyle": "Line Style",
+    "categories": {
+      "CRIMINAL": "Criminal Gang / Network",
+      "FINANCIAL": "Financial / Assets Flow",
+      "FAMILY": "Family / Relatives",
+      "LEGAL_CASE": "Legal / Case Proceedings",
+      "SOCIAL": "Social / Acquaintance"
+    },
+    "directions": {
+      "BIDIRECTIONAL": "Bidirectional (↔)",
+      "DIRECTED": "Directed (➔)"
+    },
+    "lineStyles": {
+      "SOLID": "Solid Line (Verified / Official)",
+      "DASHED": "Dashed Line (Suspicious / Under Intel)"
     }
   },
   "relationships": {

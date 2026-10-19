@@ -12,6 +12,9 @@ interface RelationshipType {
   id: string;
   name: string;
   label: string;
+  category?: string | null;
+  directionType?: string | null;
+  lineStyle?: string | null;
   color: string | null;
   inverseId: string | null;
   inverse?: {
@@ -33,12 +36,24 @@ export default function RelationshipTypeForm({
   mode,
 }: RelationshipTypeFormProps) {
   const t = useTranslations('relationshipTypes.form');
+  const tRel = useTranslations('relationshipTypes');
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Symmetric relationship toggle (inverse is the same as main, e.g., accomplice <-> accomplice)
+  const isInitiallySymmetric =
+    relationshipType?.directionType === 'BIDIRECTIONAL' ||
+    relationshipType?.inverseId === relationshipType?.id ||
+    (!relationshipType && false);
+
+  const [isSymmetric, setIsSymmetric] = useState(isInitiallySymmetric);
+
   const [formData, setFormData] = useState({
     label: relationshipType?.label || '',
+    category: relationshipType?.category || 'CRIMINAL',
+    directionType: relationshipType?.directionType || (isInitiallySymmetric ? 'BIDIRECTIONAL' : 'DIRECTED'),
+    lineStyle: relationshipType?.lineStyle || 'SOLID',
     color: relationshipType?.color || getRandomColor(),
   });
 
@@ -46,10 +61,6 @@ export default function RelationshipTypeForm({
   const [inverseValue, setInverseValue] = useState(relationshipType?.inverseId || '');
   const [inverseIsExisting, setInverseIsExisting] = useState(!!relationshipType?.inverseId);
   const [inverseLabel, setInverseLabel] = useState(relationshipType?.inverse?.label || '');
-
-  // Symmetric relationship toggle (inverse is the same as main, e.g., friend <-> friend)
-  const isInitiallySymmetric = relationshipType?.inverseId === relationshipType?.id;
-  const [isSymmetric, setIsSymmetric] = useState(isInitiallySymmetric);
 
   const handleRerollColor = () => {
     setFormData((prev) => ({
@@ -62,11 +73,18 @@ export default function RelationshipTypeForm({
   const sanitizeName = (label: string): string => {
     return label
       .toUpperCase()
-      .replace(/\s+/g, '_'); // Replace spaces with underscores
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // strip vietnamese diacritics for internal code
+      .replace(/[^A-Z0-9\s]/g, '')
+      .trim()
+      .replace(/\s+/g, '_');
   };
 
   type RelationshipTypePayload = {
     label: string;
+    category: string;
+    directionType: string;
+    lineStyle: string;
     color: string | null;
     name: string;
     symmetric?: true;
@@ -87,17 +105,18 @@ export default function RelationshipTypeForm({
       const method = mode === 'create' ? 'POST' : 'PUT';
 
       // Generate internal name from label
-      const name = sanitizeName(formData.label);
+      const name = sanitizeName(formData.label) || 'CUSTOM_TYPE';
 
       // Prepare payload
       const payload: RelationshipTypePayload = {
         ...formData,
+        directionType: isSymmetric ? 'BIDIRECTIONAL' : 'DIRECTED',
         name,
       };
 
       // Add inverse relationship data
       if (isSymmetric) {
-        // Symmetric relationship - inverse is the same as main (e.g., friend <-> friend)
+        // Symmetric relationship - inverse is the same as main
         payload.symmetric = true;
       } else if (inverseValue) {
         if (inverseIsExisting) {
@@ -150,10 +169,11 @@ export default function RelationshipTypeForm({
         </div>
       )}
 
+      {/* Label */}
       <div>
         <label
           htmlFor="label"
-          className="block text-sm font-medium text-muted mb-1"
+          className="block text-sm font-medium text-foreground mb-1"
         >
           {t('labelRequired')}
         </label>
@@ -171,28 +191,80 @@ export default function RelationshipTypeForm({
         </p>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-muted mb-2">
-          {t('inverseRelationship')}
+      {/* Category selection */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label
+            htmlFor="category"
+            className="block text-sm font-medium text-foreground mb-1"
+          >
+            {t('categoryLabel')}
+          </label>
+          <select
+            id="category"
+            value={formData.category}
+            onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+            className="w-full px-3 py-2 border border-border rounded-lg bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            <option value="CRIMINAL">{tRel('categories.CRIMINAL')}</option>
+            <option value="FINANCIAL">{tRel('categories.FINANCIAL')}</option>
+            <option value="FAMILY">{tRel('categories.FAMILY')}</option>
+            <option value="LEGAL_CASE">{tRel('categories.LEGAL_CASE')}</option>
+            <option value="SOCIAL">{tRel('categories.SOCIAL')}</option>
+          </select>
+          <p className="text-xs text-muted mt-1">
+            {t('categoryHelp')}
+          </p>
+        </div>
+
+        <div>
+          <label
+            htmlFor="lineStyle"
+            className="block text-sm font-medium text-foreground mb-1"
+          >
+            {t('lineStyleLabel')}
+          </label>
+          <select
+            id="lineStyle"
+            value={formData.lineStyle}
+            onChange={(e) => setFormData({ ...formData, lineStyle: e.target.value })}
+            className="w-full px-3 py-2 border border-border rounded-lg bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            <option value="SOLID">{tRel('lineStyles.SOLID')}</option>
+            <option value="DASHED">{tRel('lineStyles.DASHED')}</option>
+          </select>
+          <p className="text-xs text-muted mt-1">
+            {t('lineStyleHelp')}
+          </p>
+        </div>
+      </div>
+
+      {/* Direction & Symmetric toggle */}
+      <div className="p-4 rounded-lg border border-border bg-surface-elevated/40">
+        <label className="block text-sm font-medium text-foreground mb-2">
+          {t('directionLabel')}
         </label>
 
-        {/* Symmetric toggle */}
         <div className="flex items-center mb-3">
           <button
             type="button"
             role="switch"
             aria-checked={isSymmetric}
             onClick={() => {
-              setIsSymmetric(!isSymmetric);
-              if (!isSymmetric) {
-                // When enabling symmetric, clear the inverse value
+              const nextSymmetric = !isSymmetric;
+              setIsSymmetric(nextSymmetric);
+              setFormData((prev) => ({
+                ...prev,
+                directionType: nextSymmetric ? 'BIDIRECTIONAL' : 'DIRECTED',
+              }));
+              if (nextSymmetric) {
                 setInverseValue('');
                 setInverseIsExisting(false);
                 setInverseLabel('');
               }
             }}
             className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 dark:focus:ring-offset-gray-800 ${
-              isSymmetric ? 'bg-primary' : 'bg-surface-elevated'
+              isSymmetric ? 'bg-primary' : 'bg-surface-elevated border-border'
             }`}
           >
             <span
@@ -201,8 +273,8 @@ export default function RelationshipTypeForm({
               }`}
             />
           </button>
-          <span className="ml-3 text-sm text-muted">
-            {t('symmetric')}
+          <span className="ml-3 text-sm font-medium text-foreground">
+            {isSymmetric ? tRel('directions.BIDIRECTIONAL') : tRel('directions.DIRECTED')}
           </span>
         </div>
         <p className="text-xs text-muted mb-3">
@@ -211,22 +283,28 @@ export default function RelationshipTypeForm({
 
         {/* Inverse autocomplete - only shown when not symmetric */}
         {!isSymmetric && (
-          <RelationshipTypeAutocomplete
-            types={availableTypes}
-            value={inverseValue}
-            isExisting={inverseIsExisting}
-            onChange={(value, isExisting, label) => {
-              setInverseValue(value);
-              setInverseIsExisting(isExisting);
-              setInverseLabel(label);
-            }}
-            placeholder={t('inversePlaceholder')}
-          />
+          <div className="mt-3 pt-3 border-t border-border">
+            <label className="block text-xs font-medium text-muted mb-1">
+              {t('inverseRelationship')}
+            </label>
+            <RelationshipTypeAutocomplete
+              types={availableTypes}
+              value={inverseValue}
+              isExisting={inverseIsExisting}
+              onChange={(value, isExisting, label) => {
+                setInverseValue(value);
+                setInverseIsExisting(isExisting);
+                setInverseLabel(label);
+              }}
+              placeholder={t('inversePlaceholder')}
+            />
+          </div>
         )}
       </div>
 
+      {/* Color Selection */}
       <div>
-        <label className="block text-sm font-medium text-muted mb-2">
+        <label className="block text-sm font-medium text-foreground mb-2">
           {t('color')}
         </label>
         <div className="flex flex-wrap gap-3">

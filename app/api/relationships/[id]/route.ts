@@ -52,7 +52,15 @@ export const PUT = withAuth(async (request, session, context) => {
       return validation.response;
     }
 
-    const { relationshipTypeId, notes } = validation.data;
+    const {
+      relationshipTypeId,
+      verificationStatus,
+      confidence,
+      startDate,
+      endDate,
+      source,
+      notes,
+    } = validation.data;
 
     // Find the existing relationship
     const existing = await prisma.relationship.findUnique({
@@ -94,7 +102,12 @@ export const PUT = withAuth(async (request, session, context) => {
       where: { id },
       data: {
         relationshipTypeId,
-        notes: notes || null,
+        verificationStatus: verificationStatus ?? existing.verificationStatus,
+        confidence: confidence !== undefined ? confidence : existing.confidence,
+        startDate: startDate !== undefined ? (startDate ? new Date(startDate) : null) : existing.startDate,
+        endDate: endDate !== undefined ? (endDate ? new Date(endDate) : null) : existing.endDate,
+        source: source !== undefined ? source : existing.source,
+        notes: notes !== undefined ? notes : existing.notes,
       },
     });
 
@@ -112,7 +125,12 @@ export const PUT = withAuth(async (request, session, context) => {
         where: { id: inverse.id },
         data: {
           relationshipTypeId: relationshipType.inverseId,
-          notes: notes || null,
+          verificationStatus: verificationStatus ?? existing.verificationStatus,
+          confidence: confidence !== undefined ? confidence : existing.confidence,
+          startDate: startDate !== undefined ? (startDate ? new Date(startDate) : null) : existing.startDate,
+          endDate: endDate !== undefined ? (endDate ? new Date(endDate) : null) : existing.endDate,
+          source: source !== undefined ? source : existing.source,
+          notes: notes !== undefined ? notes : existing.notes,
         },
       });
     }

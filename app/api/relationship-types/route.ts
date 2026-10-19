@@ -34,7 +34,7 @@ export const POST = withAuth(async (request, session) => {
       return validation.response;
     }
 
-    const { name, label, color, inverseId, inverseLabel, symmetric } = validation.data;
+    const { name, label, color, inverseId, inverseLabel, symmetric, category, directionType, lineStyle } = validation.data;
 
     const normalizedName = name.toUpperCase().replace(/\s+/g, '_');
 
@@ -59,6 +59,9 @@ export const POST = withAuth(async (request, session) => {
           userId: session.user.id,
           name: normalizedName,
           label,
+          category: category || 'CRIMINAL',
+          directionType: directionType || 'BIDIRECTIONAL',
+          lineStyle: lineStyle || 'SOLID',
           color: color || getRandomColor(),
         },
       });
@@ -108,6 +111,9 @@ export const POST = withAuth(async (request, session) => {
           userId: session.user.id,
           name: inverseName,
           label: inverseLabel,
+          category: category || 'CRIMINAL',
+          directionType: directionType || 'DIRECTED',
+          lineStyle: lineStyle || 'SOLID',
           color: color || getRandomColor(),
           // Leave inverseId null for now, will update after creating the main type
         },
@@ -122,6 +128,9 @@ export const POST = withAuth(async (request, session) => {
         userId: session.user.id,
         name: normalizedName,
         label,
+        category: category || 'CRIMINAL',
+        directionType: directionType || (symmetric ? 'BIDIRECTIONAL' : 'DIRECTED'),
+        lineStyle: lineStyle || 'SOLID',
         color: color || getRandomColor(),
         inverseId: finalInverseId,
       },

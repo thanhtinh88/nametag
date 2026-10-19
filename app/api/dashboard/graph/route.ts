@@ -35,12 +35,20 @@ type DashboardGraphPerson = {
   relationshipsFrom: Array<{
     personId: string;
     relatedPersonId: string;
+    verificationStatus?: string | null;
+    confidence?: string | null;
     relationshipType: {
       label: string;
       color: string | null;
+      category?: string | null;
+      directionType?: string | null;
+      lineStyle?: string | null;
       inverse: {
         label: string;
         color: string | null;
+        category?: string | null;
+        directionType?: string | null;
+        lineStyle?: string | null;
       } | null;
     } | null;
   }>;
@@ -64,7 +72,7 @@ export const GET = withAuth(async (request, session) => {
     const includeGroupIds = parseGroupIds(searchParams.get('includeGroupIds'));
     const excludeGroupIds = parseGroupIds(searchParams.get('excludeGroupIds'));
     const limit = searchParams.get('limit');
-    const hideUserNode = searchParams.get('hideUserNode') === 'true';
+    const hideUserNode = searchParams.get('hideUserNode') !== 'false';
     const caseId = searchParams.get('caseId')?.trim() || '';
     const includeHop = searchParams.get('includeHop') !== 'false';
     const includeSolvedCases = searchParams.get('includeSolvedCases') !== 'false';
@@ -191,6 +199,9 @@ export const GET = withAuth(async (request, session) => {
           select: {
             personId: true,
             relatedPersonId: true,
+            verificationStatus: true,
+            confidence: true,
+            source: true,
             relationshipType: {
               where: {
                 deletedAt: null,
@@ -198,6 +209,9 @@ export const GET = withAuth(async (request, session) => {
               select: {
                 label: true,
                 color: true,
+                category: true,
+                directionType: true,
+                lineStyle: true,
                 inverse: {
                   where: {
                     deletedAt: null,
@@ -205,6 +219,9 @@ export const GET = withAuth(async (request, session) => {
                   select: {
                     label: true,
                     color: true,
+                    category: true,
+                    directionType: true,
+                    lineStyle: true,
                   },
                 },
               },

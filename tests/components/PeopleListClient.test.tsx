@@ -234,7 +234,7 @@ describe('PeopleListClient', () => {
                 makePerson({
                   id: 'p-1',
                   name: 'Alice',
-                  relationshipToUser: { label: 'Friend', color: '#10B981' },
+                  relationshipsFrom: [{ id: 'r-1' }],
                 }),
               ],
             })}
@@ -242,10 +242,10 @@ describe('PeopleListClient', () => {
         </Wrapper>
       );
 
-      expect(screen.getByText('Friend')).toBeInTheDocument();
+      expect(screen.getByText(/1 liên kết/)).toBeInTheDocument();
     });
 
-    it('renders indirect badge when person has no direct relationship', () => {
+    it('renders indirect badge when person has no relationships', () => {
       render(
         <Wrapper>
           <PeopleListClient
@@ -254,9 +254,8 @@ describe('PeopleListClient', () => {
                 makePerson({
                   id: 'p-1',
                   name: 'Alice',
-                  relationshipToUser: null,
-                  // Has at least one relationship to avoid orphan status
-                  relationshipsFrom: [{ id: 'r-1' }],
+                  relationshipsFrom: [],
+                  relationshipsTo: [],
                 }),
               ],
             })}

@@ -95,6 +95,50 @@ describe('Relationship Types API', () => {
       expect(body.relationshipType).toEqual(newType);
     });
 
+    it('should create an investigation relationship type with category, directionType, and lineStyle', async () => {
+      const criminalType = {
+        id: 'criminal-type',
+        name: 'LEADER',
+        label: 'Cầm đầu',
+        category: 'CRIMINAL',
+        directionType: 'DIRECTED',
+        lineStyle: 'SOLID',
+        color: '#DC2626',
+        userId: 'user-123',
+      };
+
+      mocks.relationshipTypeFindFirst.mockResolvedValue(null);
+      mocks.relationshipTypeCreate.mockResolvedValue(criminalType);
+
+      const request = new Request('http://localhost/api/relationship-types', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'LEADER',
+          label: 'Cầm đầu',
+          category: 'CRIMINAL',
+          directionType: 'DIRECTED',
+          lineStyle: 'SOLID',
+          color: '#DC2626',
+        }),
+        headers: { 'content-type': 'application/json' },
+      });
+
+      const response = await POST(request);
+      const body = await response.json();
+
+      expect(response.status).toBe(201);
+      expect(body.relationshipType).toEqual(criminalType);
+      expect(mocks.relationshipTypeCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            category: 'CRIMINAL',
+            directionType: 'DIRECTED',
+            lineStyle: 'SOLID',
+          }),
+        }),
+      );
+    });
+
     it('should create a symmetric relationship type (points to itself)', async () => {
       const createdType = {
         id: 'friend-type',

@@ -142,7 +142,7 @@ export default function UnifiedNetworkGraph({
   const [includeHop, setIncludeHop] = useState<boolean>(true);
   const [activeCasesOnly, setActiveCasesOnly] = useState<boolean>(Boolean(events));
   const [showRuledOut, setShowRuledOut] = useState<boolean>(!events);
-  const [hideUserNode, setHideUserNode] = useState<boolean>(Boolean(events));
+  const [hideUserNode, setHideUserNode] = useState<boolean>(true);
   const [customFieldSlug, setCustomFieldSlug] = useState<string>('');
   const [customFieldValue, setCustomFieldValue] = useState<string>('');
   const [filtersOpen, setFiltersOpen] = useState<boolean>(false);
@@ -1663,7 +1663,7 @@ export default function UnifiedNetworkGraph({
                   isExpanded={casesExpanded}
                   onToggle={() => setCasesExpanded((prev) => !prev)}
                   badgeColor="bg-amber-500/15 text-amber-700 dark:text-amber-400"
-                  emptyMessage={t('noResults')}
+                  emptyMessage={t('rosterEmpty')}
                 >
                   <div className="space-y-1.5">
                     {rosterItems.cases.map((ev) => {

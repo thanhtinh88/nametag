@@ -439,8 +439,7 @@ export default function PeopleListClient({
             </thead>
             <tbody className="bg-surface divide-y divide-border">
               {people.map((person) => {
-                const isOrphan = !person.relationshipToUser &&
-                                 person.relationshipsFrom.length === 0 &&
+                const isOrphan = person.relationshipsFrom.length === 0 &&
                                  person.relationshipsTo.length === 0;
                 const isChecked = selectAllPages || selectedIds.has(person.id);
                 const fullDisplayName = formatCanonicalName(person, nameOrder);
@@ -497,21 +496,18 @@ export default function PeopleListClient({
                       {person.nickname ? `'${person.nickname}'` : '\u2014'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {person.relationshipToUser ? (
-                        <span
-                          className="inline-flex items-center px-2 py-1 rounded text-xs font-medium"
-                          style={{
-                            backgroundColor: person.relationshipToUser.color ? `${person.relationshipToUser.color}20` : 'var(--badge-bg)',
-                            color: person.relationshipToUser.color || 'var(--badge-text)',
-                          }}
-                        >
-                          {person.relationshipToUser.label}
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium text-muted bg-surface-elevated">
-                          {tt.indirect}
-                        </span>
-                      )}
+                      {(() => {
+                        const count = person.relationshipsFrom.length + person.relationshipsTo.length;
+                        return count > 0 ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+                            {count} liên kết
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium text-muted bg-surface-elevated">
+                            {tt.indirect}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex flex-wrap gap-1">

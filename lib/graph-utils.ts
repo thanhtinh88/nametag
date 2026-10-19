@@ -22,23 +22,30 @@ export interface GraphEdge {
   targetLabel?: string;
   lineStyle?: 'solid' | 'dashed' | 'dotted';
   verificationStatus?: string;
+  confidence?: string;
+  category?: string;
+  directionType?: 'BIDIRECTIONAL' | 'DIRECTED';
   involvementType?: string;
 }
 
-type PersonId = Prisma.PersonGetPayload<{
-  select: { id: true };
-}>;
+type PersonId = {
+  id: string;
+};
 
-type RelationshipToUser = Prisma.RelationshipTypeGetPayload<{
-  select: { label: true; color: true };
-}>;
+type RelationshipToUser = {
+  label: string;
+  color?: string | null;
+  category?: string | null;
+  directionType?: string | null;
+  lineStyle?: string | null;
+};
 
 type InverseRelationship = RelationshipToUser;
 
 interface PersonWithRelationshipToUser extends PersonId {
-  relationshipToUser:
+  relationshipToUser?:
     | (RelationshipToUser & {
-        inverse: InverseRelationship | null;
+        inverse?: InverseRelationship | null;
       })
     | null;
 }
@@ -75,13 +82,22 @@ export function relationshipsWithUserToGraphEdges(
   return edges;
 }
 
-type Relationship = Prisma.RelationshipGetPayload<{
-  select: {
-    personId: true;
-    relatedPersonId: true;
-    relationshipType: { select: { label: true; color: true } };
-  };
-}>;
+export type RelationshipTypeInput = {
+  label: string;
+  color?: string | null;
+  category?: string | null;
+  directionType?: string | null;
+  lineStyle?: string | null;
+  inverse?: RelationshipTypeInput | null;
+};
+
+export type Relationship = {
+  personId: string;
+  relatedPersonId: string;
+  verificationStatus?: string | null;
+  confidence?: string | null;
+  relationshipType?: RelationshipTypeInput | null;
+};
 
 /**
  * Converts a relationship into a graph edge.
@@ -93,18 +109,35 @@ export function relationshipToGraphEdge(
   if (!relationship.relationshipType) {
     return;
   }
+  const relType = relationship.relationshipType;
+  let lineStyle: 'solid' | 'dashed' | 'dotted' = 'solid';
+  if (relationship.verificationStatus === 'UNVERIFIED' || relationship.verificationStatus === 'INVESTIGATING') {
+    lineStyle = 'dashed';
+  } else if (relationship.verificationStatus === 'RULED_OUT') {
+    lineStyle = 'dotted';
+  } else if (relType.lineStyle === 'DASHED') {
+    lineStyle = 'dashed';
+  } else if (relType.lineStyle === 'DOTTED') {
+    lineStyle = 'dotted';
+  }
+
   return {
     source: relationship.personId,
     target: relationship.relatedPersonId,
-    type: relationship.relationshipType.label,
-    color: relationship.relationshipType.color || '#999999',
+    type: relType.label,
+    color: relType.color || '#999999',
+    lineStyle,
+    verificationStatus: relationship.verificationStatus || undefined,
+    confidence: relationship.confidence || undefined,
+    category: relType.category || undefined,
+    directionType: relType.directionType === 'DIRECTED' ? 'DIRECTED' : 'BIDIRECTIONAL',
   };
 }
 
-interface RelationshipWithInverse extends Relationship {
-  relationshipType:
-    | (Relationship['relationshipType'] & {
-        inverse: InverseRelationship | null;
+export interface RelationshipWithInverse extends Relationship {
+  relationshipType?:
+    | (RelationshipTypeInput & {
+        inverse?: RelationshipTypeInput | null;
       })
     | null;
 }
@@ -121,14 +154,35 @@ export function inverseRelationshipToGraphEdge(
   if (!relationship.relationshipType) {
     return;
   }
+  const relType = relationship.relationshipType;
+  // If directed relationship without distinct inverse, don't generate inverse edge
+  if (relType.directionType === 'DIRECTED' && (!relType.inverse || relType.inverse.label === relType.label)) {
+    return;
+  }
   // Use inverse type if available, otherwise use the type itself
   // (correct for symmetric types where the inverse IS the same type)
-  const inverseType = relationship.relationshipType.inverse || relationship.relationshipType;
+  const inverseType = relType.inverse || relType;
+  let lineStyle: 'solid' | 'dashed' | 'dotted' = 'solid';
+  if (relationship.verificationStatus === 'UNVERIFIED' || relationship.verificationStatus === 'INVESTIGATING') {
+    lineStyle = 'dashed';
+  } else if (relationship.verificationStatus === 'RULED_OUT') {
+    lineStyle = 'dotted';
+  } else if (inverseType.lineStyle === 'DASHED') {
+    lineStyle = 'dashed';
+  } else if (inverseType.lineStyle === 'DOTTED') {
+    lineStyle = 'dotted';
+  }
+
   return {
     source: relationship.relatedPersonId,
     target: relationship.personId,
     type: inverseType.label,
     color: inverseType.color || '#999999',
+    lineStyle,
+    verificationStatus: relationship.verificationStatus || undefined,
+    confidence: relationship.confidence || undefined,
+    category: inverseType.category || undefined,
+    directionType: inverseType.directionType === 'DIRECTED' ? 'DIRECTED' : 'BIDIRECTIONAL',
   };
 }
 

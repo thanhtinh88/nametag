@@ -14,7 +14,7 @@ export const GET = withAuth(async (request, session, context) => {
   try {
     const { id } = await context.params;
     const { searchParams } = new URL(request.url);
-    const hideUserNode = searchParams.get('hideUserNode') === 'true';
+    const hideUserNode = searchParams.get('hideUserNode') !== 'false';
     const includeSolvedCases = searchParams.get('includeSolvedCases') !== 'false';
     const includeRuledOut = searchParams.get('includeRuledOut') !== 'false';
 

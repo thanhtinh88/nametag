@@ -1042,6 +1042,7 @@
       "rosterPersons": "Đối tượng",
       "rosterSearchPlaceholder": "Tìm kiếm đối tượng, vụ án...",
       "rosterEmpty": "Không tìm thấy kết quả phù hợp",
+      "noResults": "Không tìm thấy kết quả phù hợp",
       "focusInGraph": "Tiêu điểm trên đồ thị",
       "contextMenu": {
         "personTitle": "Đối tượng nghi vấn",
@@ -1166,6 +1167,26 @@
     "relationshipDeleted": "Đã xóa mối quan hệ thành công",
     "noRelationshipsYet": "Chưa ghi nhận mối quan hệ nào.",
     "relationshipType": "Loại mối quan hệ",
+    "verificationStatus": "Trạng thái xác minh",
+    "verificationStatusHelp": "Mức độ kiểm chứng tài liệu/chứng cứ của mối quan hệ này",
+    "verificationStatuses": {
+      "UNVERIFIED": "Nghi vấn trinh sát",
+      "INVESTIGATING": "Đang xác minh",
+      "CONFIRMED": "Đã xác minh",
+      "RULED_OUT": "Đã loại trừ"
+    },
+    "confidenceLevel": "Độ tin cậy",
+    "confidenceLevels": {
+      "HIGH": "Cao",
+      "MEDIUM": "Trung bình",
+      "LOW": "Thấp"
+    },
+    "relationshipSource": "Căn cứ / Nguồn tài liệu",
+    "relationshipSourcePlaceholder": "Lời khai, tài liệu trinh sát, hồ sơ vụ án...",
+    "relationshipStartDate": "Từ ngày",
+    "relationshipEndDate": "Đến ngày",
+    "timeline": "Thời gian",
+    "present": "Nay",
     "person": "Đối tượng",
     "searchForPerson": "Tìm kiếm đối tượng...",
     "optionalNotes": "Ghi chú thêm (tùy chọn)...",
@@ -1979,12 +2000,37 @@
       "errorConnection": "Không thể kết nối máy chủ. Vui lòng kiểm tra kết nối và thử lại.",
       "successCreated": "Đã tạo loại mối quan hệ \"{label}\"",
       "successUpdated": "Đã cập nhật loại mối quan hệ \"{label}\"",
-      "generateRandomColor": "Tạo màu ngẫu nhiên"
+      "generateRandomColor": "Tạo màu ngẫu nhiên",
+      "categoryLabel": "Nhóm quan hệ nghiệp vụ *",
+      "categoryHelp": "Phân loại tính chất quan hệ để phục vụ phân tích link analysis và sơ đồ mạng lưới",
+      "directionLabel": "Tính chất hướng *",
+      "directionHelp": "Quan hệ có hướng thể hiện quyền lực chỉ đạo hoặc dòng chảy tiền tệ",
+      "lineStyleLabel": "Kiểu nét vẽ đồ thị",
+      "lineStyleHelp": "Nét vẽ trên sơ đồ mạng lưới thể hiện mức độ xác minh hoặc tính chất quan hệ"
     },
     "autocomplete": {
       "placeholder": "Tìm hoặc tạo mối quan hệ chiều ngược lại...",
       "createNew": "Nhấn Enter để tạo loại mới: \"{searchTerm}\"",
       "willCreate": "✓ Sẽ tạo loại mới: \"{value}\""
+    },
+    "category": "Nhóm nghiệp vụ",
+    "allCategories": "Tất cả nhóm",
+    "direction": "Hướng quan hệ",
+    "lineStyle": "Nét vẽ đồ thị",
+    "categories": {
+      "CRIMINAL": "Băng nhóm / Tội phạm",
+      "FINANCIAL": "Dòng tiền / Tài sản",
+      "FAMILY": "Gia đình / Thân tộc",
+      "LEGAL_CASE": "Tố tụng / Vụ việc",
+      "SOCIAL": "Xã hội / Tiền án"
+    },
+    "directions": {
+      "BIDIRECTIONAL": "Hai chiều đối xứng (↔)",
+      "DIRECTED": "Một chiều có hướng (➔)"
+    },
+    "lineStyles": {
+      "SOLID": "Nét liền (Xác minh / Chính thức)",
+      "DASHED": "Nét đứt (Nghi vấn / Trinh sát)"
     }
   },
   "relationships": {

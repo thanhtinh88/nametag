@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { prisma } from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 import Navigation from '@/components/Navigation';
 import { Button } from '@/components/ui/Button';
 import EmptyState from '@/components/EmptyState';
@@ -59,19 +60,7 @@ export default async function PeoplePage({
   const skip = (currentPage - 1) * ITEMS_PER_PAGE;
 
   // Build where clause for people query
-  const peopleWhere: {
-    userId: string;
-    deletedAt: null;
-    groups?: { none: Record<string, never> } | { some: { groupId: string } };
-    relationshipToUserId?: string | null;
-    managementLevel?: 'NORMAL' | 'SURVEILLANCE' | 'KEY_TARGET' | { in: Array<'SURVEILLANCE' | 'KEY_TARGET'> };
-    customFieldValues?: {
-      some: {
-        value: { equals: string; mode: 'insensitive' };
-        template: { slug: string; userId: string; deletedAt: null };
-      };
-    };
-  } = {
+  const peopleWhere: Prisma.PersonWhereInput = {
     userId: session.user.id,
     deletedAt: null,
   };
@@ -83,9 +72,15 @@ export default async function PeoplePage({
   }
 
   if (relationshipFilter === 'none') {
-    peopleWhere.relationshipToUserId = null;
+    peopleWhere.AND = [
+      { relationshipsFrom: { none: {} } },
+      { relationshipsTo: { none: {} } },
+    ];
   } else if (relationshipFilter) {
-    peopleWhere.relationshipToUserId = relationshipFilter;
+    peopleWhere.OR = [
+      { relationshipsFrom: { some: { relationshipTypeId: relationshipFilter, deletedAt: null } } },
+      { relationshipsTo: { some: { relationshipTypeId: relationshipFilter, deletedAt: null } } },
+    ];
   }
 
   if (managementFilter === 'monitored') {
@@ -170,11 +165,12 @@ export default async function PeoplePage({
         const bNickname = b.nickname || 'zzz';
         primaryComparison = aNickname.localeCompare(bNickname);
         break;
-      case 'relationship':
-        const aRel = a.relationshipToUser?.label || 'zzz'; // Put indirect relationships at the end
-        const bRel = b.relationshipToUser?.label || 'zzz';
-        primaryComparison = aRel.localeCompare(bRel);
+      case 'relationship': {
+        const aCount = a.relationshipsFrom.length + a.relationshipsTo.length;
+        const bCount = b.relationshipsFrom.length + b.relationshipsTo.length;
+        primaryComparison = bCount - aCount;
         break;
+      }
       case 'group':
         const aGroup = a.groups[0]?.group.name || 'zzz';
         const bGroup = b.groups[0]?.group.name || 'zzz';
@@ -289,7 +285,7 @@ export default async function PeoplePage({
                   fullName: t('fullName'),
                   surname: t('surname'),
                   nickname: t('nickname'),
-                  relationshipToUser: t('relationshipToUser'),
+                  relationshipToUser: t('relationships'),
                   groups: t('groups'),
                   lastContact: t('lastContact'),
                   actions: t('actions'),

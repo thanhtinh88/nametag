@@ -485,11 +485,36 @@ export const createRelationshipSchema = z.object({
     .describe('Second person ID'),
   relationshipTypeId: z.string().nullable().optional()
     .describe('Relationship type ID'),
+  verificationStatus: z.enum(['UNVERIFIED', 'INVESTIGATING', 'CONFIRMED', 'RULED_OUT']).optional()
+    .describe('Verification status in investigation'),
+  confidence: z.enum(['HIGH', 'MEDIUM', 'LOW']).nullable().optional()
+    .describe('Confidence level of the link'),
+  startDate: z.preprocess(
+    (val) => (val === '' ? null : val),
+    z.iso.date({ error: 'Invalid date' }).nullable().optional(),
+  ),
+  endDate: z.preprocess(
+    (val) => (val === '' ? null : val),
+    z.iso.date({ error: 'Invalid date' }).nullable().optional(),
+  ),
+  source: z.string().max(1000).nullable().optional()
+    .describe('Evidence or intelligence source for this connection'),
   notes: z.string().max(1000).nullable().optional(),
 });
 
 export const updateRelationshipSchema = z.object({
   relationshipTypeId: z.string().nullable().optional(),
+  verificationStatus: z.enum(['UNVERIFIED', 'INVESTIGATING', 'CONFIRMED', 'RULED_OUT']).optional(),
+  confidence: z.enum(['HIGH', 'MEDIUM', 'LOW']).nullable().optional(),
+  startDate: z.preprocess(
+    (val) => (val === '' ? null : val),
+    z.iso.date({ error: 'Invalid date' }).nullable().optional(),
+  ),
+  endDate: z.preprocess(
+    (val) => (val === '' ? null : val),
+    z.iso.date({ error: 'Invalid date' }).nullable().optional(),
+  ),
+  source: z.string().max(1000).nullable().optional(),
   notes: z.string().max(1000).nullable().optional(),
 });
 
@@ -502,6 +527,12 @@ export const createRelationshipTypeSchema = z.object({
     .describe('Internal name (will be upper-cased)'),
   label: z.string().min(1, 'Label is required').max(50)
     .describe('Display label'),
+  category: z.enum(['CRIMINAL', 'FINANCIAL', 'FAMILY', 'LEGAL_CASE', 'SOCIAL']).optional()
+    .describe('Category of relationship'),
+  directionType: z.enum(['DIRECTED', 'BIDIRECTIONAL']).optional()
+    .describe('Direction type of relationship'),
+  lineStyle: z.enum(['SOLID', 'DASHED', 'DOTTED']).nullable().optional()
+    .describe('Visual line style in graph'),
   color: hexColorSchema,
   inverseId: z.string().nullable().optional()
     .describe('ID of existing inverse type'),

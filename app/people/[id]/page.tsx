@@ -3,7 +3,6 @@ import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import BackLink from '@/components/BackLink';
 import { prisma } from '@/lib/prisma';
-import UserRelationshipCard from '@/components/UserRelationshipCard';
 import RelationshipManager from '@/components/RelationshipManager';
 import UnifiedNetworkGraph from '@/components/UnifiedNetworkGraph';
 import Navigation from '@/components/Navigation';
@@ -378,10 +377,6 @@ export default async function PersonDetailsPage({
   const availablePeople = allPeople.filter(
     (p) => !relatedPersonIds.has(p.id)
   );
-
-  // relationshipToUserId stores the relationship FROM the user TO this person
-  // (e.g., if Peter is my child, it stores "Child"). Use it directly.
-  const relationshipToUser = person.relationshipToUser;
 
   return (
     <div className="min-h-screen bg-background">
@@ -990,18 +985,6 @@ export default async function PersonDetailsPage({
                   {t('relationships')}
                 </h3>
 
-                {/* Relationship to user */}
-                {relationshipToUser && (
-                  <UserRelationshipCard
-                    personId={person.id}
-                    personName={formatGraphName(person, nameOrder, nameDisplayFormat)}
-                    relationshipToUser={relationshipToUser}
-                    relationshipTypes={relationshipTypes}
-                    userName={user?.name || ''}
-                    userPhoto={user?.photo || null}
-                  />
-                )}
-
                 {/* Relationships to other people */}
                 <RelationshipManager
                   personId={person.id}
@@ -1009,14 +992,6 @@ export default async function PersonDetailsPage({
                   relationships={person.relationshipsTo}
                   availablePeople={availablePeople}
                   relationshipTypes={relationshipTypes}
-                  currentUser={{
-                    id: session.user.id,
-                    name: user?.name || '',
-                    surname: user?.surname || null,
-                    nickname: user?.nickname || null,
-                    photo: user?.photo || null,
-                  }}
-                  hasUserRelationship={!!person.relationshipToUserId}
                   nameOrder={nameOrder}
                   nameDisplayFormat={nameDisplayFormat}
                 />

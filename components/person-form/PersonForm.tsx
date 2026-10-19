@@ -298,10 +298,9 @@ export default function PersonForm({
     return () => document.removeEventListener('click', handleClick, true);
   }, [isDirty, t]);
 
-  const selectedBasePerson =
-    knownThroughId !== 'user'
-      ? availablePeople.find((p) => p.id === knownThroughId) ?? null
-      : null;
+  const selectedBasePerson = knownThroughId
+    ? availablePeople.find((p) => p.id === knownThroughId) ?? null
+    : null;
 
   const handleInheritGroupsChange = (checked: boolean) => {
     setInheritGroups(checked);
@@ -320,7 +319,7 @@ export default function PersonForm({
     newPersonName: string
   ) => {
     setKnownThrough(newPersonId, newPersonName);
-    if (inheritGroups && newPersonId !== 'user') {
+    if (inheritGroups && newPersonId) {
       const newBasePerson = availablePeople.find((p) => p.id === newPersonId);
       if (newBasePerson) {
         const inheritedGroupIds = newBasePerson.groups.map((g) => g.groupId);
@@ -375,10 +374,7 @@ export default function PersonForm({
     setPendingPhotoBlob(null);
   };
 
-  const peopleWithUser = [
-    { id: 'user', name: t('you'), surname: null, middleName: null, secondLastName: null, nickname: null, groups: [] },
-    ...availablePeople,
-  ];
+  const peopleWithUser = availablePeople;
 
   const handleSubmit = async (
     e: FormEvent<HTMLFormElement>,
@@ -434,7 +430,7 @@ export default function PersonForm({
         addresses,
         urls,
         customFieldValues,
-        ...(mode === 'create' && knownThroughId !== 'user'
+        ...(mode === 'create' && knownThroughId
           ? { connectedThroughId: knownThroughId }
           : {}),
       };

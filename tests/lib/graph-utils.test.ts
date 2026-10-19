@@ -136,7 +136,28 @@ describe('graph-utils', () => {
         target: 'person-2',
         type: 'Parent',
         color: '#F59E0B',
+        lineStyle: 'solid',
+        directionType: 'BIDIRECTIONAL',
+        category: undefined,
+        confidence: undefined,
+        verificationStatus: undefined,
       });
+    });
+
+    it('should map UNVERIFIED status to dashed lineStyle', () => {
+      const relationship = {
+        personId: 'person-1',
+        relatedPersonId: 'person-2',
+        verificationStatus: 'UNVERIFIED',
+        relationshipType: {
+          label: 'Suspect Ally',
+          color: '#EF4444',
+        },
+      };
+
+      const edge = relationshipToGraphEdge(relationship);
+      expect(edge?.lineStyle).toBe('dashed');
+      expect(edge?.verificationStatus).toBe('UNVERIFIED');
     });
 
     it('should return undefined when relationshipType is null', () => {
@@ -174,6 +195,11 @@ describe('graph-utils', () => {
         target: 'person-1',
         type: 'Child',
         color: '#F59E0B',
+        lineStyle: 'solid',
+        directionType: 'BIDIRECTIONAL',
+        category: undefined,
+        confidence: undefined,
+        verificationStatus: undefined,
       });
     });
 
@@ -195,7 +221,28 @@ describe('graph-utils', () => {
         target: 'person-1',
         type: 'Relative',
         color: '#6366F1',
+        lineStyle: 'solid',
+        directionType: 'BIDIRECTIONAL',
+        category: undefined,
+        confidence: undefined,
+        verificationStatus: undefined,
       });
+    });
+
+    it('should not create inverse edge for DIRECTED type without distinct inverse', () => {
+      const relationship = {
+        personId: 'person-boss',
+        relatedPersonId: 'person-underling',
+        relationshipType: {
+          label: 'Leader',
+          color: '#DC2626',
+          directionType: 'DIRECTED',
+          inverse: null,
+        },
+      };
+
+      const edge = inverseRelationshipToGraphEdge(relationship);
+      expect(edge).toBeUndefined();
     });
 
     it('should return undefined when relationshipType is null', () => {

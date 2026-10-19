@@ -263,6 +263,11 @@ model Relationship {
   personId           String
   relatedPersonId    String
   relationshipTypeId String?
+  verificationStatus String            @default("CONFIRMED") // UNVERIFIED | INVESTIGATING | CONFIRMED | RULED_OUT
+  confidence         String?           @default("HIGH") // HIGH | MEDIUM | LOW
+  startDate          DateTime?         // Thời điểm bắt đầu mối quan hệ
+  endDate            DateTime?         // Thời điểm kết thúc mối quan hệ (nếu có)
+  source             String?           // Nguồn tài liệu chứng minh / Căn cứ xác minh
   notes              String?
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
@@ -276,6 +281,7 @@ model Relationship {
   @@index([personId])
   @@index([relatedPersonId])
   @@index([relationshipTypeId])
+  @@index([verificationStatus])
   @@index([personId, deletedAt]) // For soft delete filtering
   @@map("relationships")
 }
@@ -333,13 +339,16 @@ enum ReminderEntityType {
 model RelationshipType {
   id          String         @id @default(cuid())
   userId      String         // Owner of this relationship type
-  name        String         // Unique identifier (PARENT, CHILD, etc.)
-  label       String         // Display name
-  color       String?        // Hex color for UI
-  inverseId   String?        // ID of the inverse relationship type
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-  deletedAt   DateTime?
+  name          String         // Unique identifier (PARENT, CHILD, etc.)
+  label         String         // Display name
+  category      String         @default("CRIMINAL") // CRIMINAL | FINANCIAL | FAMILY | LEGAL_CASE | SOCIAL
+  directionType String         @default("BIDIRECTIONAL") // BIDIRECTIONAL | DIRECTED
+  lineStyle     String?        @default("SOLID") // SOLID | DASHED | DOTTED
+  color         String?        // Hex color for UI
+  inverseId     String?        // ID of the inverse relationship type
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  deletedAt     DateTime?
 
   // Relations
   user                User               @relation(fields: [userId], references: [id], onDelete: Cascade)

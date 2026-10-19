@@ -44,30 +44,33 @@ export default function TacticalSidebarContainer({
 }: TacticalSidebarContainerProps) {
   const t = useTranslations('tacticalFilters');
 
-  // Width management
-  const [width, setWidth] = useState<number>(() => {
-    if (typeof window === 'undefined') return defaultWidth;
+  // Width management: initialize with defaultWidth to prevent SSR hydration mismatch,
+  // then restore saved width in useEffect on client.
+  const [width, setWidth] = useState<number>(defaultWidth);
+
+  useEffect(() => {
     try {
       const saved = localStorage.getItem(`${storageKeyPrefix}-width`);
-      return saved ? Math.min(Math.max(parseInt(saved, 10), minWidth), 720) : defaultWidth;
+      if (saved) {
+        const parsed = parseInt(saved, 10);
+        if (!isNaN(parsed)) {
+          setWidth(Math.min(Math.max(parsed, minWidth), 720));
+        }
+      }
     } catch {
-      return defaultWidth;
+      // Ignore storage error
     }
-  });
+  }, [storageKeyPrefix, minWidth]);
 
-  // Layout mode: 'flyout' (dual pane) vs 'tabs' (single pane with tabs)
-  const [layoutMode, setLayoutMode] = useState<'flyout' | 'tabs'>(() => {
-    if (typeof window === 'undefined') return 'flyout';
-    try {
-      const saved = localStorage.getItem(`${storageKeyPrefix}-layout-mode`);
-      return saved === 'tabs' ? 'tabs' : 'flyout';
-    } catch {
-      return 'flyout';
-    }
-  });
-
-  // Active tab when in 'tabs' mode: 'roster' | 'filters'
+  // Active tab: 'roster' (Danh sách) vs 'filters' (Bộ lọc điều tra)
   const [activeTab, setActiveTab] = useState<'roster' | 'filters'>('roster');
+
+  // Sync when parent requests filters to open
+  useEffect(() => {
+    if (filtersOpen) {
+      setActiveTab('filters');
+    }
+  }, [filtersOpen]);
 
   // Resizing state
   const isDraggingRef = useRef(false);
@@ -105,18 +108,6 @@ export default function TacticalSidebarContainer({
     window.addEventListener('mouseup', handleMouseUp);
   }, [width, storageKeyPrefix, minWidth]);
 
-  const toggleLayoutMode = useCallback(() => {
-    setLayoutMode((prev) => {
-      const next = prev === 'flyout' ? 'tabs' : 'flyout';
-      try {
-        localStorage.setItem(`${storageKeyPrefix}-layout-mode`, next);
-      } catch {
-        // Ignore
-      }
-      return next;
-    });
-  }, [storageKeyPrefix]);
-
   // Width presets: cycle base -> medium -> large -> base
   const cycleWidthPreset = useCallback(() => {
     setWidth((prev) => {
@@ -138,7 +129,7 @@ export default function TacticalSidebarContainer({
   return (
     <div className="absolute top-3 left-3 bottom-3 z-20 flex items-stretch gap-2.5 pointer-events-none select-none">
       {/* ============================================================ */}
-      {/* 1. MAIN PANE (ROSTER & CONTROLS)                             */}
+      {/* MAIN SINGLE PANE (TABBED: ROSTER & INVESTIGATION FILTERS)    */}
       {/* ============================================================ */}
       <aside
         style={{ width: `${width}px` }}
@@ -173,22 +164,6 @@ export default function TacticalSidebarContainer({
               </svg>
             </button>
 
-            {/* Layout Mode Toggle (Flyout vs Tabs) */}
-            <button
-              type="button"
-              onClick={toggleLayoutMode}
-              className={`p-1 rounded transition-colors ${
-                layoutMode === 'flyout'
-                  ? 'text-primary bg-primary/10'
-                  : 'hover:text-foreground hover:bg-surface'
-              }`}
-              title={layoutMode === 'flyout' ? 'Chế độ Cánh phụ (Flyout) đang bật' : 'Chế độ Chuyển Tab đang bật'}
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
-              </svg>
-            </button>
-
             {/* Close Sidebar */}
             <button
               type="button"
@@ -203,66 +178,87 @@ export default function TacticalSidebarContainer({
           </div>
         </div>
 
-        {/* Tab switcher when in 'tabs' mode */}
-        {layoutMode === 'tabs' && (
-          <div className="flex border-b border-border bg-surface-elevated/40 shrink-0">
-            <button
-              type="button"
-              onClick={() => setActiveTab('roster')}
-              className={`flex-1 py-1.5 px-3 text-center font-medium transition-colors border-b-2 flex items-center justify-center gap-1.5 ${
-                activeTab === 'roster'
-                  ? 'border-primary text-primary font-bold bg-surface'
-                  : 'border-transparent text-muted hover:text-foreground'
-              }`}
-            >
-              <span>📋 Danh sách</span>
-              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-surface-elevated">
-                {rosterCount}
+        {/* Tab switcher: Danh sách (Roster) vs Bộ lọc (Filters) */}
+        <div className="flex border-b border-border bg-surface-elevated/40 shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('roster');
+              if (filtersOpen) onToggleFilters();
+            }}
+            className={`flex-1 py-2 px-3 text-center font-medium transition-colors border-b-2 flex items-center justify-center gap-1.5 ${
+              activeTab === 'roster'
+                ? 'border-primary text-primary font-bold bg-surface'
+                : 'border-transparent text-muted hover:text-foreground'
+            }`}
+          >
+            <span>📋 Danh sách</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-surface-elevated font-semibold">
+              {rosterCount}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('filters');
+              if (!filtersOpen) onToggleFilters();
+            }}
+            className={`flex-1 py-2 px-3 text-center font-medium transition-colors border-b-2 flex items-center justify-center gap-1.5 ${
+              activeTab === 'filters'
+                ? 'border-primary text-primary font-bold bg-surface'
+                : 'border-transparent text-muted hover:text-foreground'
+            }`}
+          >
+            <span>⚙️ Bộ lọc</span>
+            {activeFilterCount > 0 && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary text-white font-bold">
+                {activeFilterCount}
               </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('filters')}
-              className={`flex-1 py-1.5 px-3 text-center font-medium transition-colors border-b-2 flex items-center justify-center gap-1.5 ${
-                activeTab === 'filters'
-                  ? 'border-primary text-primary font-bold bg-surface'
-                  : 'border-transparent text-muted hover:text-foreground'
-              }`}
-            >
-              <span>⚙️ Bộ lọc</span>
-              {activeFilterCount > 0 && (
-                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-primary text-white font-bold">
-                  {activeFilterCount}
-                </span>
-              )}
-            </button>
-          </div>
-        )}
+            )}
+          </button>
+        </div>
 
         {/* ============================================================ */}
-        {/* VIEW 1: TAB MODE -> SHOW FILTER DRAWER FULL HEIGHT          */}
+        {/* VIEW 1: TAB 'FILTERS' -> SHOW FILTER FORM WITH FULL HEIGHT   */}
         {/* ============================================================ */}
-        {layoutMode === 'tabs' && activeTab === 'filters' ? (
-          <div className="flex-1 overflow-y-auto p-3 space-y-3">
-            <div className="flex items-center justify-between pb-2 border-b border-border/60">
-              <span className="font-semibold text-foreground">
-                Điều kiện lọc ({activeFilterCount})
+        {activeTab === 'filters' ? (
+          <div className="flex-1 flex flex-col min-h-0">
+            <div className="p-2.5 border-b border-border/60 bg-surface/50 flex items-center justify-between shrink-0">
+              <span className="font-semibold text-foreground text-xs">
+                Điều kiện lọc nghiệp vụ ({activeFilterCount})
               </span>
               {activeFilterCount > 0 && (
                 <button
                   type="button"
                   onClick={onClearFilters}
-                  className="text-xs text-muted hover:text-red-500 transition-colors"
+                  className="text-xs text-muted hover:text-red-500 transition-colors font-medium"
                 >
                   {t('clearAll')}
                 </button>
               )}
             </div>
-            {filterDrawer}
+            <div className="flex-1 overflow-y-auto p-3 space-y-3">
+              {filterDrawer}
+            </div>
+            <div className="p-2 border-t border-border bg-surface-elevated/60 flex items-center justify-between gap-2 shrink-0">
+              <span className="text-[11px] text-muted">
+                {t('matchCount', { matched: rosterCount, total: rosterCount })}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('roster');
+                  if (filtersOpen) onToggleFilters();
+                }}
+                className="px-3 py-1.5 rounded-lg bg-primary text-white font-medium hover:bg-primary-dark transition-colors text-xs"
+              >
+                Áp dụng & Xem danh sách
+              </button>
+            </div>
           </div>
         ) : (
           /* ============================================================ */
-          /* VIEW 2: ROSTER LIST VIEW                                     */
+          /* VIEW 2: TAB 'ROSTER' -> SEARCH + QUICK CHIPS + LIST          */
           /* ============================================================ */
           <div className="flex-1 flex flex-col min-h-0">
             {/* Search input */}
@@ -275,48 +271,36 @@ export default function TacticalSidebarContainer({
               {quickChips}
             </div>
 
-            {/* Filter Drawer Toggle & Active count bar (Flyout Mode) */}
-            {layoutMode === 'flyout' && (
-              <div className="flex items-center justify-between px-3 py-1.5 bg-surface-elevated/40 border-b border-border/60 shrink-0">
+            {/* Quick jump to Filters tab */}
+            <div className="flex items-center justify-between px-3 py-1.5 bg-surface-elevated/40 border-b border-border/60 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('filters');
+                  if (!filtersOpen) onToggleFilters();
+                }}
+                className="flex items-center gap-1.5 font-semibold transition-colors text-xs text-foreground hover:text-primary px-2 py-0.5 rounded-md hover:bg-surface-elevated"
+              >
+                <span>⚙️ {t('title')}</span>
+                {activeFilterCount > 0 ? (
+                  <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-primary text-white">
+                    {activeFilterCount}
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-muted font-normal">(Mở bộ lọc chi tiết)</span>
+                )}
+              </button>
+
+              {activeFilterCount > 0 && (
                 <button
                   type="button"
-                  onClick={onToggleFilters}
-                  className={`flex items-center gap-1.5 font-semibold transition-colors text-xs px-2 py-0.5 rounded-md ${
-                    filtersOpen
-                      ? 'bg-primary text-white'
-                      : 'text-foreground hover:text-primary hover:bg-surface-elevated'
-                  }`}
-                  title={filtersOpen ? 'Đóng cánh phụ bộ lọc' : 'Mở cánh phụ bộ lọc'}
+                  onClick={onClearFilters}
+                  className="text-[11px] text-muted hover:text-red-500 transition-colors"
                 >
-                  <span>⚙️ {t('title')}</span>
-                  {activeFilterCount > 0 && (
-                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                      filtersOpen ? 'bg-white/20 text-white' : 'bg-primary text-white'
-                    }`}>
-                      {activeFilterCount}
-                    </span>
-                  )}
-                  <svg
-                    className={`w-3.5 h-3.5 transition-transform ${filtersOpen ? 'rotate-90' : ''}`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
+                  {t('clearAll')}
                 </button>
-
-                {activeFilterCount > 0 && (
-                  <button
-                    type="button"
-                    onClick={onClearFilters}
-                    className="text-[11px] text-muted hover:text-red-500 transition-colors"
-                  >
-                    {t('clearAll')}
-                  </button>
-                )}
-              </div>
-            )}
+              )}
+            </div>
 
             {/* Active Badges */}
             <div className="px-2.5 bg-surface/40 shrink-0">
@@ -339,69 +323,6 @@ export default function TacticalSidebarContainer({
           <div className="absolute top-1/2 -translate-y-1/2 right-0.5 w-1 h-6 rounded-full bg-border group-hover:bg-primary" />
         </div>
       </aside>
-
-      {/* ============================================================ */}
-      {/* 2. DUAL-PANE FLYOUT PANEL (ATTACHED TO RIGHT IN FLYOUT MODE) */}
-      {/* ============================================================ */}
-      {layoutMode === 'flyout' && filtersOpen && (
-        <aside className="pointer-events-auto w-84 sm:w-96 max-w-[calc(100vw-450px)] bg-surface/95 backdrop-blur border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden text-xs animate-in fade-in slide-in-from-left-4 duration-150">
-          {/* Flyout Header */}
-          <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 border-b border-border bg-surface-elevated/70 shrink-0">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-xs font-semibold uppercase tracking-wider text-foreground">
-                ⚙️ {t('title')}
-              </span>
-              {activeFilterCount > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full bg-primary text-white text-[10px] font-bold">
-                  {activeFilterCount}
-                </span>
-              )}
-            </div>
-
-            <div className="flex items-center gap-1.5 shrink-0">
-              {activeFilterCount > 0 && (
-                <button
-                  type="button"
-                  onClick={onClearFilters}
-                  className="text-[11px] text-muted hover:text-red-500 transition-colors mr-1"
-                >
-                  {t('clearAll')}
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={onToggleFilters}
-                className="p-1 rounded text-muted hover:text-foreground hover:bg-surface transition-colors"
-                title="Đóng cánh phụ"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-          </div>
-
-          {/* Flyout Scrollable Body (100% full height for 5 filter groups) */}
-          <div className="flex-1 overflow-y-auto p-3 space-y-3">
-            {filterDrawer}
-          </div>
-
-          {/* Flyout Sticky Footer */}
-          <div className="p-2.5 border-t border-border bg-surface-elevated/60 flex items-center justify-between gap-2 shrink-0">
-            <span className="text-[11px] text-muted">
-              {t('matchCount', { matched: rosterCount, total: rosterCount })}
-            </span>
-            <button
-              type="button"
-              onClick={onToggleFilters}
-              className="px-3 py-1 rounded-lg bg-primary text-white font-medium hover:bg-primary-dark transition-colors shadow-xs"
-            >
-              Đóng & Áp dụng
-            </button>
-          </div>
-        </aside>
-      )}
     </div>
   );
 }
-

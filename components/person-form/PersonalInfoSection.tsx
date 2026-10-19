@@ -280,61 +280,7 @@ export default function PersonalInfoSection({
         </div>
       )}
 
-      {mode === 'edit' && (
-        <div>
-          <label
-            htmlFor="relationshipToUserId"
-            className="flex items-center gap-1.5 text-sm font-medium text-muted mb-1"
-          >
-            {t('relationshipToYouDirect')}
-            <TooltipIcon tooltip={t('relationshipToYouTooltip')} />
-          </label>
-          <select
-            id="relationshipToUserId"
-            value={formData.relationshipToUserId}
-            onChange={(e) =>
-              onFormDataChange({ relationshipToUserId: e.target.value })
-            }
-            className={inputClass}
-          >
-            <option value="">{t('selectRelationship')}</option>
-            {relationshipTypes.map((type) => (
-              <option key={type.id} value={type.id}>
-                {type.label}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
-      {mode === 'create' && knownThroughId === 'user' && (
-        <div>
-          <label
-            htmlFor="relationshipToUserId"
-            className="flex items-center gap-1.5 text-sm font-medium text-muted mb-1"
-          >
-            {t('relationshipToYouDirect')}
-            <TooltipIcon tooltip={t('relationshipToYouTooltip')} />
-          </label>
-          <select
-            id="relationshipToUserId"
-            value={formData.relationshipToUserId}
-            onChange={(e) =>
-              onFormDataChange({ relationshipToUserId: e.target.value })
-            }
-            className={inputClass}
-          >
-            <option value="">{t('selectRelationship')}</option>
-            {relationshipTypes.map((type) => (
-              <option key={type.id} value={type.id}>
-                {type.label}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
-      {mode === 'create' && knownThroughId !== 'user' && (
+      {mode === 'create' && knownThroughId && (
         <div>
           <label
             htmlFor="relationshipToKnownThrough"

@@ -174,13 +174,9 @@ export const POST = withAuth(async (request, session) => {
       cardDavSyncEnabled: _cardDavSyncEnabled,
     } = validation.data;
 
-    // Relationship type is required when creating a person unless connected via an event
-    if (!relationshipToUserId && !connectedEventId) {
-      if (connectedThroughId) {
-        return apiResponse.error('Relationship type is required for person-to-person connections');
-      } else {
-        return apiResponse.error('Relationship to user is required');
-      }
+    // Relationship type is required only when connecting to another person
+    if (connectedThroughId && !relationshipToUserId) {
+      return apiResponse.error('Relationship type is required for person-to-person connections');
     }
 
     // If connectedThroughId is provided, verify the person exists and belongs to user
@@ -239,9 +235,7 @@ export const POST = withAuth(async (request, session) => {
     // When connected through another person, omit relationshipToUserId so the service
     // does not create a direct user relationship — that link is established below via
     // bidirectional Relationship records instead.
-    const serviceData = connectedThroughId
-      ? { ...validation.data, relationshipToUserId: null }
-      : validation.data;
+    const serviceData = { ...validation.data, relationshipToUserId: null };
 
     const person = await createPerson(session.user.id, serviceData);
 

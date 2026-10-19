@@ -45,7 +45,17 @@ export const POST = withAuth(async (request, session) => {
       return validation.response;
     }
 
-    const { personId, relatedPersonId, relationshipTypeId, notes } = validation.data;
+    const {
+      personId,
+      relatedPersonId,
+      relationshipTypeId,
+      verificationStatus,
+      confidence,
+      startDate,
+      endDate,
+      source,
+      notes,
+    } = validation.data;
 
     if (!relationshipTypeId) {
       return apiResponse.error('Relationship type is required');
@@ -101,6 +111,11 @@ export const POST = withAuth(async (request, session) => {
         personId,
         relatedPersonId,
         relationshipTypeId,
+        verificationStatus: verificationStatus || 'CONFIRMED',
+        confidence: confidence || 'HIGH',
+        startDate: startDate ? new Date(startDate) : null,
+        endDate: endDate ? new Date(endDate) : null,
+        source: source || null,
         notes: notes || null,
       },
     });
@@ -126,6 +141,11 @@ export const POST = withAuth(async (request, session) => {
           personId: relatedPersonId,
           relatedPersonId: personId,
           relationshipTypeId: inverseTypeId,
+          verificationStatus: verificationStatus || 'CONFIRMED',
+          confidence: confidence || 'HIGH',
+          startDate: startDate ? new Date(startDate) : null,
+          endDate: endDate ? new Date(endDate) : null,
+          source: source || null,
           notes: notes || null,
         },
       });

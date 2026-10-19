@@ -94,6 +94,9 @@ async function main() {
         userId: user.id,
         name: 'BOSS',
         label: 'Cầm đầu / Chỉ đạo',
+        category: 'CRIMINAL',
+        directionType: 'DIRECTED',
+        lineStyle: 'SOLID',
         color: '#EF4444',
       },
     });
@@ -103,6 +106,9 @@ async function main() {
         userId: user.id,
         name: 'SUBORDINATE',
         label: 'Đàn em / Chân rết',
+        category: 'CRIMINAL',
+        directionType: 'DIRECTED',
+        lineStyle: 'SOLID',
         color: '#F97316',
         inverseId: bossType.id,
       },
@@ -118,6 +124,9 @@ async function main() {
         userId: user.id,
         name: 'ACCOMPLICE',
         label: 'Đồng bọn / Chiến hữu',
+        category: 'CRIMINAL',
+        directionType: 'BIDIRECTIONAL',
+        lineStyle: 'SOLID',
         color: '#F59E0B',
       },
     });
@@ -131,6 +140,9 @@ async function main() {
         userId: user.id,
         name: 'FENCE',
         label: 'Đầu mối tiêu thụ',
+        category: 'FINANCIAL',
+        directionType: 'DIRECTED',
+        lineStyle: 'SOLID',
         color: '#8B5CF6',
       },
     });
@@ -139,11 +151,44 @@ async function main() {
       data: { inverseId: fenceType.id },
     });
 
+    const funderType = await prisma.relationshipType.create({
+      data: {
+        userId: user.id,
+        name: 'FUNDER',
+        label: 'Cung cấp vốn / Chuyển tiền',
+        category: 'FINANCIAL',
+        directionType: 'DIRECTED',
+        lineStyle: 'SOLID',
+        color: '#15803D',
+      },
+    });
+
+    const receiverType = await prisma.relationshipType.create({
+      data: {
+        userId: user.id,
+        name: 'RECEIVER',
+        label: 'Nhận tiền tài trợ',
+        category: 'FINANCIAL',
+        directionType: 'DIRECTED',
+        lineStyle: 'SOLID',
+        color: '#0D9488',
+        inverseId: funderType.id,
+      },
+    });
+
+    await prisma.relationshipType.update({
+      where: { id: funderType.id },
+      data: { inverseId: receiverType.id },
+    });
+
     const spouseType = await prisma.relationshipType.create({
       data: {
         userId: user.id,
         name: 'SPOUSE',
         label: 'Vợ / Chồng / Nhân tình',
+        category: 'FAMILY',
+        directionType: 'BIDIRECTIONAL',
+        lineStyle: 'SOLID',
         color: '#EC4899',
       },
     });
@@ -157,6 +202,9 @@ async function main() {
         userId: user.id,
         name: 'SIBLING',
         label: 'Anh / Chị / Em ruột',
+        category: 'FAMILY',
+        directionType: 'BIDIRECTIONAL',
+        lineStyle: 'SOLID',
         color: '#6366F1',
       },
     });
@@ -170,6 +218,9 @@ async function main() {
         userId: user.id,
         name: 'FRIEND',
         label: 'Quan hệ xã hội',
+        category: 'SOCIAL',
+        directionType: 'BIDIRECTIONAL',
+        lineStyle: 'SOLID',
         color: '#3B82F6',
       },
     });
@@ -178,7 +229,7 @@ async function main() {
       data: { inverseId: friendType.id },
     });
 
-    console.log('✓ Đã tạo các loại mối quan hệ nghiệp vụ');
+    console.log('✓ Đã tạo các loại mối quan hệ nghiệp vụ điều tra');
 
     // 3. Create Criminal Gangs (Băng nhóm tội phạm)
     const gangLongBien = await prisma.gang.create({
@@ -1507,26 +1558,138 @@ async function main() {
     // 7. Create Inter-Personal Relationships (Mối quan hệ đối tượng)
     await prisma.relationship.createMany({
       data: [
-        { personId: hungSoi.id, relatedPersonId: haiCan.id, relationshipTypeId: bossType.id },
-        { personId: haiCan.id, relatedPersonId: hungSoi.id, relationshipTypeId: subordinateType.id },
+        {
+          personId: hungSoi.id,
+          relatedPersonId: haiCan.id,
+          relationshipTypeId: bossType.id,
+          verificationStatus: 'CONFIRMED',
+          confidence: 'HIGH',
+          source: 'Lời khai đối tượng Hải Cận & trinh sát thực địa',
+          startDate: new Date('2023-01-15T00:00:00.000Z'),
+        },
+        {
+          personId: haiCan.id,
+          relatedPersonId: hungSoi.id,
+          relationshipTypeId: subordinateType.id,
+          verificationStatus: 'CONFIRMED',
+          confidence: 'HIGH',
+          source: 'Lời khai đối tượng Hải Cận & trinh sát thực địa',
+          startDate: new Date('2023-01-15T00:00:00.000Z'),
+        },
 
-        { personId: hungSoi.id, relatedPersonId: tuanXe.id, relationshipTypeId: bossType.id },
-        { personId: tuanXe.id, relatedPersonId: hungSoi.id, relationshipTypeId: subordinateType.id },
+        {
+          personId: hungSoi.id,
+          relatedPersonId: tuanXe.id,
+          relationshipTypeId: bossType.id,
+          verificationStatus: 'INVESTIGATING',
+          confidence: 'MEDIUM',
+          source: 'Nguồn tin cơ sở bí mật số 04',
+          startDate: new Date('2024-06-10T00:00:00.000Z'),
+        },
+        {
+          personId: tuanXe.id,
+          relatedPersonId: hungSoi.id,
+          relationshipTypeId: subordinateType.id,
+          verificationStatus: 'INVESTIGATING',
+          confidence: 'MEDIUM',
+          source: 'Nguồn tin cơ sở bí mật số 04',
+          startDate: new Date('2024-06-10T00:00:00.000Z'),
+        },
 
-        { personId: hungSoi.id, relatedPersonId: tacMatLe.id, relationshipTypeId: accompliceType.id },
-        { personId: tacMatLe.id, relatedPersonId: hungSoi.id, relationshipTypeId: accompliceType.id },
+        {
+          personId: hungSoi.id,
+          relatedPersonId: tacMatLe.id,
+          relationshipTypeId: accompliceType.id,
+          verificationStatus: 'CONFIRMED',
+          confidence: 'HIGH',
+          source: 'Hồ sơ chuyên án #2026-01',
+          startDate: new Date('2022-08-20T00:00:00.000Z'),
+        },
+        {
+          personId: tacMatLe.id,
+          relatedPersonId: hungSoi.id,
+          relationshipTypeId: accompliceType.id,
+          verificationStatus: 'CONFIRMED',
+          confidence: 'HIGH',
+          source: 'Hồ sơ chuyên án #2026-01',
+          startDate: new Date('2022-08-20T00:00:00.000Z'),
+        },
 
-        { personId: hungSoi.id, relatedPersonId: maiVang.id, relationshipTypeId: fenceType.id },
-        { personId: maiVang.id, relatedPersonId: hungSoi.id, relationshipTypeId: fenceType.id },
+        {
+          personId: hungSoi.id,
+          relatedPersonId: maiVang.id,
+          relationshipTypeId: fenceType.id,
+          verificationStatus: 'UNVERIFIED',
+          confidence: 'LOW',
+          source: 'Sao kê dòng tiền đáng ngờ & trinh sát công nghệ cao',
+          startDate: new Date('2025-11-01T00:00:00.000Z'),
+        },
+        {
+          personId: maiVang.id,
+          relatedPersonId: hungSoi.id,
+          relationshipTypeId: fenceType.id,
+          verificationStatus: 'UNVERIFIED',
+          confidence: 'LOW',
+          source: 'Sao kê dòng tiền đáng ngờ & trinh sát công nghệ cao',
+          startDate: new Date('2025-11-01T00:00:00.000Z'),
+        },
 
-        { personId: khanhChot.id, relatedPersonId: kietLun.id, relationshipTypeId: bossType.id },
-        { personId: kietLun.id, relatedPersonId: khanhChot.id, relationshipTypeId: subordinateType.id },
+        {
+          personId: khanhChot.id,
+          relatedPersonId: kietLun.id,
+          relationshipTypeId: bossType.id,
+          verificationStatus: 'CONFIRMED',
+          confidence: 'HIGH',
+          source: 'Biên bản bắt quả tang 2025',
+          startDate: new Date('2024-02-14T00:00:00.000Z'),
+        },
+        {
+          personId: kietLun.id,
+          relatedPersonId: khanhChot.id,
+          relationshipTypeId: subordinateType.id,
+          verificationStatus: 'CONFIRMED',
+          confidence: 'HIGH',
+          source: 'Biên bản bắt quả tang 2025',
+          startDate: new Date('2024-02-14T00:00:00.000Z'),
+        },
 
-        { personId: khanhChot.id, relatedPersonId: longRong.id, relationshipTypeId: accompliceType.id },
-        { personId: longRong.id, relatedPersonId: khanhChot.id, relationshipTypeId: accompliceType.id },
+        {
+          personId: khanhChot.id,
+          relatedPersonId: longRong.id,
+          relationshipTypeId: accompliceType.id,
+          verificationStatus: 'CONFIRMED',
+          confidence: 'HIGH',
+          source: 'Bản án hình sự số 42/2021/HS-ST',
+          startDate: new Date('2021-05-18T00:00:00.000Z'),
+        },
+        {
+          personId: longRong.id,
+          relatedPersonId: khanhChot.id,
+          relationshipTypeId: accompliceType.id,
+          verificationStatus: 'CONFIRMED',
+          confidence: 'HIGH',
+          source: 'Bản án hình sự số 42/2021/HS-ST',
+          startDate: new Date('2021-05-18T00:00:00.000Z'),
+        },
 
-        { personId: maiVang.id, relatedPersonId: ducDen.id, relationshipTypeId: accompliceType.id },
-        { personId: ducDen.id, relatedPersonId: maiVang.id, relationshipTypeId: accompliceType.id },
+        {
+          personId: maiVang.id,
+          relatedPersonId: ducDen.id,
+          relationshipTypeId: accompliceType.id,
+          verificationStatus: 'CONFIRMED',
+          confidence: 'HIGH',
+          source: 'Tài liệu trinh sát tiệm cầm đồ Phố Huế',
+          startDate: new Date('2023-09-01T00:00:00.000Z'),
+        },
+        {
+          personId: ducDen.id,
+          relatedPersonId: maiVang.id,
+          relationshipTypeId: accompliceType.id,
+          verificationStatus: 'CONFIRMED',
+          confidence: 'HIGH',
+          source: 'Tài liệu trinh sát tiệm cầm đồ Phố Huế',
+          startDate: new Date('2023-09-01T00:00:00.000Z'),
+        },
       ],
     });
 

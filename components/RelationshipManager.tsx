@@ -31,7 +31,13 @@ interface RelationshipType {
 interface Relationship {
   id: string;
   personId: string;
+  relatedPersonId?: string;
   relationshipTypeId: string | null;
+  verificationStatus?: string | null;
+  confidence?: string | null;
+  source?: string | null;
+  startDate?: string | null | Date;
+  endDate?: string | null | Date;
   notes: string | null;
   person: Person;
   relationshipType: RelationshipType | null;
@@ -43,15 +49,6 @@ interface RelationshipManagerProps {
   relationships: Relationship[];
   availablePeople: Person[];
   relationshipTypes: RelationshipType[];
-  currentUser?: {
-    id: string;
-    name: string;
-    surname?: string | null;
-    nickname?: string | null;
-    displayNameOverride?: string | null;
-    photo?: string | null;
-  };
-  hasUserRelationship?: boolean;
   nameOrder?: 'WESTERN' | 'EASTERN';
   nameDisplayFormat?: NameDisplayFormat;
 }
@@ -62,8 +59,6 @@ export default function RelationshipManager({
   relationships,
   availablePeople,
   relationshipTypes,
-  currentUser,
-  hasUserRelationship = false,
   nameOrder,
   nameDisplayFormat,
 }: RelationshipManagerProps) {
@@ -79,17 +74,17 @@ export default function RelationshipManager({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Include user in available people if no relationship exists
-  const peopleWithUser = currentUser && !hasUserRelationship
-    ? [currentUser, ...availablePeople]
-    : availablePeople;
-
   // Find default FRIEND type or use first available
   const defaultTypeId = relationshipTypes.find((t) => t.name === 'FRIEND')?.id || relationshipTypes[0]?.id || '';
 
   const [formData, setFormData] = useState({
     relatedPersonId: '',
     relationshipTypeId: defaultTypeId,
+    verificationStatus: 'CONFIRMED' as 'UNVERIFIED' | 'INVESTIGATING' | 'CONFIRMED' | 'RULED_OUT',
+    confidence: 'HIGH' as 'HIGH' | 'MEDIUM' | 'LOW',
+    source: '',
+    startDate: '',
+    endDate: '',
     notes: '',
   });
 
@@ -99,48 +94,6 @@ export default function RelationshipManager({
     setIsLoading(true);
 
     try {
-      // Special case: If the related person is the current user
-      if (currentUser && formData.relatedPersonId === currentUser.id) {
-        // Find the selected relationship type's inverse
-        const selectedType = relationshipTypes.find(rt => rt.id === formData.relationshipTypeId);
-
-        if (!selectedType) {
-          setError('Cannot create this relationship: no relationship type selected');
-          setIsLoading(false);
-          return;
-        }
-
-        // For symmetric types, inverseId may be null; use the type itself as fallback
-        const inverseTypeId = selectedType.inverseId || selectedType.id;
-
-        // Update the person's relationshipToUserId with the inverse
-        const response = await fetch(`/api/people/${personId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            relationshipToUserId: inverseTypeId,
-          }),
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          setError(data.error || 'Failed to create relationship');
-          setIsLoading(false);
-          return;
-        }
-
-        toast.success(`Relationship with you has been added`);
-        setShowAddModal(false);
-        setFormData({ relatedPersonId: '', relationshipTypeId: defaultTypeId, notes: '' });
-        router.refresh();
-        refreshIndex();
-        return;
-      }
-
-      // Regular person-to-person relationship
-      // Since we display relationshipsTo (relationships pointing TO the current person),
-      // we create the relationship FROM the other person TO the current person
       const response = await fetch('/api/relationships', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -148,6 +101,11 @@ export default function RelationshipManager({
           personId: formData.relatedPersonId,  // The other person (source)
           relatedPersonId: personId,           // The current person (target)
           relationshipTypeId: formData.relationshipTypeId,  // Use the type the user selected
+          verificationStatus: formData.verificationStatus,
+          confidence: formData.confidence,
+          source: formData.source.trim() || null,
+          startDate: formData.startDate ? new Date(formData.startDate).toISOString() : null,
+          endDate: formData.endDate ? new Date(formData.endDate).toISOString() : null,
           notes: formData.notes || null,
         }),
       });
@@ -160,11 +118,20 @@ export default function RelationshipManager({
         return;
       }
 
-      const relatedPerson = peopleWithUser.find(p => p.id === formData.relatedPersonId);
+      const relatedPerson = availablePeople.find(p => p.id === formData.relatedPersonId);
       toast.success(`Relationship with ${formatGraphName(relatedPerson!, nameOrder, nameDisplayFormat)} has been added`);
 
       setShowAddModal(false);
-      setFormData({ relatedPersonId: '', relationshipTypeId: defaultTypeId, notes: '' });
+      setFormData({
+        relatedPersonId: '',
+        relationshipTypeId: defaultTypeId,
+        verificationStatus: 'CONFIRMED',
+        confidence: 'HIGH',
+        source: '',
+        startDate: '',
+        endDate: '',
+        notes: '',
+      });
       router.refresh();
       refreshIndex();
     } catch (_error) {
@@ -187,6 +154,11 @@ export default function RelationshipManager({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           relationshipTypeId: formData.relationshipTypeId,
+          verificationStatus: formData.verificationStatus,
+          confidence: formData.confidence,
+          source: formData.source.trim() || null,
+          startDate: formData.startDate ? new Date(formData.startDate).toISOString() : null,
+          endDate: formData.endDate ? new Date(formData.endDate).toISOString() : null,
           notes: formData.notes,
         }),
       });
@@ -242,9 +214,21 @@ export default function RelationshipManager({
 
   const openEditModal = (relationship: Relationship) => {
     setSelectedRelationship(relationship);
+    const startStr = relationship.startDate
+      ? new Date(relationship.startDate).toISOString().substring(0, 10)
+      : '';
+    const endStr = relationship.endDate
+      ? new Date(relationship.endDate).toISOString().substring(0, 10)
+      : '';
+
     setFormData({
       relatedPersonId: relationship.personId,
       relationshipTypeId: relationship.relationshipTypeId || defaultTypeId,
+      verificationStatus: (relationship.verificationStatus as typeof formData.verificationStatus) || 'CONFIRMED',
+      confidence: (relationship.confidence as typeof formData.confidence) || 'HIGH',
+      source: relationship.source || '',
+      startDate: startStr,
+      endDate: endStr,
       notes: relationship.notes || '',
     });
     setShowEditModal(true);
@@ -263,6 +247,44 @@ export default function RelationshipManager({
       relationshipType: formData.relationshipTypeId,
     });
     router.push(`/people/new?${params.toString()}`);
+  };
+
+  const renderVerificationBadge = (status?: string | null) => {
+    switch (status) {
+      case 'CONFIRMED':
+        return (
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+            ✓ {t('verificationStatuses.CONFIRMED')}
+          </span>
+        );
+      case 'INVESTIGATING':
+        return (
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+            🔍 {t('verificationStatuses.INVESTIGATING')}
+          </span>
+        );
+      case 'UNVERIFIED':
+        return (
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-dashed border-orange-500/40">
+            ❓ {t('verificationStatuses.UNVERIFIED')}
+          </span>
+        );
+      case 'RULED_OUT':
+        return (
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-zinc-500/10 text-zinc-500 dark:text-zinc-400 border border-zinc-500/20 line-through">
+            ✕ {t('verificationStatuses.RULED_OUT')}
+          </span>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const formatDateDisplay = (dateVal?: string | null | Date) => {
+    if (!dateVal) return '';
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('vi-VN', { year: 'numeric', month: '2-digit' });
   };
 
   return (
@@ -291,7 +313,7 @@ export default function RelationshipManager({
               className="flex items-center justify-between p-3 bg-surface-elevated rounded-lg"
             >
               <div className="flex-1">
-                <div className="flex items-center gap-1 flex-wrap text-foreground">
+                <div className="flex items-center gap-1.5 flex-wrap text-foreground">
                   {t.rich('isRelationshipOf', {
                     name: () => (
                       <span className="inline-flex items-center gap-1.5">
@@ -319,7 +341,24 @@ export default function RelationshipManager({
                       </span>
                     ),
                   })}
+                  {renderVerificationBadge(rel.verificationStatus)}
                 </div>
+
+                {(rel.startDate || rel.endDate || rel.source) && (
+                  <div className="flex flex-wrap items-center gap-x-3 text-xs text-muted mt-1">
+                    {(rel.startDate || rel.endDate) && (
+                      <span>
+                        🕒 {formatDateDisplay(rel.startDate) || '...'} → {formatDateDisplay(rel.endDate) || t('present')}
+                      </span>
+                    )}
+                    {rel.source && (
+                      <span className="inline-flex items-center gap-1">
+                        📁 {t('relationshipSource')}: <span className="font-medium text-foreground">{rel.source}</span>
+                      </span>
+                    )}
+                  </div>
+                )}
+
                 {rel.notes && (
                   <p className="text-sm text-muted mt-1">
                     {rel.notes}
@@ -354,7 +393,7 @@ export default function RelationshipManager({
       {/* Add Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" aria-labelledby="add-relationship-title">
-          <div className="bg-surface rounded-lg max-w-md w-full p-6">
+          <div className="bg-surface rounded-lg max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
             <h3 id="add-relationship-title" className="text-lg font-semibold text-foreground mb-4">
               {t('addRelationship')}
             </h3>
@@ -369,7 +408,7 @@ export default function RelationshipManager({
                   {t('person')} *
                 </label>
                 <PersonAutocomplete
-                  people={peopleWithUser}
+                  people={availablePeople}
                   value={formData.relatedPersonId}
                   onChange={(personId) =>
                     setFormData({ ...formData, relatedPersonId: personId })
@@ -377,7 +416,6 @@ export default function RelationshipManager({
                   placeholder={t('searchForPerson')}
                   required
                   onCreateNew={handleCreateNewPerson}
-                  highlightPersonId={currentUser?.id}
                   nameOrder={nameOrder}
                   nameDisplayFormat={nameDisplayFormat}
                 />
@@ -401,6 +439,96 @@ export default function RelationshipManager({
                   ))}
                 </select>
               </div>
+
+              {/* Investigation Verification & Confidence */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-muted mb-1">
+                    {t('verificationStatus')}
+                  </label>
+                  <select
+                    value={formData.verificationStatus}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        verificationStatus: e.target.value as typeof formData.verificationStatus,
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-border rounded-lg bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                  >
+                    <option value="CONFIRMED">✓ {t('verificationStatuses.CONFIRMED')}</option>
+                    <option value="INVESTIGATING">🔍 {t('verificationStatuses.INVESTIGATING')}</option>
+                    <option value="UNVERIFIED">❓ {t('verificationStatuses.UNVERIFIED')}</option>
+                    <option value="RULED_OUT">✕ {t('verificationStatuses.RULED_OUT')}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-muted mb-1">
+                    {t('confidenceLevel')}
+                  </label>
+                  <select
+                    value={formData.confidence}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        confidence: e.target.value as typeof formData.confidence,
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-border rounded-lg bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                  >
+                    <option value="HIGH">{t('confidenceLevels.HIGH')}</option>
+                    <option value="MEDIUM">{t('confidenceLevels.MEDIUM')}</option>
+                    <option value="LOW">{t('confidenceLevels.LOW')}</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Basis / Source */}
+              <div>
+                <label className="block text-sm font-medium text-muted mb-1">
+                  {t('relationshipSource')}
+                </label>
+                <input
+                  type="text"
+                  value={formData.source}
+                  onChange={(e) =>
+                    setFormData({ ...formData, source: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                  placeholder={t('relationshipSourcePlaceholder')}
+                />
+              </div>
+
+              {/* Timeline (Start / End Date) */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-muted mb-1">
+                    {t('relationshipStartDate')}
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.startDate}
+                    onChange={(e) =>
+                      setFormData({ ...formData, startDate: e.target.value })
+                    }
+                    className="w-full px-3 py-2 border border-border rounded-lg bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-muted mb-1">
+                    {t('relationshipEndDate')}
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.endDate}
+                    onChange={(e) =>
+                      setFormData({ ...formData, endDate: e.target.value })
+                    }
+                    className="w-full px-3 py-2 border border-border rounded-lg bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-muted mb-1">
                   {t('notes')}
@@ -422,7 +550,7 @@ export default function RelationshipManager({
                   data-testid="relationship-preview"
                 >
                   {(() => {
-                    const selectedPerson = peopleWithUser.find(p => p.id === formData.relatedPersonId);
+                    const selectedPerson = availablePeople.find(p => p.id === formData.relatedPersonId);
                     const selectedType = formData.relationshipTypeId
                       ? relationshipTypes.find(rt => rt.id === formData.relationshipTypeId)
                       : null;
@@ -433,13 +561,6 @@ export default function RelationshipManager({
                     const typeDisplay = selectedType
                       ? selectedType.label
                       : t('formPreviewSelectType');
-
-                    if (selectedPerson && currentUser && selectedPerson.id === currentUser.id) {
-                      return t('formPreviewYour', {
-                        personName: personName,
-                        type: typeDisplay,
-                      });
-                    }
 
                     return t('formPreview', {
                       name: nameDisplay,
@@ -472,7 +593,7 @@ export default function RelationshipManager({
       {/* Edit Modal */}
       {showEditModal && selectedRelationship && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" aria-labelledby="edit-relationship-title">
-          <div className="bg-surface rounded-lg max-w-md w-full p-6">
+          <div className="bg-surface rounded-lg max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
             <h3 id="edit-relationship-title" className="text-lg font-semibold text-foreground mb-4">
               {t('editRelationship', { name: formatGraphName(selectedRelationship.person, nameOrder, nameDisplayFormat) })}
             </h3>
@@ -501,6 +622,96 @@ export default function RelationshipManager({
                   ))}
                 </select>
               </div>
+
+              {/* Investigation Verification & Confidence */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-muted mb-1">
+                    {t('verificationStatus')}
+                  </label>
+                  <select
+                    value={formData.verificationStatus}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        verificationStatus: e.target.value as typeof formData.verificationStatus,
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-border rounded-lg bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                  >
+                    <option value="CONFIRMED">✓ {t('verificationStatuses.CONFIRMED')}</option>
+                    <option value="INVESTIGATING">🔍 {t('verificationStatuses.INVESTIGATING')}</option>
+                    <option value="UNVERIFIED">❓ {t('verificationStatuses.UNVERIFIED')}</option>
+                    <option value="RULED_OUT">✕ {t('verificationStatuses.RULED_OUT')}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-muted mb-1">
+                    {t('confidenceLevel')}
+                  </label>
+                  <select
+                    value={formData.confidence}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        confidence: e.target.value as typeof formData.confidence,
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-border rounded-lg bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                  >
+                    <option value="HIGH">{t('confidenceLevels.HIGH')}</option>
+                    <option value="MEDIUM">{t('confidenceLevels.MEDIUM')}</option>
+                    <option value="LOW">{t('confidenceLevels.LOW')}</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Basis / Source */}
+              <div>
+                <label className="block text-sm font-medium text-muted mb-1">
+                  {t('relationshipSource')}
+                </label>
+                <input
+                  type="text"
+                  value={formData.source}
+                  onChange={(e) =>
+                    setFormData({ ...formData, source: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                  placeholder={t('relationshipSourcePlaceholder')}
+                />
+              </div>
+
+              {/* Timeline (Start / End Date) */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-muted mb-1">
+                    {t('relationshipStartDate')}
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.startDate}
+                    onChange={(e) =>
+                      setFormData({ ...formData, startDate: e.target.value })
+                    }
+                    className="w-full px-3 py-2 border border-border rounded-lg bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-muted mb-1">
+                    {t('relationshipEndDate')}
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.endDate}
+                    onChange={(e) =>
+                      setFormData({ ...formData, endDate: e.target.value })
+                    }
+                    className="w-full px-3 py-2 border border-border rounded-lg bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-muted mb-1">
                   {t('notes')}
