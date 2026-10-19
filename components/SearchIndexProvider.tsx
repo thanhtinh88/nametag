@@ -64,3 +64,7 @@ export function useSearchIndex() {
   }
   return context;
 }
+
+export function useOptionalSearchIndex() {
+  return useContext(SearchIndexContext);
+}

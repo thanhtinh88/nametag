@@ -13,18 +13,23 @@ import { getTranslations } from 'next-intl/server';
 import PeopleListClient from '@/components/PeopleListClient';
 import { getUserDisplayPreferences } from '@/lib/user-preferences';
 
-const ITEMS_PER_PAGE = 50;
+const DEFAULT_PAGE_SIZE = 25;
+const ALLOWED_PAGE_SIZES = [10, 25, 50, 100];
 
 export default async function PeoplePage({
   searchParams,
 }: {
   searchParams: Promise<{
     page?: string;
+    pageSize?: string;
     sortBy?: string;
     order?: string;
     group?: string;
     relationship?: string;
     managementLevel?: string;
+    threatLevel?: string;
+    hasRecord?: string;
+    q?: string;
     cf?: string;
   }>;
 }) {
@@ -43,12 +48,19 @@ export default async function PeoplePage({
   const { dateFormat, nameOrder, nameDisplayFormat } = await getUserDisplayPreferences(session.user.id);
 
   const params = await searchParams;
-  const currentPage = Number(params.page) || 1;
+  const currentPage = Math.max(1, Number(params.page) || 1);
+  const parsedPageSize = Number(params.pageSize);
+  const pageSize = ALLOWED_PAGE_SIZES.includes(parsedPageSize) ? parsedPageSize : DEFAULT_PAGE_SIZE;
+
   const sortBy = params.sortBy || 'name';
-  const order = params.order || 'asc';
+  const order = (params.order === 'desc' ? 'desc' : 'asc') as 'asc' | 'desc';
   const groupFilter = params.group || '';
   const relationshipFilter = params.relationship || '';
   const managementFilter = params.managementLevel || '';
+  const threatFilter = params.threatLevel || '';
+  const hasRecordFilter = params.hasRecord || '';
+  const query = (params.q || '').trim();
+
   const cfParam = params.cf || '';
   let cfFilter: { slug: string; value: string } | null = null;
   if (cfParam) {
@@ -57,13 +69,24 @@ export default async function PeoplePage({
       cfFilter = { slug: cfParam.slice(0, idx), value: cfParam.slice(idx + 1) };
     }
   }
-  const skip = (currentPage - 1) * ITEMS_PER_PAGE;
+
+  const skip = (currentPage - 1) * pageSize;
 
   // Build where clause for people query
   const peopleWhere: Prisma.PersonWhereInput = {
     userId: session.user.id,
     deletedAt: null,
   };
+
+  // Search keyword (q)
+  if (query) {
+    peopleWhere.OR = [
+      { name: { contains: query, mode: 'insensitive' } },
+      { surname: { contains: query, mode: 'insensitive' } },
+      { nickname: { contains: query, mode: 'insensitive' } },
+      { citizenId: { contains: query, mode: 'insensitive' } },
+    ];
+  }
 
   if (groupFilter === 'none') {
     peopleWhere.groups = { none: {} };
@@ -89,11 +112,19 @@ export default async function PeoplePage({
     peopleWhere.managementLevel = managementFilter;
   }
 
+  if (threatFilter === 'armed') {
+    peopleWhere.threatLevel = 'ARMED_DANGEROUS';
+  } else if (threatFilter === 'high') {
+    peopleWhere.threatLevel = { in: ['HIGH', 'ARMED_DANGEROUS'] };
+  } else if (threatFilter) {
+    peopleWhere.threatLevel = threatFilter;
+  }
+
+  if (hasRecordFilter === 'true') {
+    peopleWhere.criminalRecords = { some: { deletedAt: null } };
+  }
+
   if (cfFilter) {
-    // Case-insensitive match. Harmless for NUMBER ("42" == "42"), BOOLEAN
-    // ("true"/"false" are lowercase), and SELECT (dropdown values match the
-    // stored option's exact casing). For TEXT, this lets users find values
-    // without remembering the exact casing.
     peopleWhere.customFieldValues = {
       some: {
         value: { equals: cfFilter.value, mode: 'insensitive' },
@@ -106,27 +137,26 @@ export default async function PeoplePage({
     };
   }
 
-  // Get total count for pagination
-  const totalCount = await prisma.person.count({
-    where: peopleWhere,
-  });
-
-  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
-
-  // Fetch all people, groups, relationship types, and custom field templates in parallel
-  const [allPeople, allGroups, relationshipTypes, customFieldTemplates] = await Promise.all([
-    prisma.person.findMany({
-      where: peopleWhere,
-      include: {
-        relationshipToUser: { select: { label: true, color: true } },
-        groups: {
-          where: { group: { deletedAt: null } },
-          include: { group: { select: { name: true, color: true } } },
-        },
-        relationshipsFrom: { select: { id: true } },
-        relationshipsTo: { select: { id: true } },
-      },
-    }),
+  // Get total count for pagination & quick chips counts in parallel
+  const [
+    totalCount,
+    totalAll,
+    countKeyTarget,
+    countSurveillance,
+    countHighRisk,
+    countCriminal,
+    countUnassignedGroup,
+    allGroups,
+    relationshipTypes,
+    customFieldTemplates,
+  ] = await Promise.all([
+    prisma.person.count({ where: peopleWhere }),
+    prisma.person.count({ where: { userId: session.user.id, deletedAt: null } }),
+    prisma.person.count({ where: { userId: session.user.id, deletedAt: null, managementLevel: 'KEY_TARGET' } }),
+    prisma.person.count({ where: { userId: session.user.id, deletedAt: null, managementLevel: 'SURVEILLANCE' } }),
+    prisma.person.count({ where: { userId: session.user.id, deletedAt: null, threatLevel: { in: ['HIGH', 'ARMED_DANGEROUS'] } } }),
+    prisma.person.count({ where: { userId: session.user.id, deletedAt: null, criminalRecords: { some: { deletedAt: null } } } }),
+    prisma.person.count({ where: { userId: session.user.id, deletedAt: null, groups: { none: {} } } }),
     prisma.group.findMany({
       where: { userId: session.user.id, deletedAt: null },
       orderBy: { name: 'asc' },
@@ -143,67 +173,108 @@ export default async function PeoplePage({
     }),
   ]);
 
-  // Sort the people based on sortBy and order
-  const sortedPeople = [...allPeople].sort((a, b) => {
-    let primaryComparison = 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
-    switch (sortBy) {
-      case 'name': {
-        const aFullName = `${a.name} ${a.surname || ''}`.trim();
-        const bFullName = `${b.name} ${b.surname || ''}`.trim();
-        primaryComparison = aFullName.localeCompare(bFullName);
-        break;
-      }
-      case 'surname': {
-        const aFullName = `${a.name} ${a.surname || ''}`.trim();
-        const bFullName = `${b.name} ${b.surname || ''}`.trim();
-        primaryComparison = aFullName.localeCompare(bFullName);
-        break;
-      }
-      case 'nickname':
-        const aNickname = a.nickname || 'zzz'; // Put people without nicknames at the end
-        const bNickname = b.nickname || 'zzz';
-        primaryComparison = aNickname.localeCompare(bNickname);
-        break;
-      case 'relationship': {
-        const aCount = a.relationshipsFrom.length + a.relationshipsTo.length;
-        const bCount = b.relationshipsFrom.length + b.relationshipsTo.length;
-        primaryComparison = bCount - aCount;
-        break;
-      }
-      case 'group':
-        const aGroup = a.groups[0]?.group.name || 'zzz';
-        const bGroup = b.groups[0]?.group.name || 'zzz';
-        primaryComparison = aGroup.localeCompare(bGroup);
-        break;
-      case 'lastContact':
-        const aDate = a.lastContact ? new Date(a.lastContact).getTime() : 0;
-        const bDate = b.lastContact ? new Date(b.lastContact).getTime() : 0;
-        primaryComparison = aDate - bDate;
-        break;
-      default: {
-        const aFull = `${a.name} ${a.surname || ''}`.trim();
-        const bFull = `${b.name} ${b.surname || ''}`.trim();
-        primaryComparison = aFull.localeCompare(bFull);
-      }
+  // Determine whether we can sort directly in database
+  const isDbSortable = ['name', 'surname', 'lastContact', 'nickname'].includes(sortBy);
+
+  let people: Array<{
+    id: string;
+    name: string;
+    middleName: string | null;
+    surname: string | null;
+    secondLastName: string | null;
+    nickname: string | null;
+    displayNameOverride?: string | null;
+    photo: string | null;
+    lastContact: Date | null;
+    relationshipToUser: { label: string; color: string | null } | null;
+    groups: Array<{ groupId: string; group: { name: string; color: string | null } }>;
+    relationshipsFrom: Array<{ id: string }>;
+    relationshipsTo: Array<{ id: string }>;
+    managementLevel?: string | null;
+    threatLevel?: string | null;
+    citizenId?: string | null;
+  }> = [];
+
+  const personInclude = {
+    relationshipToUser: { select: { label: true, color: true } },
+    groups: {
+      where: { group: { deletedAt: null } },
+      include: { group: { select: { name: true, color: true } } },
+    },
+    relationshipsFrom: { select: { id: true } },
+    relationshipsTo: { select: { id: true } },
+  };
+
+  if (isDbSortable) {
+    let prismaOrderBy: Prisma.PersonOrderByWithRelationInput[] = [];
+    if (sortBy === 'name') {
+      prismaOrderBy = nameOrder === 'EASTERN'
+        ? [{ surname: order }, { name: order }]
+        : [{ name: order }, { surname: order }];
+    } else if (sortBy === 'surname') {
+      prismaOrderBy = [{ surname: order }, { name: order }];
+    } else if (sortBy === 'lastContact') {
+      prismaOrderBy = [{ lastContact: order }, { name: 'asc' }];
+    } else if (sortBy === 'nickname') {
+      prismaOrderBy = [{ nickname: order }, { name: 'asc' }];
     }
 
-    // Apply order to primary comparison only
-    const orderedPrimaryComparison = order === 'desc' ? -primaryComparison : primaryComparison;
+    people = await prisma.person.findMany({
+      where: peopleWhere,
+      include: personInclude,
+      orderBy: prismaOrderBy,
+      skip,
+      take: pageSize,
+    });
+  } else {
+    // In-memory sort fallback for relations count or groups
+    const allPeople = await prisma.person.findMany({
+      where: peopleWhere,
+      include: personInclude,
+    });
 
-    // If primary comparison is not equal, return it
-    if (orderedPrimaryComparison !== 0) {
-      return orderedPrimaryComparison;
-    }
+    const sortedPeople = [...allPeople].sort((a, b) => {
+      let primaryComparison = 0;
+      switch (sortBy) {
+        case 'relationship': {
+          const aCount = a.relationshipsFrom.length + a.relationshipsTo.length;
+          const bCount = b.relationshipsFrom.length + b.relationshipsTo.length;
+          primaryComparison = bCount - aCount;
+          break;
+        }
+        case 'group': {
+          const aGroup = a.groups[0]?.group.name || 'zzz';
+          const bGroup = b.groups[0]?.group.name || 'zzz';
+          primaryComparison = aGroup.localeCompare(bGroup);
+          break;
+        }
+        default: {
+          const aFull = `${a.name} ${a.surname || ''}`.trim();
+          const bFull = `${b.name} ${b.surname || ''}`.trim();
+          primaryComparison = aFull.localeCompare(bFull);
+        }
+      }
 
-    // Otherwise, use secondary sort by full name (always ascending)
-    const aFallback = `${a.name} ${a.surname || ''}`.trim();
-    const bFallback = `${b.name} ${b.surname || ''}`.trim();
-    return aFallback.localeCompare(bFallback);
-  });
+      const ordered = order === 'desc' ? -primaryComparison : primaryComparison;
+      if (ordered !== 0) return ordered;
+      const aFallback = `${a.name} ${a.surname || ''}`.trim();
+      const bFallback = `${b.name} ${b.surname || ''}`.trim();
+      return aFallback.localeCompare(bFallback);
+    });
 
-  // Paginate the sorted results
-  const people = sortedPeople.slice(skip, skip + ITEMS_PER_PAGE);
+    people = sortedPeople.slice(skip, skip + pageSize);
+  }
+
+  const quickCounts = {
+    totalAll,
+    countKeyTarget,
+    countSurveillance,
+    countHighRisk,
+    countCriminal,
+    countUnassignedGroup,
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -248,7 +319,7 @@ export default async function PeoplePage({
             </div>
           </div>
 
-          {totalCount === 0 && !groupFilter && !relationshipFilter && !cfFilter ? (
+          {totalCount === 0 && !groupFilter && !relationshipFilter && !cfFilter && !managementFilter && !threatFilter && !hasRecordFilter && !query ? (
             <div className="bg-surface rounded-lg border border-border">
               <EmptyState
                 icon={
@@ -263,47 +334,59 @@ export default async function PeoplePage({
               />
             </div>
           ) : (
-            <>
-              <PeopleListClient
-                people={people}
-                totalCount={totalCount}
-                currentPage={currentPage}
-                totalPages={totalPages}
-                sortBy={sortBy}
-                order={order}
-                groupFilter={groupFilter}
-                relationshipFilter={relationshipFilter}
-                managementFilter={managementFilter}
-                cfFilter={cfFilter}
-                dateFormat={dateFormat}
-                availableGroups={allGroups}
-                relationshipTypes={relationshipTypes}
-                customFieldTemplates={customFieldTemplates}
-                nameOrder={nameOrder}
-                nameDisplayFormat={nameDisplayFormat}
-                translations={{
-                  fullName: t('fullName'),
-                  surname: t('surname'),
-                  nickname: t('nickname'),
-                  relationshipToUser: t('relationships'),
-                  groups: t('groups'),
-                  lastContact: t('lastContact'),
-                  actions: t('actions'),
-                  indirect: t('indirect'),
-                  orphanWarning: t('orphanWarning'),
-                  showing: t('showing', { start: totalCount === 0 ? 0 : skip + 1, end: Math.min(skip + ITEMS_PER_PAGE, totalCount), total: totalCount }),
-                  page: t('page'),
-                  of: t('of'),
-                }}
-                commonTranslations={{
-                  name: tCommon('name'),
-                  edit: tCommon('edit'),
-                  view: tCommon('view'),
-                  previous: tCommon('previous'),
-                  next: tCommon('next'),
-                }}
-              />
-            </>
+            <PeopleListClient
+              people={people}
+              totalCount={totalCount}
+              currentPage={currentPage}
+              totalPages={totalPages}
+              pageSize={pageSize}
+              sortBy={sortBy}
+              order={order}
+              groupFilter={groupFilter}
+              relationshipFilter={relationshipFilter}
+              managementFilter={managementFilter}
+              threatFilter={threatFilter}
+              hasRecordFilter={hasRecordFilter}
+              query={query}
+              cfFilter={cfFilter}
+              quickCounts={quickCounts}
+              dateFormat={dateFormat}
+              availableGroups={allGroups}
+              relationshipTypes={relationshipTypes}
+              customFieldTemplates={customFieldTemplates}
+              nameOrder={nameOrder}
+              nameDisplayFormat={nameDisplayFormat}
+              translations={{
+                fullName: t('fullName'),
+                surname: t('surname'),
+                nickname: t('nickname'),
+                relationshipToUser: t('relationships'),
+                groups: t('groups'),
+                lastContact: t('lastContact'),
+                actions: t('actions'),
+                indirect: t('indirect'),
+                orphanWarning: t('orphanWarning'),
+                showing: t('showing', {
+                  start: totalCount === 0 ? 0 : skip + 1,
+                  end: Math.min(skip + pageSize, totalCount),
+                  total: totalCount,
+                }),
+                page: t('page'),
+                of: t('of'),
+                pageSize: t('pageSize'),
+                perPage: t('perPage'),
+                jumpToPage: t('jumpToPage'),
+                jump: t('jump'),
+                changeManagementLevel: t('changeManagementLevel'),
+              }}
+              commonTranslations={{
+                name: tCommon('name'),
+                edit: tCommon('edit'),
+                view: tCommon('view'),
+                previous: tCommon('previous'),
+                next: tCommon('next'),
+              }}
+            />
           )}
         </div>
       </main>

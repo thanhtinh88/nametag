@@ -91,7 +91,7 @@ export default function PersonalInfoSection({
         <p className="text-xs text-muted mt-1">{t('quickFullNameHelp')}</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label
             htmlFor="surname"
@@ -170,7 +170,7 @@ export default function PersonalInfoSection({
         <summary className="cursor-pointer text-xs font-medium text-muted hover:text-foreground select-none">
           {t('advancedNameFields')}
         </summary>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mt-3">
           <div>
             <label
               htmlFor="prefix"
@@ -223,7 +223,7 @@ export default function PersonalInfoSection({
             />
           </div>
 
-          <div className="md:col-span-3">
+          <div className="sm:col-span-3">
             <div className="flex items-center justify-between mb-1">
               <label
                 htmlFor="displayNameOverride"
@@ -313,7 +313,7 @@ export default function PersonalInfoSection({
 
       {mode === 'create' && availableEvents.length > 0 && (
         <div className="space-y-4 pt-2 border-t border-border">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label
                 htmlFor="connectedEventId"
@@ -362,7 +362,7 @@ export default function PersonalInfoSection({
           </div>
 
           {formData.connectedEventId && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label
                   htmlFor="connectedEventInvolvementType"

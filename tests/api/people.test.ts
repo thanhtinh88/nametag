@@ -173,10 +173,10 @@ describe('People API', () => {
       expect(body.error).toBe('Validation failed');
     });
 
-    it('should require relationship for direct connections', async () => {
+    it('should require relationship when connected through another person without relationship', async () => {
       const request = new Request('http://localhost/api/people', {
         method: 'POST',
-        body: JSON.stringify({ name: 'New Person' }),
+        body: JSON.stringify({ name: 'New Person', connectedThroughId: 'base-person' }),
         headers: { 'content-type': 'application/json' },
       });
 
@@ -211,6 +211,109 @@ describe('People API', () => {
 
       expect(response.status).toBe(201);
       expect(mocks.relationshipCreate).toHaveBeenCalled();
+    });
+
+    it('should create a person with investigation records (vehicles, physicalMarks, criminalRecords, bankAccounts, gangMemberships)', async () => {
+      const newPerson = {
+        id: 'person-investigated',
+        name: 'Suspect X',
+        vehicles: [{ plateNumber: '29A-123.45', vehicleType: 'MOTORBIKE' }],
+        physicalMarks: [{ type: 'TATTOO', location: 'Cổ tay phải', description: 'Hình rồng xanh' }],
+        criminalRecords: [{ charge: 'Trộm cắp tài sản', recordType: 'CONVICTION' }],
+        bankAccounts: [{ bankName: 'Techcombank', accountNumber: '19033888888' }],
+        gangMemberships: [{ gangId: 'gang-1', role: 'Đàn em' }],
+      };
+
+      mocks.personCreate.mockResolvedValue(newPerson);
+
+      const request = new Request('http://localhost/api/people', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'Suspect X',
+          vehicles: [
+            {
+              plateNumber: '29A-123.45',
+              vehicleType: 'MOTORBIKE',
+            },
+          ],
+          physicalMarks: [
+            {
+              type: 'TATTOO',
+              location: 'Cổ tay phải',
+              description: 'Hình rồng xanh',
+            },
+          ],
+          criminalRecords: [
+            {
+              charge: 'Trộm cắp tài sản',
+              recordType: 'CONVICTION',
+            },
+          ],
+          bankAccounts: [
+            {
+              bankName: 'Techcombank',
+              accountNumber: '19033888888',
+            },
+          ],
+          gangMemberships: [
+            {
+              gangId: 'gang-1',
+              role: 'Đàn em',
+            },
+          ],
+        }),
+        headers: { 'content-type': 'application/json' },
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(201);
+      expect(mocks.personCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            vehicles: {
+              create: [
+                expect.objectContaining({
+                  plateNumber: '29A-123.45',
+                  vehicleType: 'MOTORBIKE',
+                }),
+              ],
+            },
+            physicalMarks: {
+              create: [
+                expect.objectContaining({
+                  type: 'TATTOO',
+                  location: 'Cổ tay phải',
+                  description: 'Hình rồng xanh',
+                }),
+              ],
+            },
+            criminalRecords: {
+              create: [
+                expect.objectContaining({
+                  charge: 'Trộm cắp tài sản',
+                  recordType: 'CONVICTION',
+                }),
+              ],
+            },
+            bankAccounts: {
+              create: [
+                expect.objectContaining({
+                  bankName: 'Techcombank',
+                  accountNumber: '19033888888',
+                }),
+              ],
+            },
+            gangMemberships: {
+              create: [
+                expect.objectContaining({
+                  gangId: 'gang-1',
+                  role: 'Đàn em',
+                }),
+              ],
+            },
+          }),
+        })
+      );
     });
 
     it('should validate base person exists', async () => {

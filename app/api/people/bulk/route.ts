@@ -163,6 +163,18 @@ export const POST = withAuth(async (request, session) => {
 
         return apiResponse.ok({ success: true, affectedCount: result.count });
       }
+
+      case 'setManagementLevel': {
+        const ids = await resolvePersonIds(data.personIds, data.selectAll, session.user.id);
+        if (ids.length === 0) return apiResponse.ok({ success: true, affectedCount: 0 });
+
+        const result = await prisma.person.updateMany({
+          where: { id: { in: ids }, userId: session.user.id },
+          data: { managementLevel: data.managementLevel },
+        });
+
+        return apiResponse.ok({ success: true, affectedCount: result.count });
+      }
     }
   } catch (error) {
     return handleApiError(error, 'people-bulk');

@@ -1,77 +1,14 @@
 import { auth } from '@/lib/auth';
 import { redirect, notFound } from 'next/navigation';
-import Link from 'next/link';
 import BackLink from '@/components/BackLink';
 import { prisma } from '@/lib/prisma';
-import RelationshipManager from '@/components/RelationshipManager';
-import UnifiedNetworkGraph from '@/components/UnifiedNetworkGraph';
 import Navigation from '@/components/Navigation';
-import PersonVCardRawView from '@/components/PersonVCardRawView';
-import PersonActionsMenu from '@/components/PersonActionsMenu';
-import LastContactQuickUpdate from '@/components/LastContactQuickUpdate';
-import RetryGeocodeButton from '@/components/RetryGeocodeButton';
-import { formatDate, formatDateWithoutYear, parseCalendarDate, YEAR_UNKNOWN_SENTINEL, type DateFormat } from '@/lib/date-format';
-import { getCountryName } from '@/lib/countries';
-import { formatCanonicalName, formatGraphName, type NameDisplayFormat } from '@/lib/nameUtils';
-import MarkdownRenderer from '@/components/MarkdownRenderer';
-import PersonAvatar from '@/components/PersonPhoto';
-import PhotoLightbox from '@/components/PhotoLightbox';
 import { getTranslations } from 'next-intl/server';
-import { getDateDisplayTitle } from '@/lib/important-date-types';
-import JournalSection from '@/components/JournalSection';
-import MessagingLinks from '@/components/MessagingLinks';
-import PersonEventsManager from '@/components/PersonEventsManager';
-import ImmichGallerySection from '@/components/ImmichGallerySection';
-import PersonInvestigationDossier from '@/components/investigation/PersonInvestigationDossier';
 import { customFieldValuesInclude } from '@/lib/prisma-queries';
+import PersonDetailsClient from '@/components/PersonDetailsClient';
+import type { NameDisplayFormat } from '@/lib/nameUtils';
 
-function isSafeUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    return ['http:', 'https:'].includes(parsed.protocol);
-  } catch {
-    return false;
-  }
-}
-
-// Type for translation function
 type TranslationFn = (key: string, values?: Record<string, string | number | Date>) => string;
-
-function getYearsAgo(date: Date, t: TranslationFn): string | null {
-  const now = new Date();
-  if (date >= now) return null; // Future date, don't show anything
-
-  const years = now.getFullYear() - date.getFullYear();
-  const monthDiff = now.getMonth() - date.getMonth();
-  const dayDiff = now.getDate() - date.getDate();
-
-  // Adjust if the anniversary hasn't occurred yet this year
-  const adjustedYears = (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) ? years - 1 : years;
-
-  if (adjustedYears < 1) return null;
-  return adjustedYears === 1 ? t('oneYearAgo') : t('yearsAgo', { years: adjustedYears });
-}
-
-function getReminderDescription(
-  date: {
-    reminderEnabled: boolean;
-    reminderType: string | null;
-    reminderInterval: number | null;
-    reminderIntervalUnit: string | null;
-  },
-  t: TranslationFn
-): string | null {
-  if (!date.reminderEnabled) return null;
-  if (date.reminderType === 'ONCE') {
-    return t('remindOnce');
-  }
-  if (date.reminderType === 'RECURRING' && date.reminderInterval && date.reminderIntervalUnit) {
-    const unit = date.reminderIntervalUnit.toLowerCase();
-    const translatedUnit = date.reminderInterval === 1 ? t(unit.slice(0, -1)) : t(unit);
-    return t('remindEvery', { interval: date.reminderInterval, unit: translatedUnit });
-  }
-  return null;
-}
 
 function getContactReminderDescription(
   person: {
@@ -97,7 +34,6 @@ export default async function PersonDetailsPage({
 }) {
   const session = await auth();
   const t = await getTranslations('people');
-  const tCf = await getTranslations('customFields.person');
 
   if (!session?.user) {
     redirect('/login');
@@ -105,7 +41,7 @@ export default async function PersonDetailsPage({
 
   const { id } = await params;
 
-  // Fetch user's date format preference and name
+  // Fetch user's display preference and profile
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: {
@@ -119,11 +55,21 @@ export default async function PersonDetailsPage({
       photo: true,
     },
   });
-  const dateFormat = user?.dateFormat || 'MDY';
-  const nameOrder = user?.nameOrder;
-  const nameDisplayFormat: NameDisplayFormat = user?.nameDisplayFormat || 'FULL';
 
-  const [person, allPeople, relationshipTypes, cardDavConnection, latestJournalEntry, allEvents, immichConnection] = await Promise.all([
+  const dateFormat = user?.dateFormat || 'DMY';
+  const nameOrder = user?.nameOrder;
+  const nameDisplayFormat: NameDisplayFormat = (user?.nameDisplayFormat as NameDisplayFormat) || 'FULL';
+
+  // Fetch person, relationships, groups, and connections in parallel
+  const [
+    person,
+    allPeople,
+    relationshipTypes,
+    cardDavConnection,
+    latestJournalEntry,
+    allEvents,
+    immichConnection,
+  ] = await Promise.all([
     prisma.person.findUnique({
       where: {
         id,
@@ -344,30 +290,11 @@ export default async function PersonDetailsPage({
     latitude: address.latitude === null ? null : Number(address.latitude),
     longitude: address.longitude === null ? null : Number(address.longitude),
   }));
+
   const serializedPerson = {
     ...person,
     locations: serializedLocations,
     addresses: serializedAddresses,
-  };
-
-  const investigationPerson = {
-    id: person.id,
-    managementLevel: person.managementLevel,
-    threatLevel: person.threatLevel,
-    citizenId: person.citizenId,
-    citizenIdIssueDate: person.citizenIdIssueDate,
-    citizenIdIssuePlace: person.citizenIdIssuePlace,
-    residenceStatus: person.residenceStatus,
-    heightCm: person.heightCm,
-    weightKg: person.weightKg,
-    bloodType: person.bloodType,
-    modusOperandi: person.modusOperandi,
-    riskNotes: person.riskNotes,
-    vehicles: person.vehicles,
-    physicalMarks: person.physicalMarks,
-    criminalRecords: person.criminalRecords,
-    gangMemberships: person.gangMemberships,
-    bankAccounts: person.bankAccounts,
   };
 
   // Filter out people who already have a relationship
@@ -377,6 +304,8 @@ export default async function PersonDetailsPage({
   const availablePeople = allPeople.filter(
     (p) => !relatedPersonIds.has(p.id)
   );
+
+  const contactReminderDesc = getContactReminderDescription(person, t);
 
   return (
     <div className="min-h-screen bg-background">
@@ -388,627 +317,30 @@ export default async function PersonDetailsPage({
         currentPath="/people"
       />
 
-      <main className="max-w-4xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          <div className="mb-6">
-            <BackLink
-              fallbackHref="/people"
-              className="text-primary hover:underline text-sm"
-            >
-              {t('backToPeople')}
-            </BackLink>
-          </div>
-
-          <div className="bg-surface shadow rounded-lg overflow-hidden">
-            <div className="px-6 py-6 border-b border-border flex flex-col sm:flex-row justify-between items-start gap-5">
-              <div className="flex items-start gap-5 flex-1 min-w-0">
-                <PhotoLightbox
-                  personId={person.id}
-                  name={formatGraphName(person, nameOrder, nameDisplayFormat)}
-                  photo={person.photo}
-                >
-                  <PersonAvatar
-                    personId={person.id}
-                    name={formatGraphName(person, nameOrder, nameDisplayFormat)}
-                    photo={person.photo}
-                    size={72}
-                    loading="eager"
-                  />
-                </PhotoLightbox>
-                <div className="flex-1 min-w-0">
-                  <h1 className="text-2xl sm:text-3xl font-bold text-foreground break-words">
-                    {formatGraphName(person, nameOrder, nameDisplayFormat)}
-                  </h1>
-                {(person.managementLevel !== 'NORMAL' || person.threatLevel === 'HIGH' || person.threatLevel === 'ARMED_DANGEROUS') && (
-                  <div className="flex flex-wrap items-center gap-2 mt-2">
-                    {person.managementLevel === 'KEY_TARGET' && (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300 border border-red-200 dark:border-red-900">
-                        🔴 {t('form.managementLevels.KEY_TARGET')}
-                      </span>
-                    )}
-                    {person.managementLevel === 'SURVEILLANCE' && (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-900">
-                        🟠 {t('form.managementLevels.SURVEILLANCE')}
-                      </span>
-                    )}
-                    {person.threatLevel === 'ARMED_DANGEROUS' && (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-600 text-white shadow-sm">
-                        ⚠️ {t('form.threatLevels.ARMED_DANGEROUS')}
-                      </span>
-                    )}
-                    {person.threatLevel === 'HIGH' && (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-orange-600 text-white shadow-sm">
-                        ⚠️ {t('form.threatLevels.HIGH')}
-                      </span>
-                    )}
-                  </div>
-                )}
-                {person.groups.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {person.groups.map((pg) => (
-                      <span
-                        key={pg.groupId}
-                        className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium"
-                        style={{
-                          backgroundColor: pg.group.color
-                            ? `${pg.group.color}20`
-                            : 'var(--badge-bg)',
-                          color: pg.group.color || 'var(--badge-text)',
-                        }}
-                      >
-                        {pg.group.name}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                {cardDavConnection && (
-                  <div className="flex items-center gap-1.5 mt-2" title={person.cardDavSyncEnabled ? t('cardDavSynced') : t('cardDavNotSynced')}>
-                    {person.cardDavSyncEnabled ? (
-                      <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                      </svg>
-                    ) : (
-                      <svg className="w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                      </svg>
-                    )}
-                    <span className={`text-xs ${person.cardDavSyncEnabled ? 'text-green-500' : 'text-muted'}`}>
-                      {person.cardDavSyncEnabled ? t('cardDavSynced') : t('cardDavNotSynced')}
-                    </span>
-                  </div>
-                )}
-                </div>
-              </div>
-              <div className="flex flex-shrink-0 space-x-3 w-full sm:w-auto">
-                <Link
-                  href={`/people/${person.id}/edit`}
-                  className="flex-1 sm:flex-none px-4 py-2 bg-primary text-on-primary rounded-lg font-semibold hover:bg-primary-dark transition-colors text-center"
-                >
-                  {t('edit')}
-                </Link>
-                <PersonActionsMenu
-                  personId={person.id}
-                  personName={formatGraphName(person, nameOrder, nameDisplayFormat)}
-                  person={serializedPerson}
-                  hasCardDavSync={!!cardDavConnection && !!person.cardDavMapping}
-                  allPeople={allPeople}
-                  nameOrder={nameOrder}
-                  nameDisplayFormat={nameDisplayFormat}
-                />
-              </div>
-            </div>
-
-            <div className="px-6 py-6 space-y-8">
-              {/* Investigation / Subject Monitoring Dossier */}
-              {(person.managementLevel !== 'NORMAL' ||
-                Boolean(person.citizenId) ||
-                Boolean(person.residenceStatus) ||
-                Boolean(person.heightCm) ||
-                Boolean(person.weightKg) ||
-                Boolean(person.bloodType) ||
-                Boolean(person.modusOperandi) ||
-                Boolean(person.riskNotes) ||
-                person.vehicles.length > 0 ||
-                person.physicalMarks.length > 0 ||
-                person.criminalRecords.length > 0 ||
-                person.gangMemberships.length > 0 ||
-                person.bankAccounts.length > 0) ? (
-                <PersonInvestigationDossier
-                  person={investigationPerson}
-                  dateFormat={dateFormat as DateFormat}
-                />
-              ) : (
-                <details className="border border-dashed border-border rounded-lg p-4 group">
-                  <summary className="text-sm font-medium text-muted cursor-pointer hover:text-foreground list-none flex items-center justify-between">
-                    <span>🛡️ Thêm hồ sơ quản lý nghiệp vụ / đối tượng theo dõi...</span>
-                    <span className="text-xs text-primary group-open:hidden">+ Mở</span>
-                  </summary>
-                  <div className="mt-4">
-                    <PersonInvestigationDossier
-                      person={investigationPerson}
-                      dateFormat={dateFormat as DateFormat}
-                    />
-                  </div>
-                </details>
-              )}
-
-              {/* Personal Details */}
-              <div className="border border-border rounded-lg p-4">
-                <h3 className="text-lg font-semibold text-foreground mb-4">
-                  {t('personalDetails')}
-                </h3>
-                <div className="space-y-3">
-                  <div>
-                    <h4 className="text-sm font-medium text-muted mb-1">
-                      {t('fullName')}
-                    </h4>
-                    <p className="text-foreground">
-                      {[
-                        person.prefix,
-                        formatCanonicalName(person, nameOrder),
-                        person.suffix,
-                      ]
-                        .filter(Boolean)
-                        .join(' ')}
-                    </p>
-                  </div>
-
-                  {person.displayNameOverride && (
-                    <div>
-                      <h4 className="text-sm font-medium text-muted mb-1">
-                        {t('form.displayNameOverrideLabel')}
-                      </h4>
-                      <p className="text-foreground">
-                        {person.displayNameOverride}
-                      </p>
-                    </div>
-                  )}
-
-                  {person.nickname && (
-                    <div>
-                      <h4 className="text-sm font-medium text-muted mb-1">
-                        {t('nickname')}
-                      </h4>
-                      <p className="text-foreground">{person.nickname}</p>
-                    </div>
-                  )}
-
-                  {person.gender && (
-                    <div>
-                      <h4 className="text-sm font-medium text-muted mb-1">
-                        {t('gender')}
-                      </h4>
-                      <p className="text-foreground">{person.gender}</p>
-                    </div>
-                  )}
-
-                  {person.anniversary && (() => {
-                    const anniversaryDate = parseCalendarDate(person.anniversary);
-                    const yearsAgo = getYearsAgo(anniversaryDate, t);
-                    return (
-                      <div>
-                        <h4 className="text-sm font-medium text-muted mb-1">
-                          {t('anniversary')}
-                        </h4>
-                        <p className="text-foreground">
-                          {formatDate(anniversaryDate, dateFormat)}
-                          {yearsAgo && (
-                            <span className="text-sm text-muted ml-1">
-                              ({yearsAgo})
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                    );
-                  })()}
-
-                  <LastContactQuickUpdate
-                    personId={person.id}
-                    currentLastContact={person.lastContact ? new Date(person.lastContact).toISOString() : null}
-                    dateFormat={dateFormat as DateFormat}
-                    contactReminderDescription={getContactReminderDescription(person, t)}
-                  />
-                </div>
-              </div>
-
-              {/* Professional Information */}
-              {(person.organization || person.jobTitle) && (
-                <div className="border border-border rounded-lg p-4">
-                  <h3 className="text-lg font-semibold text-foreground mb-4">
-                    {t('professional')}
-                  </h3>
-                  <div className="space-y-3">
-                    {person.organization && (
-                      <div>
-                        <h4 className="text-sm font-medium text-muted mb-1">
-                          {t('organization')}
-                        </h4>
-                        <p className="text-foreground">{person.organization}</p>
-                      </div>
-                    )}
-                    {person.jobTitle && (
-                      <div>
-                        <h4 className="text-sm font-medium text-muted mb-1">
-                          {t('jobTitle')}
-                        </h4>
-                        <p className="text-foreground">{person.jobTitle}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Contact Information */}
-              {(person.phoneNumbers.length > 0 || person.emails.length > 0 || person.addresses.length > 0) && (
-                <div className="border border-border rounded-lg p-4">
-                  <h3 className="text-lg font-semibold text-foreground mb-4">
-                    {t('contactInformation')}
-                  </h3>
-                  <div className="space-y-4">
-                    {person.phoneNumbers.length > 0 && (
-                      <div>
-                        <h4 className="text-sm font-medium text-muted mb-2">
-                          {t('phoneNumbers')}
-                        </h4>
-                        <div className="space-y-2">
-                          {person.phoneNumbers.map((phone) => (
-                            <div key={phone.id} className="flex items-center gap-2">
-                              <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-surface-elevated text-muted capitalize">
-                                {phone.type}
-                              </span>
-                              <a
-                                href={`tel:${phone.number}`}
-                                className="text-primary hover:underline"
-                              >
-                                {phone.number}
-                              </a>
-                              {phone.type === 'Mobile' && (
-                                <MessagingLinks phoneNumber={phone.number} personId={person.id} />
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {person.emails.length > 0 && (
-                      <div>
-                        <h4 className="text-sm font-medium text-muted mb-2">
-                          {t('emailAddresses')}
-                        </h4>
-                        <div className="space-y-2">
-                          {person.emails.map((email) => (
-                            <div key={email.id} className="flex items-center gap-2">
-                              <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-surface-elevated text-muted capitalize">
-                                {email.type}
-                              </span>
-                              <a
-                                href={`mailto:${email.email}`}
-                                className="text-primary hover:underline"
-                              >
-                                {email.email}
-                              </a>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {person.addresses.length > 0 && (
-                      <div>
-                        <h4 className="text-sm font-medium text-muted mb-2">
-                          {t('addresses')}
-                        </h4>
-                        <div className="space-y-3">
-                          {person.addresses.map((address) => (
-                            <div key={address.id} className="p-3 bg-surface-elevated rounded-lg">
-                              <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-surface text-muted capitalize mb-2">
-                                {address.type}
-                              </span>
-                              <div className="text-sm text-foreground space-y-1">
-                                {address.streetLine1 && <div>{address.streetLine1}</div>}
-                                {address.streetLine2 && <div>{address.streetLine2}</div>}
-                                <div>
-                                  {[address.locality, address.region, address.postalCode]
-                                    .filter(Boolean)
-                                    .join(', ')}
-                                </div>
-                                {address.country && <div>{getCountryName(address.country) || address.country}</div>}
-                                {address.latitude !== null && address.longitude !== null && (
-                                  <div className="text-xs text-muted font-mono pt-0.5">
-                                    {Number(address.latitude).toFixed(6)}, {Number(address.longitude).toFixed(6)}
-                                  </div>
-                                )}
-                              </div>
-                              {address.geocodeStatus === 'success' && address.latitude !== null && address.longitude !== null && (
-                                <Link
-                                  href={`/map?focus=addr_${address.id}`}
-                                  className="inline-flex items-center gap-1 mt-2 text-sm text-primary hover:text-primary-dark transition-colors"
-                                >
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden="true">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
-                                  </svg>
-                                  {t('showOnMap')}
-                                </Link>
-                              )}
-                              {address.geocodeStatus === 'failed' && (
-                                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-                                  <span className="text-sm text-amber-600 dark:text-amber-400">
-                                    {t('addressNotLocated')}
-                                  </span>
-                                  <RetryGeocodeButton addressId={address.id} />
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Online Presence */}
-              {(person.urls.length > 0 || person.imHandles.length > 0) && (
-                <div className="border border-border rounded-lg p-4">
-                  <h3 className="text-lg font-semibold text-foreground mb-4">
-                    {t('onlinePresence')}
-                  </h3>
-                  <div className="space-y-4">
-                    {person.urls.length > 0 && (
-                      <div>
-                        <h4 className="text-sm font-medium text-muted mb-2">
-                          {t('websites')}
-                        </h4>
-                        <div className="space-y-2">
-                          {person.urls.map((url) => (
-                            <div key={url.id} className="flex items-center gap-2">
-                              <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-surface-elevated text-muted capitalize">
-                                {url.type}
-                              </span>
-                              {isSafeUrl(url.url) ? (
-                                <a
-                                  href={url.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-primary hover:underline flex items-center gap-1"
-                                >
-                                  {url.url}
-                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                  </svg>
-                                </a>
-                              ) : (
-                                <span className="text-muted flex items-center gap-1">
-                                  {url.url}
-                                </span>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {person.imHandles.length > 0 && (
-                      <div>
-                        <h4 className="text-sm font-medium text-muted mb-2">
-                          {t('instantMessaging')}
-                        </h4>
-                        <div className="space-y-2">
-                          {person.imHandles.map((im) => (
-                            <div key={im.id} className="flex items-center gap-2">
-                              <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-surface-elevated text-muted capitalize">
-                                {im.protocol}
-                              </span>
-                              <span className="text-foreground">{im.handle}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Locations */}
-              {person.locations.length > 0 && (
-                <div className="border border-border rounded-lg p-4">
-                  <h3 className="text-lg font-semibold text-foreground mb-4">
-                    {t('locations')}
-                  </h3>
-                  <div className="space-y-2">
-                    {person.locations.map((location) => {
-                      const lat = Number(location.latitude);
-                      const lng = Number(location.longitude);
-                      return (
-                        <div key={location.id} className="p-3 bg-surface-elevated rounded-lg">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-surface text-muted capitalize mb-1">
-                                {location.type}
-                              </span>
-                              <div className="text-sm text-foreground">
-                                {lat}, {lng}
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <Link
-                                href={`/map?focus=loc_${location.id}`}
-                                className="text-sm text-primary hover:text-primary-dark transition-colors"
-                              >
-                                {t('showOnMap')}
-                              </Link>
-                              <a
-                                href={`https://www.google.com/maps?q=${lat},${lng}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-primary hover:text-primary-dark transition-colors"
-                                title={t('viewOnMap')}
-                              >
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                                </svg>
-                              </a>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Important Dates Section */}
-              {person.importantDates && person.importantDates.length > 0 && (
-                <div className="border border-border rounded-lg p-4">
-                  <h3 className="text-lg font-semibold text-foreground mb-4">
-                    {t('importantDates')}
-                  </h3>
-                  <div className="space-y-2">
-                    {person.importantDates.map((date) => {
-                      const reminderDesc = getReminderDescription(date, t);
-                      const dateObj = parseCalendarDate(date.date);
-                      const isYearUnknown = dateObj.getFullYear() <= YEAR_UNKNOWN_SENTINEL;
-                      const yearsAgo = !isYearUnknown ? getYearsAgo(dateObj, t) : null;
-                      return (
-                        <div
-                          key={date.id}
-                          className="flex items-center justify-between p-3 bg-surface-elevated rounded-lg"
-                        >
-                          <div className="flex-1">
-                            <div className="font-medium text-foreground text-sm">
-                              {getDateDisplayTitle(date, (key: string) => t(`form.importantDates.${key}`))}
-                            </div>
-                            <div className="text-xs text-muted">
-                              {isYearUnknown
-                                ? formatDateWithoutYear(dateObj, dateFormat)
-                                : formatDate(dateObj, dateFormat)}
-                              {yearsAgo && <span className="ml-1">({yearsAgo})</span>}
-                            </div>
-                            {reminderDesc && (
-                              <div className="text-xs text-primary mt-1 flex items-center gap-1">
-                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                                </svg>
-                                {reminderDesc}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Custom Fields */}
-              {person.customFieldValues.length > 0 && (
-                <div className="border border-border rounded-lg p-4">
-                  <h3 className="text-lg font-semibold text-foreground mb-4">
-                    {tCf('sectionTitle')}
-                  </h3>
-                  <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {person.customFieldValues.map((v) => {
-                      const display =
-                        v.template.type === 'BOOLEAN'
-                          ? v.value === 'true'
-                            ? tCf('booleanYes')
-                            : tCf('booleanNo')
-                          : v.value;
-                      return (
-                        <div key={v.id}>
-                          <dt className="text-xs text-muted-foreground">{v.template.name}</dt>
-                          <dd className="text-sm text-foreground">{display}</dd>
-                        </div>
-                      );
-                    })}
-                  </dl>
-                </div>
-              )}
-
-              {/* Notes */}
-              {person.notes && (
-                <div className="border border-border rounded-lg p-4">
-                  <h3 className="text-lg font-semibold text-foreground mb-4">
-                    {t('notes')}
-                  </h3>
-                  <MarkdownRenderer content={person.notes} />
-                </div>
-              )}
-
-              {/* Immich Photo & Video Evidence Gallery */}
-              <ImmichGallerySection
-                mode="person"
-                entityId={person.id}
-                initialImmichPersonId={person.immichPersonId}
-                initialImmichAlbumId={person.immichAlbumId}
-                immichConfigured={Boolean(immichConnection?.enabled)}
-              />
-
-              {/* Journal Section */}
-              <JournalSection
-                personId={person.id}
-                latestEntry={latestJournalEntry ? {
-                  ...latestJournalEntry,
-                  date: latestJournalEntry.date.toISOString(),
-                } : null}
-                nameOrder={nameOrder}
-                nameDisplayFormat={nameDisplayFormat}
-                locale={user?.language || 'en'}
-              />
-
-              {/* Relationship Network Section */}
-              <div className="border border-border rounded-lg p-4">
-                <h3 className="text-lg font-semibold text-foreground mb-4">
-                  {t('relationshipNetwork')}
-                </h3>
-                <UnifiedNetworkGraph
-                  apiEndpoint={`/api/people/${person.id}/graph`}
-                  linkDistance={100}
-                  chargeStrength={-300}
-                  compact
-                  refreshKey={person.relationshipsTo.length + (person.relationshipToUserId ? 1000 : 0)}
-                />
-                <p className="text-xs text-muted mt-2">
-                  {t('graphHelp')}
-                </p>
-              </div>
-
-              {/* Raw vCard Viewer (Development Only) */}
-              <PersonVCardRawView person={serializedPerson} />
-
-              {/* Relationships Section */}
-              <div className="border border-border rounded-lg p-4">
-                <h3 className="text-lg font-semibold text-foreground mb-4">
-                  {t('relationships')}
-                </h3>
-
-                {/* Relationships to other people */}
-                <RelationshipManager
-                  personId={person.id}
-                  personName={formatGraphName(person, nameOrder, nameDisplayFormat)}
-                  relationships={person.relationshipsTo}
-                  availablePeople={availablePeople}
-                  relationshipTypes={relationshipTypes}
-                  nameOrder={nameOrder}
-                  nameDisplayFormat={nameDisplayFormat}
-                />
-              </div>
-
-              {/* Events & Co-participants Section */}
-              <PersonEventsManager
-                personId={person.id}
-                personEvents={person.events}
-                availableEvents={allEvents}
-                nameOrder={nameOrder}
-                nameDisplayFormat={nameDisplayFormat}
-              />
-
-            </div>
-          </div>
+      <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        <div className="mb-4">
+          <BackLink
+            fallbackHref="/people"
+            className="text-primary hover:underline text-sm font-medium inline-flex items-center gap-1"
+          >
+            {t('backToPeople')}
+          </BackLink>
         </div>
+
+        <PersonDetailsClient
+          person={serializedPerson}
+          availablePeople={availablePeople}
+          relationshipTypes={relationshipTypes}
+          hasCardDavConnection={Boolean(cardDavConnection)}
+          latestJournalEntry={latestJournalEntry}
+          allEvents={allEvents}
+          immichConfigured={Boolean(immichConnection?.enabled)}
+          dateFormat={dateFormat}
+          nameOrder={nameOrder}
+          nameDisplayFormat={nameDisplayFormat}
+          userLanguage={user?.language || 'vi'}
+          contactReminderDesc={contactReminderDesc}
+        />
       </main>
     </div>
   );

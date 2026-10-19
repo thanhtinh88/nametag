@@ -348,6 +348,14 @@ export const createPersonSchema = z.object({
   modusOperandi: z.string().max(10000).nullable().optional(),
   riskNotes: z.string().max(5000).nullable().optional(),
   bankAccounts: z.array(createSuspectBankAccountSchema).optional(),
+  vehicles: z.array(createSuspectVehicleSchema).optional(),
+  physicalMarks: z.array(createPhysicalMarkSchema).optional(),
+  criminalRecords: z.array(createCriminalRecordSchema).optional(),
+  gangMemberships: z.array(z.object({
+    gangId: z.string().trim().min(1),
+    role: z.string().optional().default('MEMBER'),
+    notes: z.string().nullable().optional(),
+  })).optional(),
 });
 
 export const updatePersonSchema = createPersonSchema.partial();
@@ -394,6 +402,12 @@ export const bulkActionSchema = z.discriminatedUnion('action', [
     personIds: z.array(z.string()).optional(),
     selectAll: z.boolean().optional(),
     relationshipTypeId: z.string(),
+  }),
+  z.object({
+    action: z.literal('setManagementLevel'),
+    personIds: z.array(z.string()).optional(),
+    selectAll: z.boolean().optional(),
+    managementLevel: z.enum(['NORMAL', 'SURVEILLANCE', 'KEY_TARGET']),
   }),
 ]);
 

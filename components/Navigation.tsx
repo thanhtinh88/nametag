@@ -55,11 +55,17 @@ const navIcons: Record<string, React.ReactNode> = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
     </svg>
   ),
+  gangs: (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v1.5M3 21v-6m0 0l2.77-.693a9 9 0 016.208.682l.108.054a9 9 0 006.086.71l3.114-.732a1.125 1.125 0 00.864-1.091V6.368a1.125 1.125 0 00-.864-1.091l-3.114.732a9 9 0 01-6.086-.71l-.108-.054a9 9 0 00-6.208-.682L3 5.25m0 9.75V5.25" />
+    </svg>
+  ),
 };
 
 const navItems = [
   { href: '/dashboard', labelKey: 'dashboard' },
   { href: '/people', labelKey: 'people', createHref: '/people/new', createLabelKey: 'people' },
+  { href: '/gangs', labelKey: 'gangs', createHref: '/gangs/new', createLabelKey: 'gangs' },
   { href: '/events', labelKey: 'events', createHref: '/events/new', createLabelKey: 'events' },
   { href: '/groups', labelKey: 'groups', createHref: '/groups/new', createLabelKey: 'groups' },
   { href: '/map', labelKey: 'map' },

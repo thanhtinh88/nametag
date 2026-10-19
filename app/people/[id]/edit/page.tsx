@@ -23,7 +23,19 @@ export default async function EditPersonPage({
 
   const { id } = await params;
 
-  const [person, groups, relationshipTypes, reminderCheck, preferences, cardDavConnection, customFieldTemplates, notificationPreferences] = await Promise.all([
+  const [
+    person,
+    groups,
+    relationshipTypes,
+    reminderCheck,
+    preferences,
+    cardDavConnection,
+    customFieldTemplates,
+    notificationPreferences,
+    allPeople,
+    allEvents,
+    availableGangs,
+  ] = await Promise.all([
     prisma.person.findUnique({
       where: {
         id,
@@ -49,6 +61,89 @@ export default async function EditPersonPage({
         customFieldValues: {
           where: { template: { deletedAt: null } },
           select: { templateId: true, value: true },
+        },
+        relationshipsTo: {
+          where: {
+            deletedAt: null,
+            person: {
+              deletedAt: null,
+            },
+          },
+          include: {
+            person: {
+              select: {
+                id: true,
+                name: true,
+                surname: true,
+                nickname: true,
+                displayNameOverride: true,
+                photo: true,
+              },
+            },
+            relationshipType: {
+              where: {
+                deletedAt: null,
+              },
+            },
+          },
+        },
+        events: {
+          where: {
+            deletedAt: null,
+            event: {
+              deletedAt: null,
+            },
+          },
+          include: {
+            event: {
+              include: {
+                people: {
+                  where: {
+                    deletedAt: null,
+                    person: {
+                      deletedAt: null,
+                    },
+                  },
+                  include: {
+                    person: {
+                      select: {
+                        id: true,
+                        name: true,
+                        surname: true,
+                        nickname: true,
+                        displayNameOverride: true,
+                        photo: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
+        },
+        vehicles: {
+          where: { deletedAt: null },
+          orderBy: { createdAt: 'desc' },
+        },
+        physicalMarks: {
+          where: { deletedAt: null },
+          orderBy: { createdAt: 'desc' },
+        },
+        criminalRecords: {
+          where: { deletedAt: null },
+          orderBy: { incidentDate: 'desc' },
+        },
+        gangMemberships: {
+          include: {
+            gang: true,
+          },
+        },
+        bankAccounts: {
+          where: { deletedAt: null },
+          orderBy: [{ isPrimary: 'desc' }, { createdAt: 'desc' }],
         },
       },
     }),
@@ -87,6 +182,56 @@ export default async function EditPersonPage({
       where: { id: session.user.id },
       select: { defaultReminderLeadDays: true },
     }),
+    prisma.person.findMany({
+      where: {
+        userId: session.user.id,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        name: true,
+        surname: true,
+        middleName: true,
+        secondLastName: true,
+        nickname: true,
+        displayNameOverride: true,
+        photo: true,
+        groups: {
+          select: {
+            groupId: true,
+          },
+        },
+      },
+      orderBy: {
+        name: 'asc',
+      },
+    }),
+    prisma.event.findMany({
+      where: {
+        userId: session.user.id,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        title: true,
+      },
+      orderBy: [{ startDate: 'desc' }, { title: 'asc' }],
+    }),
+    prisma.gang.findMany({
+      where: {
+        userId: session.user.id,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        name: true,
+        color: true,
+        turf: true,
+      },
+      orderBy: {
+        name: 'asc',
+      },
+    }),
   ]);
 
   if (!person) {
@@ -115,40 +260,42 @@ export default async function EditPersonPage({
         currentPath="/people"
       />
 
-      <main className="max-w-3xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          <div className="mb-6">
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div className="px-4 py-4 sm:px-0">
+          <div className="mb-4">
             <Link
               href={`/people/${person.id}`}
-              className="text-primary hover:underline text-sm"
+              className="text-primary hover:underline text-sm inline-flex items-center gap-1"
             >
               {t('backToPerson', { name: formatGraphName(person, nameOrder, nameDisplayFormat) })}
             </Link>
           </div>
 
-          <h1 className="text-3xl font-bold text-foreground mb-6">
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-6">
             {t('editPerson', { name: formatGraphName(person, nameOrder, nameDisplayFormat) })}
           </h1>
 
-          <div className="bg-surface shadow rounded-lg p-6">
-            <PersonForm
-              person={serializedPerson}
-              customFieldTemplates={customFieldTemplates}
-              groups={groups}
-              relationshipTypes={relationshipTypes}
-              mode="edit"
-              dateFormat={dateFormat}
-              hasCardDavConnection={!!cardDavConnection}
-              nameOrder={nameOrder}
-              defaultReminderLeadDays={notificationPreferences?.defaultReminderLeadDays ?? 0}
-              reminderLimit={{
-                canCreate: reminderCheck.allowed,
-                current: reminderCheck.current,
-                limit: reminderCheck.limit,
-                isUnlimited: reminderCheck.isUnlimited,
-              }}
-            />
-          </div>
+          <PersonForm
+            person={serializedPerson}
+            customFieldTemplates={customFieldTemplates}
+            groups={groups}
+            relationshipTypes={relationshipTypes}
+            availablePeople={allPeople}
+            availableEvents={allEvents}
+            availableGangs={availableGangs}
+            mode="edit"
+            dateFormat={dateFormat}
+            hasCardDavConnection={!!cardDavConnection}
+            nameOrder={nameOrder}
+            nameDisplayFormat={nameDisplayFormat}
+            defaultReminderLeadDays={notificationPreferences?.defaultReminderLeadDays ?? 0}
+            reminderLimit={{
+              canCreate: reminderCheck.allowed,
+              current: reminderCheck.current,
+              limit: reminderCheck.limit,
+              isUnlimited: reminderCheck.isUnlimited,
+            }}
+          />
         </div>
       </main>
     </div>

@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import BulkDeleteModal from './BulkDeleteModal';
 import BulkGroupAssignModal from './BulkGroupAssignModal';
 import BulkRelationshipModal from './BulkRelationshipModal';
+import BulkManagementLevelModal from './BulkManagementLevelModal';
 import PersonAvatar from './PersonPhoto';
 import { formatCanonicalName, type NameDisplayFormat } from '@/lib/nameUtils';
 import { formatDate, parseCalendarDate, type DateFormat } from '@/lib/date-format';
@@ -30,6 +31,7 @@ interface PersonRow {
   relationshipsTo: Array<{ id: string }>;
   managementLevel?: string | null;
   threatLevel?: string | null;
+  citizenId?: string | null;
 }
 
 interface Group {
@@ -44,17 +46,31 @@ interface RelationshipType {
   color: string | null;
 }
 
+interface QuickCounts {
+  totalAll: number;
+  countKeyTarget: number;
+  countSurveillance: number;
+  countHighRisk: number;
+  countCriminal: number;
+  countUnassignedGroup: number;
+}
+
 interface PeopleListClientProps {
   people: PersonRow[];
   totalCount: number;
   currentPage: number;
   totalPages: number;
+  pageSize?: number;
   sortBy: string;
   order: string;
   groupFilter: string;
   relationshipFilter: string;
   managementFilter?: string;
+  threatFilter?: string;
+  hasRecordFilter?: string;
+  query?: string;
   cfFilter: { slug: string; value: string } | null;
+  quickCounts?: QuickCounts;
   dateFormat: DateFormat;
   availableGroups: Group[];
   relationshipTypes: RelationshipType[];
@@ -74,6 +90,11 @@ interface PeopleListClientProps {
     showing: string;
     page: string;
     of: string;
+    pageSize?: string;
+    perPage?: string;
+    jumpToPage?: string;
+    jump?: string;
+    changeManagementLevel?: string;
   };
   commonTranslations: {
     name: string;
@@ -84,70 +105,144 @@ interface PeopleListClientProps {
   };
 }
 
-/**
- * The linked name in a person row, plus the orphan marker and any display
- * override. Rendered twice per row: once for the combined mobile column and
- * once for the first-name column shown from md up.
- */
+function QuickStatusSelector({
+  personId,
+  currentLevel,
+  personName,
+  onUpdate,
+}: {
+  personId: string;
+  currentLevel?: string | null;
+  personName: string;
+  onUpdate: (id: string, newLevel: 'NORMAL' | 'SURVEILLANCE' | 'KEY_TARGET') => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const t = useTranslations('people');
+
+  const handleSelect = async (level: 'NORMAL' | 'SURVEILLANCE' | 'KEY_TARGET') => {
+    setIsOpen(false);
+    if (level === currentLevel) return;
+
+    setIsUpdating(true);
+    try {
+      const response = await fetch(`/api/people/${personId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ managementLevel: level }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Update failed');
+      }
+
+      onUpdate(personId, level);
+      toast.success(t('quickStatusSuccess') || `Đã chuyển diện quản lý của ${personName}`);
+    } catch {
+      toast.error(t('quickStatusFailed') || 'Không thể cập nhật diện quản lý');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  return (
+    <div className="relative inline-block text-left">
+      <button
+        type="button"
+        disabled={isUpdating}
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsOpen(!isOpen);
+        }}
+        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold border transition-all ${
+          currentLevel === 'KEY_TARGET'
+            ? 'bg-red-100 text-red-800 dark:bg-red-950/70 dark:text-red-300 border-red-300 dark:border-red-800 hover:bg-red-200'
+            : currentLevel === 'SURVEILLANCE'
+            ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border-amber-300 dark:border-amber-800 hover:bg-amber-200'
+            : 'bg-surface-elevated text-muted border-border hover:bg-surface hover:text-foreground'
+        }`}
+        title="Nhấn để đổi diện quản lý nhanh"
+      >
+        {currentLevel === 'KEY_TARGET' && '🔴 Trọng điểm'}
+        {currentLevel === 'SURVEILLANCE' && '🟠 Nghi vấn'}
+        {(!currentLevel || currentLevel === 'NORMAL') && '⚪ Bình thường'}
+        <span className="text-[9px] opacity-70">▼</span>
+      </button>
+
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+          <div className="absolute left-0 mt-1 w-44 rounded-md shadow-lg bg-surface border border-border z-50 py-1 text-xs">
+            <button
+              type="button"
+              onClick={() => handleSelect('NORMAL')}
+              className={`w-full text-left px-3 py-1.5 hover:bg-surface-elevated flex items-center gap-2 ${
+                !currentLevel || currentLevel === 'NORMAL' ? 'font-bold text-foreground bg-surface-elevated/50' : 'text-muted'
+              }`}
+            >
+              <span>⚪</span>
+              <span>Bình thường</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSelect('SURVEILLANCE')}
+              className={`w-full text-left px-3 py-1.5 hover:bg-amber-50 dark:hover:bg-amber-950/30 flex items-center gap-2 ${
+                currentLevel === 'SURVEILLANCE' ? 'font-bold text-amber-700 dark:text-amber-300 bg-amber-50/50' : 'text-amber-700 dark:text-amber-400'
+              }`}
+            >
+              <span>🟠</span>
+              <span>Nghi vấn</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSelect('KEY_TARGET')}
+              className={`w-full text-left px-3 py-1.5 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center gap-2 ${
+                currentLevel === 'KEY_TARGET' ? 'font-bold text-red-700 dark:text-red-300 bg-red-50/50' : 'text-red-700 dark:text-red-400'
+              }`}
+            >
+              <span>🔴</span>
+              <span>Trọng điểm</span>
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function NameCell({
   href,
   label,
   isOrphan,
   orphanWarning,
   displayNameOverride,
-  managementLevel,
-  threatLevel,
 }: {
   href: string;
   label: string;
   isOrphan: boolean;
   orphanWarning: string;
   displayNameOverride?: string | null;
-  managementLevel?: string | null;
-  threatLevel?: string | null;
 }) {
   return (
     <div>
       <div className="flex items-center gap-1.5 flex-wrap">
-        <Link href={href} className="text-primary hover:underline font-medium">
+        <Link href={href} className="text-primary hover:underline font-semibold text-sm">
           {label}
         </Link>
-        {managementLevel === 'KEY_TARGET' && (
-          <span
-            className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300 border border-red-200 dark:border-red-900"
-            title="Đối tượng trọng điểm"
-          >
-            🔴 Trọng điểm
-          </span>
-        )}
-        {managementLevel === 'SURVEILLANCE' && (
-          <span
-            className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-900"
-            title="Đối tượng nghi vấn"
-          >
-            🟠 Nghi vấn
-          </span>
-        )}
-        {(threatLevel === 'HIGH' || threatLevel === 'ARMED_DANGEROUS') && (
-          <span
-            className="inline-flex items-center px-1 rounded text-[11px] font-semibold bg-red-600 text-white"
-            title={threatLevel === 'ARMED_DANGEROUS' ? 'Có vũ khí, cực kỳ nguy hiểm' : 'Nguy hiểm cao'}
-          >
-            ⚠️
-          </span>
-        )}
+
         {isOrphan && (
           <span className="relative group cursor-help">
             <span className="text-yellow-500">{'⚠️'}</span>
             <span className="invisible group-hover:visible absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-3 py-2 text-xs text-foreground bg-surface-elevated rounded-lg whitespace-normal max-w-xs z-50 shadow-lg border border-border">
               {orphanWarning}
-              <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-surface-elevated"></span>
+              <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-surface-elevated" />
             </span>
           </span>
         )}
       </div>
+
       {displayNameOverride && (
-        <div className="mt-1 text-xs text-muted">
+        <div className="text-xs text-muted mt-0.5">
           {displayNameOverride}
         </div>
       )}
@@ -156,16 +251,21 @@ function NameCell({
 }
 
 export default function PeopleListClient({
-  people,
+  people: initialPeople,
   totalCount,
   currentPage,
   totalPages,
+  pageSize = 25,
   sortBy,
   order,
   groupFilter,
   relationshipFilter,
   managementFilter = '',
+  threatFilter = '',
+  hasRecordFilter = '',
+  query = '',
   cfFilter,
+  quickCounts,
   dateFormat,
   availableGroups,
   relationshipTypes,
@@ -181,7 +281,28 @@ export default function PeopleListClient({
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // Save current people list URL so the "back to people" link can return here
+  // Local state for optimistic status updates
+  const [people, setPeople] = useState<PersonRow[]>(initialPeople);
+  useEffect(() => {
+    setPeople(initialPeople);
+  }, [initialPeople]);
+
+  const handleStatusUpdate = useCallback((id: string, newLevel: 'NORMAL' | 'SURVEILLANCE' | 'KEY_TARGET') => {
+    setPeople((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, managementLevel: newLevel } : p))
+    );
+  }, []);
+
+  // Jump page input
+  const [jumpPageInput, setJumpPageInput] = useState('');
+
+  // Search input state with enter submit
+  const [searchInput, setSearchInput] = useState(query);
+  useEffect(() => {
+    setSearchInput(query);
+  }, [query]);
+
+  // Save current people list URL so back link returns here
   useEffect(() => {
     const url = searchParams.toString() ? `${pathname}?${searchParams.toString()}` : pathname;
     sessionStorage.setItem('backLink:/people', url);
@@ -191,18 +312,17 @@ export default function PeopleListClient({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectAllPages, setSelectAllPages] = useState(false);
 
-  // Modal state
+  // Modals state
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [showRelationshipModal, setShowRelationshipModal] = useState(false);
+  const [showManagementModal, setShowManagementModal] = useState(false);
 
-  // Group state (for inline creation in modal)
   const [groups, setGroups] = useState<Group[]>(availableGroups);
 
   const pageIds = useMemo(() => people.map((p) => p.id), [people]);
   const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
   const someSelected = selectedIds.size > 0 || selectAllPages;
-
   const effectiveCount = selectAllPages ? totalCount : selectedIds.size;
 
   const togglePerson = useCallback((id: string) => {
@@ -244,14 +364,9 @@ export default function PeopleListClient({
   }, [pageIds]);
 
   const selectedNames = useMemo(() => {
-    const fullName = (p: PersonRow) =>
-      formatCanonicalName(p, nameOrder);
-    if (selectAllPages) {
-      return people.map(fullName);
-    }
-    return people
-      .filter((p) => selectedIds.has(p.id))
-      .map(fullName);
+    const fullName = (p: PersonRow) => formatCanonicalName(p, nameOrder);
+    if (selectAllPages) return people.map(fullName);
+    return people.filter((p) => selectedIds.has(p.id)).map(fullName);
   }, [selectedIds, selectAllPages, people, nameOrder]);
 
   const handleSuccess = useCallback(() => {
@@ -259,6 +374,7 @@ export default function PeopleListClient({
     setShowDeleteModal(false);
     setShowGroupModal(false);
     setShowRelationshipModal(false);
+    setShowManagementModal(false);
     router.refresh();
   }, [clearSelection, router]);
 
@@ -272,14 +388,18 @@ export default function PeopleListClient({
     setGroups((prev) => [...prev, group]);
   }, []);
 
-  const buildFilterParams = () => {
+  const buildFilterParams = useCallback(() => {
     const params = new URLSearchParams();
     if (groupFilter) params.set('group', groupFilter);
     if (relationshipFilter) params.set('relationship', relationshipFilter);
     if (managementFilter) params.set('managementLevel', managementFilter);
+    if (threatFilter) params.set('threatLevel', threatFilter);
+    if (hasRecordFilter) params.set('hasRecord', hasRecordFilter);
+    if (query) params.set('q', query);
     if (cfFilter) params.set('cf', `${cfFilter.slug}:${cfFilter.value}`);
+    if (pageSize !== 25) params.set('pageSize', String(pageSize));
     return params;
-  };
+  }, [groupFilter, relationshipFilter, managementFilter, threatFilter, hasRecordFilter, query, cfFilter, pageSize]);
 
   const buildSortUrl = (col: string) => {
     const params = buildFilterParams();
@@ -289,13 +409,12 @@ export default function PeopleListClient({
     return `/people?${params.toString()}`;
   };
 
-  // Sort the combined column by whichever part the reader sees first, so the
-  // list looks alphabetical in the order it is actually displayed.
   const fullNameSortKey = nameOrder === 'EASTERN' ? 'surname' : 'name';
 
-  const buildPageUrl = (page: number) => {
+  const buildPageUrl = (page: number, newPageSize?: number) => {
     const params = buildFilterParams();
     params.set('page', page.toString());
+    if (newPageSize) params.set('pageSize', newPageSize.toString());
     if (sortBy !== 'name') params.set('sortBy', sortBy);
     if (order !== 'asc') params.set('order', order);
     return `/people?${params.toString()}`;
@@ -305,34 +424,187 @@ export default function PeopleListClient({
     const params = new URLSearchParams();
     if (sortBy !== 'name') params.set('sortBy', sortBy);
     if (order !== 'asc') params.set('order', order);
-    // Preserve existing filters, updating the changed one
+    if (pageSize !== 25) params.set('pageSize', String(pageSize));
+
     const filters: Record<string, string> = {
       group: groupFilter,
       relationship: relationshipFilter,
       managementLevel: managementFilter,
+      threatLevel: threatFilter,
+      hasRecord: hasRecordFilter,
+      q: query,
       cf: cfFilter ? `${cfFilter.slug}:${cfFilter.value}` : '',
       [key]: value,
     };
+
     if (filters.group) params.set('group', filters.group);
     if (filters.relationship) params.set('relationship', filters.relationship);
     if (filters.managementLevel) params.set('managementLevel', filters.managementLevel);
+    if (filters.threatLevel) params.set('threatLevel', filters.threatLevel);
+    if (filters.hasRecord) params.set('hasRecord', filters.hasRecord);
+    if (filters.q) params.set('q', filters.q);
     if (filters.cf) params.set('cf', filters.cf);
+
     params.set('page', '1');
     router.push(`/people?${params.toString()}`);
   };
 
+  const handleQuickChipClick = (type: 'all' | 'KEY_TARGET' | 'SURVEILLANCE' | 'highRisk' | 'criminal' | 'unassigned') => {
+    const params = new URLSearchParams();
+    if (sortBy !== 'name') params.set('sortBy', sortBy);
+    if (order !== 'asc') params.set('order', order);
+    if (pageSize !== 25) params.set('pageSize', String(pageSize));
+
+    if (type === 'KEY_TARGET') {
+      params.set('managementLevel', 'KEY_TARGET');
+    } else if (type === 'SURVEILLANCE') {
+      params.set('managementLevel', 'SURVEILLANCE');
+    } else if (type === 'highRisk') {
+      params.set('threatLevel', 'high');
+    } else if (type === 'criminal') {
+      params.set('hasRecord', 'true');
+    } else if (type === 'unassigned') {
+      params.set('group', 'none');
+    }
+
+    params.set('page', '1');
+    router.push(`/people?${params.toString()}`);
+  };
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    handleFilterChange('q', searchInput.trim());
+  };
+
+  const handleJumpToPage = (e: React.FormEvent) => {
+    e.preventDefault();
+    const pageNum = parseInt(jumpPageInput, 10);
+    if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= totalPages) {
+      router.push(buildPageUrl(pageNum));
+      setJumpPageInput('');
+    }
+  };
+
   return (
     <>
-      {/* Showing count and filters */}
-      <div className="mb-4 flex flex-col-reverse sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-2">
-        <span className="text-sm text-muted">
-          {tt.showing}
-        </span>
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+      {/* 1. Tactical Quick Chips Bar */}
+      {quickCounts && (
+        <div className="mb-4 flex flex-wrap items-center gap-1.5 p-2 bg-surface rounded-lg border border-border">
+          <span className="text-xs font-semibold text-muted px-1.5 py-1">Khoanh vùng nhanh:</span>
+
+          <button
+            type="button"
+            onClick={() => handleQuickChipClick('all')}
+            className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all ${
+              !managementFilter && !threatFilter && !hasRecordFilter && !groupFilter
+                ? 'bg-primary text-on-primary shadow-sm'
+                : 'bg-surface-elevated text-foreground hover:bg-surface-elevated/80 border border-border'
+            }`}
+          >
+            Tất cả ({quickCounts.totalAll})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleQuickChipClick('KEY_TARGET')}
+            className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all flex items-center gap-1 ${
+              managementFilter === 'KEY_TARGET'
+                ? 'bg-red-600 text-white shadow-sm'
+                : 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300 border border-red-200 dark:border-red-900 hover:bg-red-100'
+            }`}
+          >
+            <span>🔴 Trọng điểm</span>
+            <span className="opacity-90 font-bold">({quickCounts.countKeyTarget})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleQuickChipClick('SURVEILLANCE')}
+            className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all flex items-center gap-1 ${
+              managementFilter === 'SURVEILLANCE'
+                ? 'bg-amber-600 text-white shadow-sm'
+                : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-900 hover:bg-amber-100'
+            }`}
+          >
+            <span>🟠 Nghi vấn</span>
+            <span className="opacity-90 font-bold">({quickCounts.countSurveillance})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleQuickChipClick('highRisk')}
+            className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all flex items-center gap-1 ${
+              threatFilter === 'high'
+                ? 'bg-rose-700 text-white shadow-sm'
+                : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-900 hover:bg-rose-100'
+            }`}
+          >
+            <span>⚠️ Nguy hiểm / Vũ khí</span>
+            <span className="opacity-90 font-bold">({quickCounts.countHighRisk})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleQuickChipClick('criminal')}
+            className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all flex items-center gap-1 ${
+              hasRecordFilter === 'true'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-900 hover:bg-indigo-100'
+            }`}
+          >
+            <span>⛓️ Có tiền án</span>
+            <span className="opacity-90 font-bold">({quickCounts.countCriminal})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleQuickChipClick('unassigned')}
+            className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all flex items-center gap-1 ${
+              groupFilter === 'none'
+                ? 'bg-slate-700 text-white shadow-sm'
+                : 'bg-surface-elevated text-muted border border-border hover:bg-surface-elevated/80'
+            }`}
+          >
+            <span>👥 Chưa phân nhóm</span>
+            <span className="opacity-90 font-bold">({quickCounts.countUnassignedGroup})</span>
+          </button>
+        </div>
+      )}
+
+      {/* 2. Search & Detailed Filter Bar */}
+      <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        {/* Search bar */}
+        <form onSubmit={handleSearchSubmit} className="flex-1 max-w-md relative">
+          <input
+            type="text"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Tìm theo tên, biệt danh, CCCD..."
+            className="w-full pl-9 pr-8 py-2 text-sm border border-border rounded-lg bg-surface text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
+          />
+          <svg className="w-4 h-4 text-muted absolute left-3 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          {searchInput && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchInput('');
+                handleFilterChange('q', '');
+              }}
+              className="absolute right-2.5 top-2.5 text-muted hover:text-foreground text-xs"
+            >
+              ✕
+            </button>
+          )}
+        </form>
+
+        {/* Dropdowns */}
+        <div className="flex flex-wrap items-center gap-2">
           <select
             value={managementFilter}
             onChange={(e) => handleFilterChange('managementLevel', e.target.value)}
-            className="flex-1 sm:flex-initial min-w-0 px-3 py-1.5 text-base sm:text-sm border border-border rounded-lg bg-surface-elevated text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
+            className="px-3 py-1.5 text-sm border border-border rounded-lg bg-surface text-foreground focus:ring-2 focus:ring-primary"
           >
             <option value="">{tPeople('allManagementLevels')}</option>
             <option value="monitored">{tPeople('allMonitored')}</option>
@@ -340,10 +612,11 @@ export default function PeopleListClient({
             <option value="SURVEILLANCE">🟠 {tPeople('form.managementLevels.SURVEILLANCE')}</option>
             <option value="NORMAL">{tPeople('normalOnly')}</option>
           </select>
+
           <select
             value={groupFilter}
             onChange={(e) => handleFilterChange('group', e.target.value)}
-            className="flex-1 sm:flex-initial min-w-0 px-3 py-1.5 text-base sm:text-sm border border-border rounded-lg bg-surface-elevated text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
+            className="px-3 py-1.5 text-sm border border-border rounded-lg bg-surface text-foreground focus:ring-2 focus:ring-primary"
           >
             <option value="">{tPeople('allGroups')}</option>
             <option value="none">{tPeople('noGroup')}</option>
@@ -351,10 +624,11 @@ export default function PeopleListClient({
               <option key={g.id} value={g.id}>{g.name}</option>
             ))}
           </select>
+
           <select
             value={relationshipFilter}
             onChange={(e) => handleFilterChange('relationship', e.target.value)}
-            className="flex-1 sm:flex-initial min-w-0 px-3 py-1.5 text-base sm:text-sm border border-border rounded-lg bg-surface-elevated text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
+            className="px-3 py-1.5 text-sm border border-border rounded-lg bg-surface text-foreground focus:ring-2 focus:ring-primary"
           >
             <option value="">{tPeople('allRelationships')}</option>
             <option value="none">{tPeople('noRelationship')}</option>
@@ -362,12 +636,39 @@ export default function PeopleListClient({
               <option key={rt.id} value={rt.id}>{rt.label}</option>
             ))}
           </select>
+
           <CustomFieldFilter
             templates={customFieldTemplates}
             current={cfFilter}
             onChange={(value) => handleFilterChange('cf', value)}
           />
+
+          {/* Page size selector */}
+          <div className="flex items-center gap-1 border border-border rounded-lg bg-surface px-2 py-1 text-xs text-muted">
+            <span>{tt.pageSize || 'Hiển thị'}:</span>
+            {[25, 50, 100].map((size) => (
+              <Link
+                key={size}
+                href={buildPageUrl(1, size)}
+                className={`px-1.5 py-0.5 rounded font-medium transition-colors ${
+                  pageSize === size ? 'bg-primary text-on-primary' : 'hover:bg-surface-elevated text-foreground'
+                }`}
+              >
+                {size}
+              </Link>
+            ))}
+          </div>
         </div>
+      </div>
+
+      {/* Showing count summary */}
+      <div className="mb-2 flex items-center justify-between text-xs text-muted">
+        <span>{tt.showing}</span>
+        {totalCount > 0 && (
+          <span>
+            {tt.page} {currentPage} {tt.of} {totalPages}
+          </span>
+        )}
       </div>
 
       {/* Table */}
@@ -387,49 +688,40 @@ export default function PeopleListClient({
                   />
                 </th>
                 <th className="w-[32px] py-3 px-2" />
-                {/* Narrow screens have no room for the separate name parts, so
-                    they get a single combined column instead (see the Name,
-                    Surname and Nickname headers below). */}
-                <th className="md:hidden px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
                   <Link href={buildSortUrl(fullNameSortKey)} className="flex items-center gap-1 hover:text-foreground py-2 -my-2 min-h-11 sm:min-h-0">
                     {tt.fullName}
-                    {sortBy === fullNameSortKey && <span className="text-primary">{order === 'asc' ? '\u2191' : '\u2193'}</span>}
-                  </Link>
-                </th>
-                <th className="hidden md:table-cell px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
-                  <Link href={buildSortUrl('name')} className="flex items-center gap-1 hover:text-foreground py-2 -my-2 min-h-11 sm:min-h-0">
-                    {tc.name}
-                    {sortBy === 'name' && <span className="text-primary">{order === 'asc' ? '\u2191' : '\u2193'}</span>}
-                  </Link>
-                </th>
-                <th className="hidden md:table-cell px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
-                  <Link href={buildSortUrl('surname')} className="flex items-center gap-1 hover:text-foreground py-2 -my-2 min-h-11 sm:min-h-0">
-                    {tt.surname}
-                    {sortBy === 'surname' && <span className="text-primary">{order === 'asc' ? '\u2191' : '\u2193'}</span>}
-                  </Link>
-                </th>
-                <th className="hidden lg:table-cell px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
-                  <Link href={buildSortUrl('nickname')} className="flex items-center gap-1 hover:text-foreground py-2 -my-2 min-h-11 sm:min-h-0">
-                    {tt.nickname}
-                    {sortBy === 'nickname' && <span className="text-primary">{order === 'asc' ? '\u2191' : '\u2193'}</span>}
+                    {sortBy === fullNameSortKey && <span className="text-primary">{order === 'asc' ? '↑' : '↓'}</span>}
                   </Link>
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
+                  <Link href={buildSortUrl('managementLevel')} className="flex items-center gap-1 hover:text-foreground py-2 -my-2 min-h-11 sm:min-h-0">
+                    Diện quản lý
+                    {sortBy === 'managementLevel' && <span className="text-primary">{order === 'asc' ? '↑' : '↓'}</span>}
+                  </Link>
+                </th>
+                <th className="hidden sm:table-cell px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
+                  <Link href={buildSortUrl('citizenId')} className="flex items-center gap-1 hover:text-foreground py-2 -my-2 min-h-11 sm:min-h-0">
+                    Số CCCD / CMND
+                    {sortBy === 'citizenId' && <span className="text-primary">{order === 'asc' ? '↑' : '↓'}</span>}
+                  </Link>
+                </th>
+                <th className="hidden lg:table-cell px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
                   <Link href={buildSortUrl('relationship')} className="flex items-center gap-1 hover:text-foreground py-2 -my-2 min-h-11 sm:min-h-0">
                     {tt.relationshipToUser}
-                    {sortBy === 'relationship' && <span className="text-primary">{order === 'asc' ? '\u2191' : '\u2193'}</span>}
+                    {sortBy === 'relationship' && <span className="text-primary">{order === 'asc' ? '↑' : '↓'}</span>}
                   </Link>
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
                   <Link href={buildSortUrl('group')} className="flex items-center gap-1 hover:text-foreground py-2 -my-2 min-h-11 sm:min-h-0">
                     {tt.groups}
-                    {sortBy === 'group' && <span className="text-primary">{order === 'asc' ? '\u2191' : '\u2193'}</span>}
+                    {sortBy === 'group' && <span className="text-primary">{order === 'asc' ? '↑' : '↓'}</span>}
                   </Link>
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
+                <th className="hidden md:table-cell px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
                   <Link href={buildSortUrl('lastContact')} className="flex items-center gap-1 hover:text-foreground py-2 -my-2 min-h-11 sm:min-h-0">
                     {tt.lastContact}
-                    {sortBy === 'lastContact' && <span className="text-primary">{order === 'asc' ? '\u2191' : '\u2193'}</span>}
+                    {sortBy === 'lastContact' && <span className="text-primary">{order === 'asc' ? '↑' : '↓'}</span>}
                   </Link>
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-muted uppercase tracking-wider">
@@ -439,24 +731,26 @@ export default function PeopleListClient({
             </thead>
             <tbody className="bg-surface divide-y divide-border">
               {people.map((person) => {
-                const isOrphan = person.relationshipsFrom.length === 0 &&
-                                 person.relationshipsTo.length === 0;
-                const isChecked = selectAllPages || selectedIds.has(person.id);
+                const isSelected = selectedIds.has(person.id);
+                const isOrphan =
+                  person.relationshipsFrom.length === 0 &&
+                  person.relationshipsTo.length === 0 &&
+                  !person.relationshipToUser;
                 const fullDisplayName = formatCanonicalName(person, nameOrder);
-                // What the combined mobile column shows. Unlike fullDisplayName
-                // (avatar initials, checkbox label) this also applies the user's
-                // name display format, so SHORT collapses it to a first name.
                 const combinedName = formatCanonicalName(person, nameOrder, nameDisplayFormat);
 
                 return (
-                  <tr key={person.id} className={`hover:bg-surface-elevated transition-colors ${isChecked ? 'bg-primary/5' : ''}`}>
-                    <td className="pl-4 pr-2 py-4 w-10">
+                  <tr
+                    key={person.id}
+                    className={`hover:bg-surface-elevated transition-colors ${isSelected ? 'bg-primary/5' : ''}`}
+                  >
+                    <td className="pl-4 pr-2 py-4 whitespace-nowrap">
                       <input
                         type="checkbox"
-                        checked={isChecked}
+                        checked={isSelected}
                         onChange={() => togglePerson(person.id)}
                         className="w-4 h-4 text-primary bg-surface-elevated border-border rounded focus:ring-primary"
-                        aria-label={fullDisplayName}
+                        aria-label={`Select ${fullDisplayName}`}
                       />
                     </td>
                     <td className="w-[32px] py-4 px-2">
@@ -467,35 +761,46 @@ export default function PeopleListClient({
                         size={32}
                       />
                     </td>
-                    <td className="md:hidden px-6 py-4 whitespace-nowrap">
+                    {/* Cột Họ và tên gộp chung */}
+                    <td className="px-6 py-4 whitespace-nowrap">
                       <NameCell
                         href={`/people/${person.id}`}
                         label={combinedName}
                         isOrphan={isOrphan}
                         orphanWarning={tt.orphanWarning}
                         displayNameOverride={person.displayNameOverride}
-                        managementLevel={person.managementLevel}
-                        threatLevel={person.threatLevel}
                       />
                     </td>
-                    <td className="hidden md:table-cell px-6 py-4 whitespace-nowrap">
-                      <NameCell
-                        href={`/people/${person.id}`}
-                        label={person.name}
-                        isOrphan={isOrphan}
-                        orphanWarning={tt.orphanWarning}
-                        displayNameOverride={person.displayNameOverride}
-                        managementLevel={person.managementLevel}
-                        threatLevel={person.threatLevel}
-                      />
-                    </td>
-                    <td className="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-foreground">
-                      {person.surname || '\u2014'}
-                    </td>
-                    <td className="hidden lg:table-cell px-6 py-4 whitespace-nowrap text-sm text-muted">
-                      {person.nickname ? `'${person.nickname}'` : '\u2014'}
-                    </td>
+                    {/* Cột Diện quản lý riêng */}
                     <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <QuickStatusSelector
+                          personId={person.id}
+                          currentLevel={person.managementLevel}
+                          personName={fullDisplayName}
+                          onUpdate={handleStatusUpdate}
+                        />
+                        {(person.threatLevel === 'HIGH' || person.threatLevel === 'ARMED_DANGEROUS') && (
+                          <span
+                            className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-600 text-white shadow-xs"
+                            title={person.threatLevel === 'ARMED_DANGEROUS' ? 'Có vũ khí, cực kỳ nguy hiểm' : 'Nguy hiểm cao'}
+                          >
+                            ⚠️ {person.threatLevel === 'ARMED_DANGEROUS' ? 'Vũ khí' : 'Nguy hiểm'}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    {/* Cột Số CCCD riêng */}
+                    <td className="hidden sm:table-cell px-6 py-4 whitespace-nowrap text-xs font-mono">
+                      {person.citizenId ? (
+                        <span className="px-2 py-0.5 rounded bg-surface-elevated border border-border/70 font-semibold text-foreground">
+                          {person.citizenId}
+                        </span>
+                      ) : (
+                        <span className="text-muted">—</span>
+                      )}
+                    </td>
+                    <td className="hidden lg:table-cell px-6 py-4 whitespace-nowrap">
                       {(() => {
                         const count = person.relationshipsFrom.length + person.relationshipsTo.length;
                         return count > 0 ? (
@@ -523,11 +828,11 @@ export default function PeopleListClient({
                             {pg.group.name}
                           </span>
                         ))}
-                        {person.groups.length === 0 && <span className="text-sm text-muted">{'\u2014'}</span>}
+                        {person.groups.length === 0 && <span className="text-sm text-muted">{'—'}</span>}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-muted">
-                      {person.lastContact ? formatDate(parseCalendarDate(person.lastContact), dateFormat) : '\u2014'}
+                    <td className="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-muted">
+                      {person.lastContact ? formatDate(parseCalendarDate(person.lastContact), dateFormat) : '—'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <div className="flex justify-end gap-3">
@@ -551,81 +856,123 @@ export default function PeopleListClient({
           </table>
         </div>
 
-        {/* Pagination */}
+        {/* Enhanced Pagination Bar */}
         {totalPages > 1 && (
           <div className="bg-surface px-4 py-3 border-t border-border sm:px-6">
-            <div className="flex items-center justify-between">
-              <div className="flex-1 flex justify-between sm:hidden">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+              {/* Left: Summary & Jump Page */}
+              <div className="flex flex-wrap items-center gap-3 text-sm text-foreground">
+                <p>
+                  {tt.page} <span className="font-semibold">{currentPage}</span> / <span className="font-semibold">{totalPages}</span>
+                  <span className="text-muted ml-2">({totalCount} đối tượng)</span>
+                </p>
+
+                <form onSubmit={handleJumpToPage} className="flex items-center gap-1.5 ml-2">
+                  <span className="text-xs text-muted">{tt.jumpToPage || 'Đến trang'}:</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max={totalPages}
+                    value={jumpPageInput}
+                    onChange={(e) => setJumpPageInput(e.target.value)}
+                    placeholder={String(currentPage)}
+                    className="w-14 px-2 py-1 text-xs border border-border rounded bg-surface-elevated text-foreground focus:ring-1 focus:ring-primary text-center"
+                  />
+                  <button
+                    type="submit"
+                    className="px-2 py-1 text-xs bg-surface-elevated hover:bg-surface-elevated/80 border border-border rounded text-foreground font-medium"
+                  >
+                    {tt.jump || 'Đi'}
+                  </button>
+                </form>
+              </div>
+
+              {/* Right: Page Buttons */}
+              <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
+                {/* First Page */}
+                {currentPage > 2 && (
+                  <Link
+                    href={buildPageUrl(1)}
+                    className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-border bg-surface-elevated text-xs font-medium text-foreground hover:bg-surface-elevated/80"
+                    title="Trang đầu"
+                  >
+                    «
+                  </Link>
+                )}
+
+                {/* Previous Page */}
                 {currentPage > 1 ? (
-                  <Link href={buildPageUrl(currentPage - 1)} className="relative inline-flex items-center px-4 py-2 border border-border text-sm font-medium rounded-md text-foreground bg-surface-elevated hover:bg-surface-elevated/80 transition-colors">
-                    {tc.previous}
+                  <Link
+                    href={buildPageUrl(currentPage - 1)}
+                    className={`relative inline-flex items-center px-3 py-2 border border-border bg-surface-elevated text-xs font-medium text-foreground hover:bg-surface-elevated/80 ${
+                      currentPage <= 2 ? 'rounded-l-md' : ''
+                    }`}
+                  >
+                    {tc.previous || '←'}
                   </Link>
                 ) : (
-                  <span className="relative inline-flex items-center px-4 py-2 border border-border text-sm font-medium rounded-md text-muted bg-surface cursor-not-allowed">
-                    {tc.previous}
+                  <span className="relative inline-flex items-center px-3 py-2 rounded-l-md border border-border bg-surface text-xs font-medium text-muted cursor-not-allowed">
+                    {tc.previous || '←'}
                   </span>
                 )}
+
+                {/* Page numbers (up to 7 items) */}
+                {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                  let pageNum: number;
+                  if (totalPages <= 7) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 4) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 3) {
+                    pageNum = totalPages - 6 + i;
+                  } else {
+                    pageNum = currentPage - 3 + i;
+                  }
+                  return pageNum === currentPage ? (
+                    <span
+                      key={pageNum}
+                      className="relative inline-flex items-center px-3 py-2 border border-primary bg-primary/10 text-xs font-bold text-primary"
+                    >
+                      {pageNum}
+                    </span>
+                  ) : (
+                    <Link
+                      key={pageNum}
+                      href={buildPageUrl(pageNum)}
+                      className="relative inline-flex items-center px-3 py-2 border border-border bg-surface-elevated text-xs font-medium text-foreground hover:bg-surface-elevated/80 transition-colors"
+                    >
+                      {pageNum}
+                    </Link>
+                  );
+                })}
+
+                {/* Next Page */}
                 {currentPage < totalPages ? (
-                  <Link href={buildPageUrl(currentPage + 1)} className="ml-3 relative inline-flex items-center px-4 py-2 border border-border text-sm font-medium rounded-md text-foreground bg-surface-elevated hover:bg-surface-elevated/80 transition-colors">
-                    {tc.next}
+                  <Link
+                    href={buildPageUrl(currentPage + 1)}
+                    className={`relative inline-flex items-center px-3 py-2 border border-border bg-surface-elevated text-xs font-medium text-foreground hover:bg-surface-elevated/80 ${
+                      currentPage >= totalPages - 1 ? 'rounded-r-md' : ''
+                    }`}
+                  >
+                    {tc.next || '→'}
                   </Link>
                 ) : (
-                  <span className="ml-3 relative inline-flex items-center px-4 py-2 border border-border text-sm font-medium rounded-md text-muted bg-surface cursor-not-allowed">
-                    {tc.next}
+                  <span className="relative inline-flex items-center px-3 py-2 rounded-r-md border border-border bg-surface text-xs font-medium text-muted cursor-not-allowed">
+                    {tc.next || '→'}
                   </span>
                 )}
-              </div>
-              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm text-foreground">
-                    {tt.page} <span className="font-medium">{currentPage}</span> {tt.of}{' '}
-                    <span className="font-medium">{totalPages}</span>
-                  </p>
-                </div>
-                <div>
-                  <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
-                    {currentPage > 1 ? (
-                      <Link href={buildPageUrl(currentPage - 1)} className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-border bg-surface-elevated text-sm font-medium text-foreground hover:bg-surface-elevated/80 transition-colors">
-                        <span className="sr-only">{tc.previous}</span>{'\u2190'}
-                      </Link>
-                    ) : (
-                      <span className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-border bg-surface text-sm font-medium text-muted cursor-not-allowed">
-                        <span className="sr-only">{tc.previous}</span>{'\u2190'}
-                      </span>
-                    )}
-                    {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-                      let pageNum;
-                      if (totalPages <= 7) {
-                        pageNum = i + 1;
-                      } else if (currentPage <= 4) {
-                        pageNum = i + 1;
-                      } else if (currentPage >= totalPages - 3) {
-                        pageNum = totalPages - 6 + i;
-                      } else {
-                        pageNum = currentPage - 3 + i;
-                      }
-                      return pageNum === currentPage ? (
-                        <span key={pageNum} className="relative inline-flex items-center px-4 py-2 border border-primary bg-primary/10 text-sm font-medium text-primary">
-                          {pageNum}
-                        </span>
-                      ) : (
-                        <Link key={pageNum} href={buildPageUrl(pageNum)} className="relative inline-flex items-center px-4 py-2 border border-border bg-surface-elevated text-sm font-medium text-foreground hover:bg-surface-elevated/80 transition-colors">
-                          {pageNum}
-                        </Link>
-                      );
-                    })}
-                    {currentPage < totalPages ? (
-                      <Link href={buildPageUrl(currentPage + 1)} className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-border bg-surface-elevated text-sm font-medium text-foreground hover:bg-surface-elevated/80 transition-colors">
-                        <span className="sr-only">{tc.next}</span>{'\u2192'}
-                      </Link>
-                    ) : (
-                      <span className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-border bg-surface text-sm font-medium text-muted cursor-not-allowed">
-                        <span className="sr-only">{tc.next}</span>{'\u2192'}
-                      </span>
-                    )}
-                  </nav>
-                </div>
-              </div>
+
+                {/* Last Page */}
+                {currentPage < totalPages - 1 && (
+                  <Link
+                    href={buildPageUrl(totalPages)}
+                    className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-border bg-surface-elevated text-xs font-medium text-foreground hover:bg-surface-elevated/80"
+                    title="Trang cuối"
+                  >
+                    »
+                  </Link>
+                )}
+              </nav>
             </div>
           </div>
         )}
@@ -638,9 +985,9 @@ export default function PeopleListClient({
         }`}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-4">
-          <div className="bg-surface shadow-lg border border-border rounded-lg px-4 py-3 flex items-center justify-between gap-4">
+          <div className="bg-surface shadow-xl border border-border rounded-xl px-4 py-3 flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-foreground">
+              <span className="text-sm font-semibold text-foreground">
                 {selectAllPages
                   ? t('allSelected', { count: totalCount })
                   : t('selected', { count: selectedIds.size })}
@@ -658,7 +1005,7 @@ export default function PeopleListClient({
               )}
               <button
                 onClick={clearSelection}
-                className="text-muted hover:text-foreground transition-colors"
+                className="text-muted hover:text-foreground transition-colors p-1"
                 title={t('clearSelection')}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -667,6 +1014,13 @@ export default function PeopleListClient({
               </button>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowManagementModal(true)}
+                className="px-3 py-1.5 text-sm font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-800 rounded-lg hover:bg-amber-100 transition-colors flex items-center gap-1.5"
+              >
+                <span>🛡️</span>
+                <span>Chuyển diện quản lý</span>
+              </button>
               <button
                 onClick={() => setShowGroupModal(true)}
                 className="px-3 py-1.5 text-sm font-medium text-foreground bg-surface-elevated border border-border rounded-lg hover:bg-surface-elevated/80 transition-colors"
@@ -691,6 +1045,15 @@ export default function PeopleListClient({
       </div>
 
       {/* Modals */}
+      <BulkManagementLevelModal
+        isOpen={showManagementModal}
+        onClose={() => setShowManagementModal(false)}
+        selectedIds={Array.from(selectedIds)}
+        selectAll={selectAllPages}
+        totalCount={totalCount}
+        onSuccess={handleSuccess}
+      />
+
       <BulkDeleteModal
         isOpen={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}

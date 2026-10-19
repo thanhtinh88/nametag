@@ -48,6 +48,60 @@ export interface UrlItem {
   url: string;
 }
 
+export interface VehicleDraftItem {
+  id?: string;
+  plateNumber: string;
+  vehicleType: string;
+  brandModel?: string | null;
+  color?: string | null;
+  identifyingFeatures?: string | null;
+  registeredOwner?: string | null;
+  isSuspicious?: boolean;
+}
+
+export interface PhysicalMarkDraftItem {
+  id?: string;
+  type: string;
+  location: string;
+  description: string;
+  photoUrl?: string | null;
+}
+
+export interface CriminalRecordDraftItem {
+  id?: string;
+  charge: string;
+  recordType?: string;
+  sentenceDetail?: string | null;
+  adjudicatedBy?: string | null;
+  incidentDate?: string | null;
+  verdictDate?: string | null;
+  isPardoned?: boolean;
+  notes?: string | null;
+}
+
+export interface BankAccountDraftItem {
+  id?: string;
+  bankName: string;
+  accountNumber: string;
+  accountHolder?: string | null;
+  accountType?: 'OWNER' | 'MULE' | 'SUSPICIOUS' | string;
+  isPrimary?: boolean;
+  notes?: string | null;
+}
+
+export interface GangMembershipDraftItem {
+  id?: string;
+  gangId: string;
+  role?: string;
+  notes?: string | null;
+  gang?: {
+    id: string;
+    name: string;
+    color: string | null;
+    turf: string | null;
+  };
+}
+
 export interface FormData {
   name: string;
   surname: string;
@@ -59,6 +113,7 @@ export interface FormData {
   suffix: string;
   organization: string;
   jobTitle: string;
+  gender: string;
   lastContact: string;
   notes: string;
   relationshipToUserId: string;
@@ -107,6 +162,11 @@ export interface PersonFormState {
   addresses: AddressItem[];
   urls: UrlItem[];
   customFieldValues: CustomFieldValueInput[];
+  vehicles: VehicleDraftItem[];
+  physicalMarks: PhysicalMarkDraftItem[];
+  criminalRecords: CriminalRecordDraftItem[];
+  bankAccounts: BankAccountDraftItem[];
+  gangMemberships: GangMembershipDraftItem[];
 }
 
 type PersonFormAction =
@@ -129,6 +189,11 @@ type PersonFormAction =
   | { type: 'SET_ADDRESSES'; payload: AddressItem[] }
   | { type: 'SET_URLS'; payload: UrlItem[] }
   | { type: 'SET_CUSTOM_FIELD_VALUES'; payload: CustomFieldValueInput[] }
+  | { type: 'SET_VEHICLES'; payload: VehicleDraftItem[] }
+  | { type: 'SET_PHYSICAL_MARKS'; payload: PhysicalMarkDraftItem[] }
+  | { type: 'SET_CRIMINAL_RECORDS'; payload: CriminalRecordDraftItem[] }
+  | { type: 'SET_BANK_ACCOUNTS'; payload: BankAccountDraftItem[] }
+  | { type: 'SET_GANG_MEMBERSHIPS'; payload: GangMembershipDraftItem[] }
   | { type: 'RESET'; payload: PersonFormState };
 
 function reducer(state: PersonFormState, action: PersonFormAction): PersonFormState {
@@ -171,6 +236,16 @@ function reducer(state: PersonFormState, action: PersonFormAction): PersonFormSt
       return { ...state, urls: action.payload };
     case 'SET_CUSTOM_FIELD_VALUES':
       return { ...state, customFieldValues: action.payload };
+    case 'SET_VEHICLES':
+      return { ...state, vehicles: action.payload };
+    case 'SET_PHYSICAL_MARKS':
+      return { ...state, physicalMarks: action.payload };
+    case 'SET_CRIMINAL_RECORDS':
+      return { ...state, criminalRecords: action.payload };
+    case 'SET_BANK_ACCOUNTS':
+      return { ...state, bankAccounts: action.payload };
+    case 'SET_GANG_MEMBERSHIPS':
+      return { ...state, gangMemberships: action.payload };
     case 'RESET':
       return action.payload;
     default:
@@ -191,6 +266,7 @@ interface PersonProp {
   photo?: string | null;
   organization: string | null;
   jobTitle: string | null;
+  gender?: string | null;
   lastContact: Date | null;
   notes: string | null;
   relationshipToUserId: string | null;
@@ -238,6 +314,13 @@ interface PersonProp {
   threatLevel?: string | null;
   modusOperandi?: string | null;
   riskNotes?: string | null;
+  vehicles?: any[];
+  physicalMarks?: any[];
+  criminalRecords?: any[];
+  bankAccounts?: any[];
+  gangMemberships?: any[];
+  relationshipsTo?: any[];
+  events?: any[];
 }
 
 interface AvailablePerson {
@@ -260,6 +343,11 @@ function getDataFingerprint(state: PersonFormState): string {
     addresses: state.addresses,
     urls: state.urls,
     customFieldValues: state.customFieldValues,
+    vehicles: state.vehicles,
+    physicalMarks: state.physicalMarks,
+    criminalRecords: state.criminalRecords,
+    bankAccounts: state.bankAccounts,
+    gangMemberships: state.gangMemberships,
   });
 }
 
@@ -315,6 +403,7 @@ function buildInitialState(params: {
       suffix: person?.suffix || '',
       organization: person?.organization || '',
       jobTitle: person?.jobTitle || '',
+      gender: person?.gender || '',
       lastContact: person?.lastContact
         ? new Date(person.lastContact).toISOString().split('T')[0]
         : '',
@@ -398,6 +487,66 @@ function buildInitialState(params: {
       person?.customFieldValues?.map((v) => ({
         templateId: v.templateId,
         value: v.value,
+      })) || [],
+    vehicles:
+      person?.vehicles?.map((v) => ({
+        id: v.id,
+        plateNumber: v.plateNumber,
+        vehicleType: v.vehicleType,
+        brandModel: v.brandModel ?? null,
+        color: v.color ?? null,
+        identifyingFeatures: v.identifyingFeatures ?? null,
+        registeredOwner: v.registeredOwner ?? null,
+        isSuspicious: v.isSuspicious ?? false,
+      })) || [],
+    physicalMarks:
+      person?.physicalMarks?.map((m) => ({
+        id: m.id,
+        type: m.type,
+        location: m.location,
+        description: m.description,
+        photoUrl: m.photoUrl ?? null,
+      })) || [],
+    criminalRecords:
+      person?.criminalRecords?.map((r) => ({
+        id: r.id,
+        charge: r.charge,
+        recordType: r.recordType,
+        sentenceDetail: r.sentenceDetail ?? null,
+        adjudicatedBy: r.adjudicatedBy ?? null,
+        incidentDate: r.incidentDate
+          ? new Date(r.incidentDate).toISOString().split('T')[0]
+          : null,
+        verdictDate: r.verdictDate
+          ? new Date(r.verdictDate).toISOString().split('T')[0]
+          : null,
+        isPardoned: r.isPardoned ?? false,
+        notes: r.notes ?? null,
+      })) || [],
+    bankAccounts:
+      person?.bankAccounts?.map((b) => ({
+        id: b.id,
+        bankName: b.bankName,
+        accountNumber: b.accountNumber,
+        accountHolder: b.accountHolder ?? null,
+        accountType: b.accountType || 'OWNER',
+        isPrimary: b.isPrimary ?? false,
+        notes: b.notes ?? null,
+      })) || [],
+    gangMemberships:
+      person?.gangMemberships?.map((g) => ({
+        id: g.id,
+        gangId: g.gangId,
+        role: g.role,
+        notes: g.notes ?? null,
+        gang: g.gang
+          ? {
+              id: g.gang.id,
+              name: g.gang.name,
+              color: g.gang.color ?? null,
+              turf: g.gang.turf ?? null,
+            }
+          : undefined,
       })) || [],
   };
 }
@@ -509,6 +658,31 @@ export function usePersonForm(params: {
       dispatch({ type: 'SET_CUSTOM_FIELD_VALUES', payload: val }),
     []
   );
+  const setVehicles = useCallback(
+    (val: VehicleDraftItem[]) =>
+      dispatch({ type: 'SET_VEHICLES', payload: val }),
+    []
+  );
+  const setPhysicalMarks = useCallback(
+    (val: PhysicalMarkDraftItem[]) =>
+      dispatch({ type: 'SET_PHYSICAL_MARKS', payload: val }),
+    []
+  );
+  const setCriminalRecords = useCallback(
+    (val: CriminalRecordDraftItem[]) =>
+      dispatch({ type: 'SET_CRIMINAL_RECORDS', payload: val }),
+    []
+  );
+  const setBankAccounts = useCallback(
+    (val: BankAccountDraftItem[]) =>
+      dispatch({ type: 'SET_BANK_ACCOUNTS', payload: val }),
+    []
+  );
+  const setGangMemberships = useCallback(
+    (val: GangMembershipDraftItem[]) =>
+      dispatch({ type: 'SET_GANG_MEMBERSHIPS', payload: val }),
+    []
+  );
   const reset = useCallback(
     (newState: PersonFormState) =>
       dispatch({ type: 'RESET', payload: newState }),
@@ -537,6 +711,11 @@ export function usePersonForm(params: {
     setAddresses,
     setUrls,
     setCustomFieldValues,
+    setVehicles,
+    setPhysicalMarks,
+    setCriminalRecords,
+    setBankAccounts,
+    setGangMemberships,
     reset,
   };
 }

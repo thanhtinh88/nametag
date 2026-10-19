@@ -156,6 +156,10 @@ export function personDetailsInclude() {
     gangMemberships: {
       include: { gang: true },
     },
+    bankAccounts: {
+      where: { deletedAt: null },
+      orderBy: { createdAt: 'desc' as const },
+    },
     ...multiValueFieldsInclude(),
     ...importantDatesInclude(),
   } as const;

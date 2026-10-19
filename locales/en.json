@@ -47,7 +47,7 @@
   "nav": {
     "dashboard": "Dashboard",
     "people": "People",
-    "groups": "Groups",
+    "groups": "Tags & Categories",
     "relationshipTypes": "Relationships",
     "settings": "Settings",
     "menuLabel": "Menu",
@@ -66,7 +66,9 @@
     "journal": "Journal",
     "createJournal": "New entry",
     "map": "Map",
-    "events": "Events"
+    "events": "Cases & Events",
+    "gangs": "Gangs",
+    "createGang": "New Gang"
   },
   "notifications": {
     "push": {
@@ -1112,6 +1114,25 @@
     "allManagementLevels": "All management levels",
     "allMonitored": "🎯 Monitored subjects (Surveillance & Key target)",
     "normalOnly": "Normal residents",
+    "pageSize": "Show",
+    "perPage": "subjects / page",
+    "jumpToPage": "Jump to page",
+    "jump": "Go",
+    "changeManagementLevel": "Change management level",
+    "quickStatusSuccess": "Management level updated successfully",
+    "quickStatusFailed": "Failed to update management level",
+    "tabs": {
+      "investigation": "Investigation Dossier",
+      "personal": "Identity & Contact",
+      "network": "Relationship Network",
+      "journal": "Journal & Evidence"
+    },
+    "quickGlance": "Identity & Summary",
+    "copySuccess": "Copied to clipboard",
+    "quickCreate": "Quick Create",
+    "fullDossier": "Full Dossier",
+    "expandFullDossier": "🛡️ Expand full investigation & details",
+    "collapseFullDossier": "Collapse to basic mode",
     "backToPeople": "← Back to People",
     "edit": "Edit",
     "details": "Details",
@@ -1213,6 +1234,11 @@
       "clearSelection": "Clear selection",
       "addToGroups": "Add to Groups",
       "setRelationship": "Set Relationship",
+      "setManagementLevel": "Change Management Level",
+      "setManagementLevelTitle": "Change Management Level for {count} subjects",
+      "selectManagementLevelDescription": "Select the new management level to apply to all selected subjects.",
+      "setManagementLevelSuccess": "Successfully updated management level for {count} subjects",
+      "setManagementLevelFailed": "Failed to update management level. Please try again.",
       "delete": "Delete",
       "deleteTitle": "Delete {count} People",
       "deleteConfirm": "You are about to delete {count} people:",
@@ -1884,6 +1910,79 @@
       "assignedToGroupBadge": "📁 Special case dossier",
       "memberInvolvementBadge": "👤 Member suspect",
       "confidencePrefix": "Confidence: {level}"
+    }
+  },
+  "gangs": {
+    "title": "Criminal Gangs & Syndicates",
+    "description": "Manage criminal syndicates, gangs, active turf, and hierarchical member roles",
+    "addGang": "Add gang",
+    "editGang": "Edit gang",
+    "deleteGang": "Delete gang",
+    "viewGang": "View gang",
+    "createNewGang": "Create new gang",
+    "backToGang": "← Back to {name}",
+    "editGangName": "Edit {name}",
+    "backToGangs": "← Back to gangs",
+    "searchPlaceholder": "Search by gang name, turf...",
+    "turfLabel": "Active turf / jurisdiction",
+    "noTurf": "No turf recorded",
+    "memberCount": "{count, plural, one {# member} other {# members}}",
+    "viewOnMap": "View on Map",
+    "empty": {
+      "title": "No criminal gangs found",
+      "description": "Add your first gang to track syndicates, turf, and leaders.",
+      "action": "Create new gang"
+    },
+    "form": {
+      "gangName": "Gang name",
+      "gangNameRequired": "Gang name *",
+      "gangNamePlaceholder": "e.g. Red Dragon Syndicate...",
+      "turf": "Active turf / territory",
+      "turfPlaceholder": "e.g. Downtown, District 1...",
+      "description": "Description & Modus Operandi",
+      "descriptionPlaceholder": "Describe gang operations, known activities...",
+      "color": "Identification color",
+      "customColor": "Or pick custom hex:",
+      "generateRandomColor": "Generate random color",
+      "cancel": "Cancel",
+      "saving": "Saving...",
+      "createGang": "Create gang",
+      "updateGang": "Update gang",
+      "errorSomethingWrong": "Something went wrong",
+      "errorConnection": "Could not connect to server. Please try again.",
+      "successCreated": "Created gang \"{name}\"",
+      "successUpdated": "Updated gang \"{name}\""
+    },
+    "roles": {
+      "LEADER": "Leader / Boss",
+      "SECOND_IN_COMMAND": "Second-in-Command / Lieutenant",
+      "ENFORCER": "Enforcer / Muscle",
+      "MEMBER": "Member / Foot soldier"
+    },
+    "members": {
+      "title": "Members ({count})",
+      "addMember": "Add person to gang",
+      "selectPerson": "Select person",
+      "selectRole": "Gang role & rank",
+      "notes": "Role notes",
+      "notesPlaceholder": "e.g. Collection, driver...",
+      "addedSuccess": "Added {name} to {gang}",
+      "removedSuccess": "Removed {name} from {gang}",
+      "roleUpdatedSuccess": "Updated role for {name}",
+      "errorAdd": "Could not add member to gang",
+      "errorRemove": "Could not remove member from gang",
+      "errorRoleUpdate": "Could not update member role",
+      "noMembers": "No members assigned to this gang yet."
+    },
+    "delete": {
+      "button": "Delete gang",
+      "title": "Delete gang",
+      "confirmButton": "Delete",
+      "deleting": "Deleting...",
+      "confirmMessage": "Are you sure you want to delete",
+      "explanation": "This will delete the gang. Member people profiles will not be deleted, only unlinked.",
+      "success": "Gang deleted successfully",
+      "errorGeneric": "Could not delete gang. Please try again."
     }
   },
   "map": {

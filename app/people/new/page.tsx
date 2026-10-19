@@ -1,5 +1,6 @@
 import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
 import PersonForm from '@/components/PersonForm';
 import Navigation from '@/components/Navigation';
@@ -48,7 +49,7 @@ export default async function NewPersonPage({
 
   const { dateFormat, nameOrder } = preferences;
 
-  const [groups, relationshipTypes, people, events, customFieldTemplates] = await Promise.all([
+  const [groups, relationshipTypes, people, events, customFieldTemplates, gangs] = await Promise.all([
     prisma.group.findMany({
       where: {
         userId: session.user.id,
@@ -80,6 +81,7 @@ export default async function NewPersonPage({
         secondLastName: true,
         nickname: true,
         displayNameOverride: true,
+        photo: true,
         groups: {
           select: {
             groupId: true,
@@ -105,6 +107,21 @@ export default async function NewPersonPage({
       where: { userId: session.user.id, deletedAt: null },
       orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
     }),
+    prisma.gang.findMany({
+      where: {
+        userId: session.user.id,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        name: true,
+        color: true,
+        turf: true,
+      },
+      orderBy: {
+        name: 'asc',
+      },
+    }),
   ]);
 
   const tierName = TIER_INFO[usageCheck.tier].name;
@@ -119,11 +136,19 @@ export default async function NewPersonPage({
         currentPath="/people"
       />
 
-      <main className="max-w-3xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          <h1 className="text-3xl font-bold text-foreground mb-6">
-            {t('addNewPerson')}
-          </h1>
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div className="px-4 py-4 sm:px-0">
+          <div className="flex items-center justify-between mb-6">
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
+              {t('addNewPerson')}
+            </h1>
+            <Link
+              href="/people"
+              className="text-sm font-medium text-muted hover:text-foreground transition-colors"
+            >
+              {t('backToPeople')}
+            </Link>
+          </div>
 
           {!usageCheck.allowed ? (
             <LimitReachedMessage
@@ -133,31 +158,31 @@ export default async function NewPersonPage({
               tier={tierName}
             />
           ) : (
-            <div className="bg-surface shadow rounded-lg p-6">
-              <PersonForm
-                groups={groups}
-                customFieldTemplates={customFieldTemplates}
-                relationshipTypes={relationshipTypes}
-                availablePeople={people}
-                availableEvents={events}
-                userName={session.user.name || session.user.email || 'You'}
-                mode="create"
-                dateFormat={dateFormat}
-                initialName={params.name}
-                initialKnownThrough={params.knownThrough}
-                initialRelationshipType={params.relationshipType}
-                initialConnectedEventId={params.connectedEventId}
-                hasCardDavConnection={!!cardDavConnection}
-                nameOrder={nameOrder}
-                defaultReminderLeadDays={notificationPreferences?.defaultReminderLeadDays ?? 0}
-                reminderLimit={{
-                  canCreate: reminderCheck.allowed,
-                  current: reminderCheck.current,
-                  limit: reminderCheck.limit,
-                  isUnlimited: reminderCheck.isUnlimited,
-                }}
-              />
-            </div>
+            <PersonForm
+              groups={groups}
+              customFieldTemplates={customFieldTemplates}
+              relationshipTypes={relationshipTypes}
+              availablePeople={people}
+              availableEvents={events}
+              availableGangs={gangs}
+              userName={session.user.name || session.user.email || 'You'}
+              mode="create"
+              dateFormat={dateFormat}
+              initialName={params.name}
+              initialKnownThrough={params.knownThrough}
+              initialRelationshipType={params.relationshipType}
+              initialConnectedEventId={params.connectedEventId}
+              hasCardDavConnection={!!cardDavConnection}
+              nameOrder={nameOrder}
+              nameDisplayFormat={preferences.nameDisplayFormat as any}
+              defaultReminderLeadDays={notificationPreferences?.defaultReminderLeadDays ?? 0}
+              reminderLimit={{
+                canCreate: reminderCheck.allowed,
+                current: reminderCheck.current,
+                limit: reminderCheck.limit,
+                isUnlimited: reminderCheck.isUnlimited,
+              }}
+            />
           )}
         </div>
       </main>

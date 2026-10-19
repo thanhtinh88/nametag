@@ -55,6 +55,15 @@ vi.mock('@/components/BulkRelationshipModal', () => ({
     ) : null,
 }));
 
+vi.mock('@/components/BulkManagementLevelModal', () => ({
+  default: ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) =>
+    isOpen ? (
+      <div data-testid="bulk-management-modal">
+        <button onClick={onClose}>Close</button>
+      </div>
+    ) : null,
+}));
+
 function Wrapper({ children }: { children: React.ReactNode }) {
   return (
     <NextIntlClientProvider locale="en" messages={enMessages}>
@@ -156,8 +165,8 @@ describe('PeopleListClient', () => {
         </Wrapper>
       );
 
-      expect(screen.getByText('Alice')).toBeInTheDocument();
-      expect(screen.getByText('Bob')).toBeInTheDocument();
+      expect(screen.getByText('Alice Smith')).toBeInTheDocument();
+      expect(screen.getByText('Bob Jones')).toBeInTheDocument();
     });
 
     describe('last contact across timezones', () => {
@@ -201,8 +210,9 @@ describe('PeopleListClient', () => {
         </Wrapper>
       );
 
-      expect(screen.getByText('Name')).toBeInTheDocument();
-      expect(screen.getByText('Last Name')).toBeInTheDocument();
+      expect(screen.getByText('Full Name')).toBeInTheDocument();
+      expect(screen.getByText('Diện quản lý')).toBeInTheDocument();
+      expect(screen.getByText('Số CCCD / CMND')).toBeInTheDocument();
     });
 
     it('renders edit and view links for each person', () => {
@@ -310,11 +320,9 @@ describe('PeopleListClient', () => {
         </Wrapper>
       );
 
-      // Orphan warning icon appears (⚠️) in whichever name column is visible
-      const mobileCell = screen.getByText('Alice Smith').closest('td')!;
-      const desktopCell = screen.getByText('Alice').closest('td')!;
-      expect(within(mobileCell).getByText('⚠️')).toBeInTheDocument();
-      expect(within(desktopCell).getByText('⚠️')).toBeInTheDocument();
+      // Orphan warning icon appears (⚠️) in the name column
+      const cell = screen.getByText('Alice Smith').closest('td')!;
+      expect(within(cell).getByText('⚠️')).toBeInTheDocument();
     });
 
     it('keeps the real name primary and shows display override as secondary text', () => {
@@ -336,11 +344,9 @@ describe('PeopleListClient', () => {
         </Wrapper>
       );
 
-      // Both name columns link the canonical name and keep the override secondary
-      const mobileCell = screen.getByRole('link', { name: 'Robert Johnson' }).closest('td')!;
-      const desktopCell = screen.getByRole('link', { name: 'Robert' }).closest('td')!;
-      expect(within(mobileCell).getByText('Dad')).toBeInTheDocument();
-      expect(within(desktopCell).getByText('Dad')).toBeInTheDocument();
+      // Name column links the canonical name and keeps the override secondary
+      const cell = screen.getByRole('link', { name: 'Robert Johnson' }).closest('td')!;
+      expect(within(cell).getByText('Dad')).toBeInTheDocument();
       expect(screen.queryByRole('link', { name: 'Dad' })).not.toBeInTheDocument();
     });
   });
@@ -449,7 +455,7 @@ describe('PeopleListClient', () => {
       );
     });
 
-    it('shows the full name column only below the md breakpoint', () => {
+    it('renders the full name column across all breakpoints', () => {
       render(
         <Wrapper>
           <PeopleListClient
@@ -463,26 +469,22 @@ describe('PeopleListClient', () => {
       const fullNameHeader = screen.getByText('Full Name').closest('th');
       const fullNameCell = screen.getByText('Alice Smith').closest('td');
 
-      expect(fullNameHeader).toHaveClass('md:hidden');
-      expect(fullNameCell).toHaveClass('md:hidden');
+      expect(fullNameHeader).toBeInTheDocument();
+      expect(fullNameCell).toBeInTheDocument();
     });
 
-    it('hides the first-name column below the md breakpoint so names are not duplicated', () => {
+    it('renders citizen ID in its dedicated column', () => {
       render(
         <Wrapper>
           <PeopleListClient
             {...defaultProps({
-              people: [makePerson({ id: 'p-1', name: 'Alice', surname: 'Smith' })],
+              people: [makePerson({ id: 'p-1', name: 'Alice', surname: 'Smith', citizenId: '001201012345' } as any)],
             })}
           />
         </Wrapper>
       );
 
-      const nameHeader = screen.getByText('Name').closest('th');
-      const nameCell = screen.getByText('Alice').closest('td');
-
-      expect(nameHeader).toHaveClass('hidden', 'md:table-cell');
-      expect(nameCell).toHaveClass('hidden', 'md:table-cell');
+      expect(screen.getByText('001201012345')).toBeInTheDocument();
     });
   });
 
@@ -721,9 +723,7 @@ describe('PeopleListClient', () => {
         </Wrapper>
       );
 
-      // Ascending arrow ↑ should appear on both name headers, since Western
-      // order sorts the combined mobile column by first name too
-      expect(within(screen.getByText('Name').closest('th')!).getByText('↑')).toBeInTheDocument();
+      // Ascending arrow ↑ should appear on the full name header
       expect(
         within(screen.getByText('Full Name').closest('th')!).getByText('↑')
       ).toBeInTheDocument();
@@ -738,7 +738,7 @@ describe('PeopleListClient', () => {
         </Wrapper>
       );
 
-      expect(within(screen.getByText('Name').closest('th')!).getByText('↓')).toBeInTheDocument();
+      expect(within(screen.getByText('Full Name').closest('th')!).getByText('↓')).toBeInTheDocument();
     });
 
     it('renders sort links for table headers', () => {
@@ -748,8 +748,8 @@ describe('PeopleListClient', () => {
         </Wrapper>
       );
 
-      // Name header should be a link
-      const nameLink = screen.getByRole('link', { name: /^name/i });
+      // Full Name header should be a link
+      const nameLink = screen.getByRole('link', { name: /full name/i });
       expect(nameLink).toHaveAttribute('href', expect.stringContaining('sortBy=name'));
     });
   });

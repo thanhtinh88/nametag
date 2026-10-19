@@ -327,6 +327,56 @@ export async function createPerson(userId: string, data: PersonInput) {
               })),
             }
           : undefined,
+      vehicles:
+        data.vehicles && data.vehicles.length > 0
+          ? {
+              create: data.vehicles.map((v) => ({
+                plateNumber: v.plateNumber.trim(),
+                vehicleType: v.vehicleType.trim(),
+                brandModel: v.brandModel?.trim() || null,
+                color: v.color?.trim() || null,
+                identifyingFeatures: v.identifyingFeatures?.trim() || null,
+                registeredOwner: v.registeredOwner?.trim() || null,
+                isSuspicious: v.isSuspicious ?? false,
+              })),
+            }
+          : undefined,
+      physicalMarks:
+        data.physicalMarks && data.physicalMarks.length > 0
+          ? {
+              create: data.physicalMarks.map((m) => ({
+                type: m.type.trim(),
+                location: m.location.trim(),
+                description: m.description.trim(),
+                photoUrl: m.photoUrl ?? null,
+              })),
+            }
+          : undefined,
+      criminalRecords:
+        data.criminalRecords && data.criminalRecords.length > 0
+          ? {
+              create: data.criminalRecords.map((r) => ({
+                charge: r.charge.trim(),
+                recordType: r.recordType || 'CONVICTION',
+                sentenceDetail: r.sentenceDetail?.trim() || null,
+                adjudicatedBy: r.adjudicatedBy?.trim() || null,
+                incidentDate: r.incidentDate ? new Date(r.incidentDate) : null,
+                verdictDate: r.verdictDate ? new Date(r.verdictDate) : null,
+                isPardoned: r.isPardoned ?? false,
+                notes: r.notes?.trim() || null,
+              })),
+            }
+          : undefined,
+      gangMemberships:
+        data.gangMemberships && data.gangMemberships.length > 0
+          ? {
+              create: data.gangMemberships.map((g) => ({
+                gangId: g.gangId,
+                role: g.role || 'MEMBER',
+                notes: g.notes?.trim() || null,
+              })),
+            }
+          : undefined,
       relationshipToUser:
         relationshipToUserId ? { connect: { id: relationshipToUserId } } : undefined,
     },
