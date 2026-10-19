@@ -22,6 +22,17 @@ import { buildSimulationNodes, type RawGraphPerson } from './graph/bubble-compos
 import { buildHubAndSpokeEdges } from './graph/edge-composition';
 import { UNGROUPED_SYNTHETIC_ID } from './graph/simulation-types';
 import type { SimulationNode, SimulationEdge, BubbleSimNode } from './graph/simulation-types';
+import TacticalQuickChips from './filters/TacticalQuickChips';
+import ActiveTacticalBadges from './filters/ActiveTacticalBadges';
+import TacticalFilterDrawer from './filters/TacticalFilterDrawer';
+import TacticalSidebarContainer from './filters/TacticalSidebarContainer';
+import TacticalPersonCard from './filters/TacticalPersonCard';
+import {
+  DEFAULT_PERSON_FILTER_STATE,
+  matchesPersonTacticalFilters,
+  countActiveTacticalFilters,
+  type UnifiedPersonFilterState,
+} from '@/lib/filters/person-filter-types';
 
 interface GraphContextMenuState {
   node: SimulationNode;
@@ -69,6 +80,7 @@ export default function UnifiedNetworkGraph({
   compact = false,
 }: UnifiedNetworkGraphProps) {
   const t = useTranslations('dashboard.graph');
+  const tTactical = useTranslations('tacticalFilters');
   const tPeople = useTranslations('people');
   const tEvents = useTranslations('events');
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -99,6 +111,23 @@ export default function UnifiedNetworkGraph({
   const filtersStorageKey = `nametag:graph:filters:${storageScope}`;
   const positionsStorageKey = `nametag:graph:positions:${storageScope}`;
 
+  // Tactical Filter state
+  const [tacticalFilters, setTacticalFilters] = useState<UnifiedPersonFilterState>(() => ({
+    ...DEFAULT_PERSON_FILTER_STATE,
+    activeCasesOnly: Boolean(events),
+    showRuledOut: !events,
+  }));
+  const [gangs, setGangs] = useState<Array<{ id: string; name: string; color?: string | null }>>([]);
+
+  useEffect(() => {
+    fetch('/api/gangs')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((payload) => {
+        if (payload?.gangs) setGangs(payload.gangs);
+      })
+      .catch(() => {});
+  }, []);
+
   // Filter state
   const [selectedGroupFilters, setSelectedGroupFilters] = useState<GroupFilterItem[]>([]);
   const [includeMode, setIncludeMode] = useState<IncludeMode>('or');
@@ -115,24 +144,20 @@ export default function UnifiedNetworkGraph({
   const capitalizeType = useLocale().startsWith('de');
 
   const activeFilterCount = useMemo(() => {
-    let count = 0;
-    if (selectedGroupFilters.length > 0) count++;
-    if (selectedCaseId) count++;
-    if (activeCasesOnly) count++;
-    if (!showRuledOut) count++;
-    if (customFieldSlug && customFieldValue) count++;
-    return count;
-  }, [selectedGroupFilters.length, selectedCaseId, activeCasesOnly, showRuledOut, customFieldSlug, customFieldValue]);
+    return (
+      countActiveTacticalFilters(tacticalFilters) +
+      (selectedGroupFilters.length > 0 ? selectedGroupFilters.length : 0)
+    );
+  }, [tacticalFilters, selectedGroupFilters.length]);
 
   const handleClearFilters = useCallback(() => {
     setSelectedGroupFilters([]);
     setIncludeMode('or');
-    setSelectedCaseId('');
-    setIncludeHop(true);
-    setActiveCasesOnly(false);
-    setShowRuledOut(true);
-    setCustomFieldSlug('');
-    setCustomFieldValue('');
+    setTacticalFilters({
+      ...DEFAULT_PERSON_FILTER_STATE,
+      activeCasesOnly: false,
+      showRuledOut: true,
+    });
   }, []);
 
   const invMap = useMemo<Record<string, string>>(() => {
@@ -244,12 +269,19 @@ export default function UnifiedNetworkGraph({
   const ungroupedLabel = t('unsortedBubbleLabel');
 
   const includeGroupIds = useMemo(
-    () => selectedGroupFilters.filter((f) => !f.isNegative).map((f) => f.id),
-    [selectedGroupFilters],
+    () => [
+      ...selectedGroupFilters.filter((f) => !f.isNegative).map((f) => f.id),
+      ...(tacticalFilters.groupId ? [tacticalFilters.groupId] : []),
+      ...tacticalFilters.includeGroupIds,
+    ],
+    [selectedGroupFilters, tacticalFilters.groupId, tacticalFilters.includeGroupIds],
   );
   const excludeGroupIds = useMemo(
-    () => selectedGroupFilters.filter((f) => f.isNegative).map((f) => f.id),
-    [selectedGroupFilters],
+    () => [
+      ...selectedGroupFilters.filter((f) => f.isNegative).map((f) => f.id),
+      ...tacticalFilters.excludeGroupIds,
+    ],
+    [selectedGroupFilters, tacticalFilters.excludeGroupIds],
   );
 
   // Detect mobile screen size
@@ -402,6 +434,13 @@ export default function UnifiedNetworkGraph({
     if (!graphData?.nodes) return { cases: [], persons: [] };
     const q = rosterQuery.trim().toLowerCase();
 
+    const effectiveFilters = {
+      ...tacticalFilters,
+      includeGroupIds,
+      excludeGroupIds,
+      groupMatchOperator: includeMode,
+    };
+
     const cases: RawGraphPerson[] = [];
     const persons: RawGraphPerson[] = [];
 
@@ -410,8 +449,19 @@ export default function UnifiedNetworkGraph({
       if (q && !node.label.toLowerCase().includes(q)) continue;
 
       if (node.nodeType === 'event' || node.id.startsWith('event-')) {
+        const evId = node.id.replace(/^event-/, '');
+        if (effectiveFilters.caseId && evId !== effectiveFilters.caseId) continue;
+        if (
+          effectiveFilters.activeCasesOnly &&
+          node.eventStatus &&
+          node.eventStatus !== 'PLANNED' &&
+          node.eventStatus !== 'ONGOING'
+        ) {
+          continue;
+        }
         cases.push(node);
       } else {
+        if (!matchesPersonTacticalFilters(node, effectiveFilters)) continue;
         persons.push(node);
       }
     }
@@ -420,7 +470,7 @@ export default function UnifiedNetworkGraph({
     persons.sort((a, b) => a.label.localeCompare(b.label));
 
     return { cases, persons };
-  }, [graphData, rosterQuery]);
+  }, [graphData, rosterQuery, tacticalFilters, includeGroupIds, excludeGroupIds, includeMode]);
 
   const focusNodeInGraph = useCallback(
     (nodeId: string) => {
@@ -690,8 +740,33 @@ export default function UnifiedNetworkGraph({
   }, [isMobile, linkDistance, chargeStrength, requestPaint]);
 
   // Step 3: Composition helper — recomposes sim data from raw cache
-  const recomposeAndBuildSim = useCallback((raw: { nodes: RawGraphPerson[]; edges: SimulationEdge[] }) => {
+  const recomposeAndBuildSim = useCallback((raw: { nodes: RawGraphPerson[]; edges: SimulationEdge[] } | null) => {
     const incomingPeople = Array.isArray(raw?.nodes) ? raw.nodes : [];
+
+    const effectiveFilters = {
+      ...tacticalFilters,
+      includeGroupIds,
+      excludeGroupIds,
+      groupMatchOperator: includeMode,
+    };
+
+    const filteredPeople = incomingPeople.filter((p) => {
+      if (p.isCenter || p.id.startsWith('user-')) return true;
+      if (p.nodeType === 'event' || p.id.startsWith('event-')) {
+        const evId = p.id.replace(/^event-/, '');
+        if (effectiveFilters.caseId && evId !== effectiveFilters.caseId) return false;
+        if (
+          effectiveFilters.activeCasesOnly &&
+          p.eventStatus &&
+          p.eventStatus !== 'PLANNED' &&
+          p.eventStatus !== 'ONGOING'
+        ) {
+          return false;
+        }
+        return true;
+      }
+      return matchesPersonTacticalFilters(p, effectiveFilters);
+    });
 
     // If no groups prop, we're not on the dashboard — skip bubble logic.
     const resolvedMode = groups ? resolveGraphMode(localGraphMode) : 'individuals';
@@ -717,7 +792,7 @@ export default function UnifiedNetworkGraph({
     }
 
     const incomingNodes = buildSimulationNodes({
-      people: incomingPeople,
+      people: filteredPeople,
       groups: groups ?? [],
       mode: resolvedMode,
       expandedBubbles: nextExpanded,
@@ -771,7 +846,8 @@ export default function UnifiedNetworkGraph({
     }
   }, [
     groups, localGraphMode, expandedBubbles,
-    includeGroupIds, ungroupedLabel, buildSimulation,
+    includeGroupIds, excludeGroupIds, includeMode,
+    tacticalFilters, ungroupedLabel, buildSimulation,
   ]);
 
   // Step 4: Data-fetch effect
@@ -835,13 +911,12 @@ export default function UnifiedNetworkGraph({
     customFieldValue,
   ]);
 
-  // Step 5: Recompose when bubble state changes (mode toggle, expand/collapse)
+  // Step 5: Recompose when bubble state or tactical filters change
   useEffect(() => {
     const raw = rawCacheRef.current;
     if (!raw) return;
     recomposeAndBuildSim(raw);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localGraphMode, expandedBubbles]);
+  }, [localGraphMode, expandedBubbles, tacticalFilters, recomposeAndBuildSim]);
 
   // Step 6: Zoom, click, hover, and drag handlers
   useEffect(() => {
@@ -1175,268 +1250,138 @@ export default function UnifiedNetworkGraph({
           </button>
         )}
 
-        {/* Collapsible Subject & Case Roster Sidebar */}
-        {rosterOpen && (
-          <aside
-            className="absolute top-3 left-3 bottom-3 z-10 w-72 sm:w-80 bg-surface/95 backdrop-blur border border-border rounded-xl shadow-lg flex flex-col overflow-hidden text-xs"
-            aria-label={t('rosterTitle')}
-          >
-            <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 border-b border-border bg-surface-elevated/60">
-              <div className="flex items-center gap-2 min-w-0">
-                <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground truncate">
-                  📋 {t('rosterTitle')}
-                </h2>
-                <span className="px-1.5 py-0.5 rounded-full bg-primary/15 text-primary font-semibold text-[11px] shrink-0">
-                  {rosterItems.persons.length + rosterItems.cases.length}
+        {/* Resizable / Dual-Pane Subject & Case Roster Sidebar */}
+        <TacticalSidebarContainer
+          isOpen={rosterOpen}
+          onClose={() => setRosterOpen(false)}
+          title={t('rosterTitle')}
+          rosterCount={rosterItems.persons.length + rosterItems.cases.length}
+          activeFilterCount={activeFilterCount}
+          onClearFilters={handleClearFilters}
+          filtersOpen={filtersOpen}
+          onToggleFilters={() => setFiltersOpen((prev) => !prev)}
+          storageKeyPrefix="graph-tactical-sidebar"
+          searchBar={
+            <input
+              type="search"
+              value={rosterQuery}
+              onChange={(e) => setRosterQuery(e.target.value)}
+              placeholder={t('rosterSearchPlaceholder')}
+              className="w-full px-2.5 py-1.5 bg-surface border border-border rounded-lg text-xs text-foreground placeholder-muted focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          }
+          quickChips={
+            <TacticalQuickChips filters={tacticalFilters} onChange={setTacticalFilters} />
+          }
+          activeBadges={
+            <ActiveTacticalBadges
+              filters={tacticalFilters}
+              onChange={setTacticalFilters}
+              cases={events}
+              gangs={gangs}
+              groups={groups}
+            />
+          }
+          filterDrawer={
+            <div className="space-y-2.5">
+              {groups && groups.length > 0 && (
+                <div className="space-y-1.5 pb-2 border-b border-border/50">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-muted text-[11px]">{t('filterByGroups')}</span>
+                    <button
+                      type="button"
+                      onClick={() => setIncludeMode((prev) => (prev === 'or' ? 'and' : 'or'))}
+                      className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-surface-elevated text-foreground hover:bg-surface border border-border"
+                    >
+                      {includeMode === 'or' ? t('matchMode.any') : t('matchMode.all')}
+                    </button>
+                  </div>
+                  <PillSelector<GroupFilterItem>
+                    selectedItems={selectedGroupFilters}
+                    availableItems={groups.map((g) => ({
+                      id: g.id,
+                      label: g.name,
+                      color: g.color,
+                      isNegative: false,
+                    }))}
+                    onAdd={(item) => {
+                      setSelectedGroupFilters((prev) =>
+                        prev.some((f) => f.id === item.id)
+                          ? prev
+                          : [...prev, { ...item, isNegative: false }],
+                      );
+                    }}
+                    onRemove={(itemId) =>
+                      setSelectedGroupFilters((prev) =>
+                        prev.filter((f) => f.id !== itemId),
+                      )
+                    }
+                    onClearAll={() => setSelectedGroupFilters([])}
+                    placeholder={t('filterPlaceholder')}
+                    emptyMessage={t('noGroupsFound')}
+                    showAllOnFocus={true}
+                    renderPill={(item, onRemove) => (
+                      <GraphFilterGroupPill
+                        key={item.id}
+                        id={item.id}
+                        label={item.label}
+                        color={item.color}
+                        isNegative={item.isNegative}
+                        onToggle={() => toggleFilterSign(item.id)}
+                        onRemove={onRemove}
+                        title={
+                          item.isNegative
+                            ? t('filterState.excluded')
+                            : t('filterState.included')
+                        }
+                        ariaLabel={
+                          item.isNegative
+                            ? t('filterState.excludedWithLabel', {
+                                label: item.label,
+                              })
+                            : t('filterState.includedWithLabel', {
+                                label: item.label,
+                              })
+                        }
+                      />
+                    )}
+                  />
+                </div>
+              )}
+
+              <TacticalFilterDrawer
+                filters={tacticalFilters}
+                onChange={setTacticalFilters}
+                cases={events}
+                gangs={gangs}
+                groups={groups}
+                isGraphMode={true}
+                customFieldTemplates={customFieldTemplates}
+              />
+
+              {/* Compact Legend */}
+              <div className="pt-2 border-t border-border/50 flex flex-wrap items-center gap-2 text-[10px] text-muted">
+                <span className="inline-flex items-center gap-1">
+                  <span className="inline-block w-2.5 h-2 rounded-sm bg-amber-500 border border-amber-800" />
+                  {t('legendCase')}
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="inline-block w-3 h-0.5 bg-red-500" />
+                  {t('legendConfirmed')}
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="inline-block w-3 border-t border-dashed border-orange-500" />
+                  {t('legendInvestigating')}
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="inline-block w-3 border-t border-dotted border-gray-500" />
+                  {t('legendRuledOut')}
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={() => setRosterOpen(false)}
-                aria-label={t('contextMenu.close')}
-                className="p-1 rounded text-muted hover:text-foreground hover:bg-surface transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
             </div>
-
-            {/* Search filter inside roster */}
-            <div className="p-2 border-b border-border/60 bg-surface/40">
-              <input
-                type="search"
-                value={rosterQuery}
-                onChange={(e) => setRosterQuery(e.target.value)}
-                placeholder={t('rosterSearchPlaceholder')}
-                className="w-full px-2.5 py-1.5 bg-surface border border-border rounded-lg text-xs text-foreground placeholder-muted focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-            </div>
-
-            {/* Filter Drawer Toggle & Clear row */}
-            <div className="flex items-center justify-between px-3 py-1.5 bg-surface-elevated/40 border-b border-border/60">
-              <button
-                type="button"
-                onClick={() => setFiltersOpen((prev) => !prev)}
-                className="flex items-center gap-1.5 font-semibold text-foreground hover:text-primary transition-colors text-xs"
-              >
-                <span>⚙️ {t('filterByGroups')}</span>
-                {activeFilterCount > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full bg-primary text-white text-[10px] font-bold">
-                    {activeFilterCount}
-                  </span>
-                )}
-                <svg className={`w-3.5 h-3.5 transition-transform ${filtersOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-              {activeFilterCount > 0 && (
-                <button
-                  type="button"
-                  onClick={handleClearFilters}
-                  className="text-[11px] text-muted hover:text-red-500 transition-colors"
-                >
-                  Xóa lọc
-                </button>
-              )}
-            </div>
-
-            {/* Collapsible Filter Panel */}
-            {filtersOpen && (
-              <div className="p-2.5 space-y-2.5 border-b border-border/60 bg-surface/30 max-h-72 overflow-y-auto">
-                {groups && groups.length > 0 && (
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-muted text-[11px]">{t('filterByGroups')}</span>
-                      <button
-                        type="button"
-                        onClick={() => setIncludeMode((prev) => (prev === 'or' ? 'and' : 'or'))}
-                        className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-surface-elevated text-foreground hover:bg-surface border border-border"
-                      >
-                        {includeMode === 'or' ? t('matchMode.any') : t('matchMode.all')}
-                      </button>
-                    </div>
-                    <PillSelector<GroupFilterItem>
-                      selectedItems={selectedGroupFilters}
-                      availableItems={groups.map((g) => ({
-                        id: g.id,
-                        label: g.name,
-                        color: g.color,
-                        isNegative: false,
-                      }))}
-                      onAdd={(item) => {
-                        setSelectedGroupFilters((prev) =>
-                          prev.some((f) => f.id === item.id)
-                            ? prev
-                            : [...prev, { ...item, isNegative: false }],
-                        );
-                      }}
-                      onRemove={(itemId) =>
-                        setSelectedGroupFilters((prev) =>
-                          prev.filter((f) => f.id !== itemId),
-                        )
-                      }
-                      onClearAll={() => setSelectedGroupFilters([])}
-                      placeholder={t('filterPlaceholder')}
-                      emptyMessage={t('noGroupsFound')}
-                      showAllOnFocus={true}
-                      renderPill={(item, onRemove) => (
-                        <GraphFilterGroupPill
-                          key={item.id}
-                          id={item.id}
-                          label={item.label}
-                          color={item.color}
-                          isNegative={item.isNegative}
-                          onToggle={() => toggleFilterSign(item.id)}
-                          onRemove={onRemove}
-                          title={
-                            item.isNegative
-                              ? t('filterState.excluded')
-                              : t('filterState.included')
-                          }
-                          ariaLabel={
-                            item.isNegative
-                              ? t('filterState.excludedWithLabel', {
-                                  label: item.label,
-                                })
-                              : t('filterState.includedWithLabel', {
-                                  label: item.label,
-                                })
-                          }
-                        />
-                      )}
-                    />
-                  </div>
-                )}
-
-                {events && events.length > 0 && (
-                  <div className="space-y-1">
-                    <label className="font-semibold text-muted text-[11px] block">{t('caseFocus')}</label>
-                    <select
-                      value={selectedCaseId}
-                      onChange={(e) => setSelectedCaseId(e.target.value)}
-                      className="w-full px-2 py-1.5 rounded-lg border border-border bg-surface text-foreground text-xs"
-                    >
-                      <option value="">{t('allCases')}</option>
-                      {events.map((ev) => (
-                        <option key={ev.id} value={ev.id}>
-                          📅 {ev.title} ({ev.status})
-                        </option>
-                      ))}
-                    </select>
-                    {selectedCaseId && (
-                      <label className="inline-flex items-center gap-1.5 text-foreground cursor-pointer select-none text-[11px] pt-1">
-                        <input
-                          type="checkbox"
-                          checked={includeHop}
-                          onChange={(e) => setIncludeHop(e.target.checked)}
-                          className="rounded border-border text-primary focus:ring-primary"
-                        />
-                        <span>{t('includeHop')}</span>
-                      </label>
-                    )}
-                  </div>
-                )}
-
-                <div className="space-y-1 pt-1">
-                  <label className="inline-flex items-center gap-1.5 text-foreground cursor-pointer select-none text-[11px] block">
-                    <input
-                      type="checkbox"
-                      checked={activeCasesOnly}
-                      onChange={(e) => setActiveCasesOnly(e.target.checked)}
-                      className="rounded border-border text-primary focus:ring-primary"
-                    />
-                    <span>{t('activeCasesOnly')}</span>
-                  </label>
-                  <label className="inline-flex items-center gap-1.5 text-foreground cursor-pointer select-none text-[11px] block">
-                    <input
-                      type="checkbox"
-                      checked={showRuledOut}
-                      onChange={(e) => setShowRuledOut(e.target.checked)}
-                      className="rounded border-border text-primary focus:ring-primary"
-                    />
-                    <span>{t('showRuledOut')}</span>
-                  </label>
-                </div>
-
-                {customFieldTemplates && customFieldTemplates.length > 0 && (
-                  <div className="space-y-1 pt-1">
-                    <label className="font-semibold text-muted text-[11px] block">{t('customFieldFilter')}</label>
-                    <select
-                      value={customFieldSlug}
-                      onChange={(e) => {
-                        setCustomFieldSlug(e.target.value);
-                        setCustomFieldValue('');
-                      }}
-                      className="w-full px-2 py-1.5 rounded-lg border border-border bg-surface text-foreground text-xs"
-                    >
-                      <option value="">{t('customFieldAny')}</option>
-                      {customFieldTemplates.map((cf) => (
-                        <option key={cf.id} value={cf.slug}>
-                          {cf.name}
-                        </option>
-                      ))}
-                    </select>
-                    {customFieldSlug && (
-                      activeCustomFieldTemplate?.type === 'SELECT' && Array.isArray(activeCustomFieldTemplate.options) && activeCustomFieldTemplate.options.length > 0 ? (
-                        <select
-                          value={customFieldValue}
-                          onChange={(e) => setCustomFieldValue(e.target.value)}
-                          className="w-full px-2 py-1.5 rounded-lg border border-border bg-surface text-foreground text-xs mt-1"
-                        >
-                          <option value="">{t('customFieldAny')}</option>
-                          {activeCustomFieldTemplate.options.map((opt) => (
-                            <option key={opt} value={opt}>
-                              {opt}
-                            </option>
-                          ))}
-                        </select>
-                      ) : activeCustomFieldTemplate?.type === 'BOOLEAN' ? (
-                        <select
-                          value={customFieldValue}
-                          onChange={(e) => setCustomFieldValue(e.target.value)}
-                          className="w-full px-2 py-1.5 rounded-lg border border-border bg-surface text-foreground text-xs mt-1"
-                        >
-                          <option value="">{t('customFieldAny')}</option>
-                          <option value="true">Có (True)</option>
-                          <option value="false">Không (False)</option>
-                        </select>
-                      ) : (
-                        <input
-                          type="text"
-                          value={customFieldValue}
-                          onChange={(e) => setCustomFieldValue(e.target.value)}
-                          placeholder={t('customFieldValuePlaceholder')}
-                          className="w-full px-2 py-1.5 rounded-lg border border-border bg-surface text-foreground text-xs mt-1"
-                        />
-                      )
-                    )}
-                  </div>
-                )}
-
-                {/* Compact Legend */}
-                <div className="pt-2 border-t border-border/50 flex flex-wrap items-center gap-2 text-[10px] text-muted">
-                  <span className="inline-flex items-center gap-1">
-                    <span className="inline-block w-2.5 h-2 rounded-sm bg-amber-500 border border-amber-800" />
-                    {t('legendCase')}
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="inline-block w-3 h-0.5 bg-red-500" />
-                    {t('legendConfirmed')}
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="inline-block w-3 border-t border-dashed border-orange-500" />
-                    {t('legendInvestigating')}
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="inline-block w-3 border-t border-dotted border-gray-500" />
-                    {t('legendRuledOut')}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            <div className="flex-1 overflow-y-auto divide-y divide-border/60 text-xs">
+          }
+          rosterContent={
+            <div className="divide-y divide-border/60 text-xs">
               {/* Cases section */}
               {rosterItems.cases.length > 0 && (
                 <div className="p-2.5">
@@ -1448,17 +1393,17 @@ export default function UnifiedNetworkGraph({
                       {rosterItems.cases.length}
                     </span>
                   </div>
-                  <ul className="space-y-1">
+                  <ul className="space-y-1.5">
                     {rosterItems.cases.map((ev) => {
                       const eventId = ev.id.replace(/^event-/, '');
                       const isSelected = selectedCaseId === eventId;
                       return (
-                        <li key={ev.id} className="rounded-lg hover:bg-surface-elevated transition-colors p-1.5 border border-transparent hover:border-border/60">
+                        <li key={ev.id} className="rounded-xl hover:bg-surface-elevated transition-colors p-2 border border-border/50 bg-surface">
                           <div className="flex items-center justify-between gap-2">
                             <button
                               type="button"
                               onClick={() => focusNodeInGraph(ev.id)}
-                              className="min-w-0 flex-1 text-left flex items-center gap-2 group"
+                              className="min-w-0 flex-1 text-left flex items-center gap-2 group cursor-pointer"
                               title={t('focusInGraph')}
                             >
                               <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
@@ -1516,54 +1461,29 @@ export default function UnifiedNetworkGraph({
                 {rosterItems.persons.length === 0 ? (
                   <p className="px-1.5 py-2 text-muted italic">{t('rosterEmpty')}</p>
                 ) : (
-                  <ul className="space-y-1">
-                    {rosterItems.persons.map((person) => {
-                      const groupColor = person.colors?.[0] ?? '#3b82f6';
-                      return (
-                        <li key={person.id} className="rounded-lg hover:bg-surface-elevated transition-colors p-1.5 border border-transparent hover:border-border/60">
-                          <div className="flex items-center justify-between gap-2">
-                            <button
-                              type="button"
-                              onClick={() => focusNodeInGraph(person.id)}
-                              className="min-w-0 flex-1 text-left flex items-center gap-2 group"
-                              title={t('focusInGraph')}
-                            >
-                              {person.photo ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={`/api/photos/${person.id}`}
-                                  alt=""
-                                  className="w-5 h-5 rounded-full object-cover shrink-0 border"
-                                  style={{ borderColor: groupColor }}
-                                />
-                              ) : (
-                                <span
-                                  className="w-2.5 h-2.5 rounded-full shrink-0"
-                                  style={{ backgroundColor: groupColor }}
-                                />
-                              )}
-                              <span className="font-medium text-foreground truncate group-hover:text-primary transition-colors">
-                                {person.label}
-                              </span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => router.push(`/people/${person.id}`)}
-                              className="px-1.5 py-0.5 rounded text-[10px] text-muted hover:text-foreground bg-surface-elevated hover:bg-surface transition-colors shrink-0"
-                              title={t('contextMenu.viewDetails')}
-                            >
-                              →
-                            </button>
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                  <div className="space-y-1.5">
+                    {rosterItems.persons.map((person) => (
+                      <TacticalPersonCard
+                        key={person.id}
+                        id={person.id}
+                        name={person.label}
+                        photoUrl={person.photo ? `/api/photos/${person.id}` : null}
+                        hasPhoto={Boolean(person.photo)}
+                        color={person.colors?.[0] ?? '#3b82f6'}
+                        tacticalData={person}
+                        onFocus={() => focusNodeInGraph(person.id)}
+                        focusTitle={t('focusInGraph')}
+                        detailsHref={`/people/${person.id}`}
+                        detailsTitle={t('contextMenu.viewDetails')}
+                        gangs={gangs}
+                      />
+                    ))}
+                  </div>
                 )}
               </div>
             </div>
-          </aside>
-        )}
+          }
+        />
 
         {/* Backdrop to dismiss context menu on click anywhere outside */}
         {contextMenu && (

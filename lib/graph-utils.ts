@@ -1,7 +1,8 @@
 import { Prisma } from '@prisma/client';
 import { formatGraphName, type NameDisplayFormat } from './nameUtils';
+import type { PersonTacticalData } from './filters/person-filter-types';
 
-export interface GraphNode {
+export interface GraphNode extends PersonTacticalData {
   id: string;
   label: string;
   groups: string[];
@@ -141,6 +142,22 @@ interface Person
   }> {
   middleName?: string | null;
   groups: { group: Group }[];
+  managementLevel?: string | null;
+  threatLevel?: string | null;
+  residenceStatus?: string | null;
+  gender?: string | null;
+  criminalRecords?: Array<{ id: string; charge: string; recordType: string; isPardoned: boolean }>;
+  gangMemberships?: Array<{ gangId: string; role: string; gang?: { id: string; name: string; color: string | null } }>;
+  vehicles?: Array<{ id: string; vehicleType: string; plateNumber: string; isSuspicious: boolean }>;
+  physicalMarks?: Array<{ id: string; type: string; location: string }>;
+  bankAccounts?: Array<{ id: string; accountType: string }>;
+  events?: Array<{
+    eventId: string;
+    involvementType?: string;
+    verificationStatus?: string;
+    confidence?: string | null;
+    role?: string | null;
+  }>;
 }
 
 export function personToGraphNode(
@@ -156,6 +173,26 @@ export function personToGraphNode(
     colors: person.groups.map((pg) => pg.group.color || '#3B82F6'),
     isCenter,
     photo: person.photo,
+    managementLevel: person.managementLevel,
+    threatLevel: person.threatLevel,
+    residenceStatus: person.residenceStatus,
+    gender: person.gender,
+    hasCriminalRecord: (person.criminalRecords && person.criminalRecords.length > 0) || false,
+    criminalRecordCharges: person.criminalRecords?.map((r) => r.charge) ?? [],
+    hasActiveConviction: person.criminalRecords?.some((r) => r.recordType === 'CONVICTION' && !r.isPardoned) ?? false,
+    gangIds: person.gangMemberships?.map((g) => g.gangId) ?? [],
+    gangRoles: person.gangMemberships?.map((g) => g.role) ?? [],
+    hasSuspiciousVehicle: person.vehicles?.some((v) => v.isSuspicious) ?? false,
+    vehicleTypes: person.vehicles?.map((v) => v.vehicleType) ?? [],
+    markTypes: person.physicalMarks?.map((m) => m.type) ?? [],
+    hasMuleAccount: person.bankAccounts?.some((b) => b.accountType === 'MULE' || b.accountType === 'SUSPICIOUS') ?? false,
+    caseLinks: person.events?.map((e) => ({
+      eventId: e.eventId,
+      involvementType: e.involvementType,
+      verificationStatus: e.verificationStatus,
+      confidence: e.confidence,
+      role: e.role,
+    })) ?? [],
   };
 }
 

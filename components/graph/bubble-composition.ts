@@ -5,8 +5,9 @@ import {
   UNGROUPED_SYNTHETIC_ID,
 } from './simulation-types';
 import type { GraphMode } from './mode-resolution';
+import type { PersonTacticalData } from '@/lib/filters/person-filter-types';
 
-export interface RawGraphPerson {
+export interface RawGraphPerson extends PersonTacticalData {
   id: string;
   label: string;
   groups: string[];

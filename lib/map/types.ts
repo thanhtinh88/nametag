@@ -18,8 +18,10 @@ export interface MapCase {
   longitude: number | null;
 }
 
+import type { PersonTacticalData } from '@/lib/filters/person-filter-types';
+
 /** One plottable point: a geocoded address or a vCard GEO location. */
-export interface MapMarker {
+export interface MapMarker extends PersonTacticalData {
   /** "addr_<addressId>", "loc_<locationId>", or "evaddr_<eventAddressId>", used by /map?focus= deep links */
   id: string;
   source: 'address' | 'location' | 'event_address';
@@ -71,6 +73,7 @@ export interface UnmappedSubject {
 export interface MapMarkersResponse {
   markers: MapMarker[];
   groups: MapGroup[];
+  gangs?: Array<{ id: string; name: string; color: string | null }>;
   cases?: MapCase[];
   unmappedSubjects?: UnmappedSubject[];
   pendingCount: number;

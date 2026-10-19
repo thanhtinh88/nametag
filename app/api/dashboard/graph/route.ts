@@ -211,6 +211,43 @@ export const GET = withAuth(async (request, session) => {
             },
           },
         },
+        managementLevel: true,
+        threatLevel: true,
+        residenceStatus: true,
+        gender: true,
+        criminalRecords: {
+          where: { deletedAt: null },
+          select: { id: true, charge: true, recordType: true, isPardoned: true },
+        },
+        gangMemberships: {
+          select: {
+            gangId: true,
+            role: true,
+            gang: { select: { id: true, name: true, color: true } },
+          },
+        },
+        vehicles: {
+          where: { deletedAt: null },
+          select: { id: true, vehicleType: true, plateNumber: true, isSuspicious: true },
+        },
+        physicalMarks: {
+          where: { deletedAt: null },
+          select: { id: true, type: true, location: true },
+        },
+        bankAccounts: {
+          where: { deletedAt: null },
+          select: { id: true, accountType: true },
+        },
+        events: {
+          where: { deletedAt: null, event: { deletedAt: null } },
+          select: {
+            eventId: true,
+            involvementType: true,
+            verificationStatus: true,
+            confidence: true,
+            role: true,
+          },
+        },
       },
       orderBy: {
         name: 'asc',

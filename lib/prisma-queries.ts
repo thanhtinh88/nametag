@@ -190,6 +190,45 @@ export function personRelationshipsInclude() {
   } as const;
 }
 
+/** Tactical investigation relations include */
+export function tacticalIncludes() {
+  return {
+    criminalRecords: {
+      where: { deletedAt: null },
+      select: { id: true, charge: true, recordType: true, isPardoned: true },
+    },
+    gangMemberships: {
+      select: {
+        gangId: true,
+        role: true,
+        gang: { select: { id: true, name: true, color: true } },
+      },
+    },
+    vehicles: {
+      where: { deletedAt: null },
+      select: { id: true, vehicleType: true, plateNumber: true, isSuspicious: true },
+    },
+    physicalMarks: {
+      where: { deletedAt: null },
+      select: { id: true, type: true, location: true },
+    },
+    bankAccounts: {
+      where: { deletedAt: null },
+      select: { id: true, accountType: true },
+    },
+    events: {
+      where: { deletedAt: null, event: { deletedAt: null } },
+      select: {
+        eventId: true,
+        involvementType: true,
+        verificationStatus: true,
+        confidence: true,
+        role: true,
+      },
+    },
+  } as const;
+}
+
 /**
  * Deep include for the person graph view
  * (GET /api/people/[id]/graph).
@@ -201,6 +240,7 @@ export function personGraphInclude() {
   return {
     ...relationshipToUserInclude(),
     ...groupsInclude(),
+    ...tacticalIncludes(),
     relationshipsFrom: {
       where: {
         deletedAt: null,
@@ -213,6 +253,7 @@ export function personGraphInclude() {
           include: {
             ...relationshipToUserInclude(),
             ...groupsInclude(),
+            ...tacticalIncludes(),
             // Fetch relationships between connected people
             relationshipsFrom: {
               where: {

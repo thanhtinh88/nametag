@@ -6,8 +6,23 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { MapMarkersResponse, UnmappedSubject } from '@/lib/map/types';
-import { filterMarkers, type MapFilterState } from '@/lib/map/filter-markers';
-import MapFilters from './MapFilters';
+import {
+  distinctCities,
+  distinctCountries,
+  distinctRegions,
+  filterMarkers,
+  type MapFilterState,
+} from '@/lib/map/filter-markers';
+import {
+  DEFAULT_PERSON_FILTER_STATE,
+  matchesPersonTacticalFilters,
+  countActiveTacticalFilters,
+} from '@/lib/filters/person-filter-types';
+import TacticalSidebarContainer from '@/components/filters/TacticalSidebarContainer';
+import TacticalPersonCard from '@/components/filters/TacticalPersonCard';
+import TacticalQuickChips from '@/components/filters/TacticalQuickChips';
+import ActiveTacticalBadges from '@/components/filters/ActiveTacticalBadges';
+import TacticalFilterDrawer from '@/components/filters/TacticalFilterDrawer';
 
 const MapView = dynamic(() => import('./MapView'), { ssr: false });
 
@@ -23,9 +38,15 @@ function MapPageInner() {
   const [unlocatedOpen, setUnlocatedOpen] = useState(false);
   const [rosterOpen, setRosterOpen] = useState(true);
   const [focusRequest, setFocusRequest] = useState<{ id: string; seq: number } | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
+  const cities = useMemo(() => distinctCities(data?.markers ?? []), [data?.markers]);
+  const regions = useMemo(() => distinctRegions(data?.markers ?? []), [data?.markers]);
+  const countries = useMemo(() => distinctCountries(data?.markers ?? []), [data?.markers]);
 
   const filters: MapFilterState = useMemo(
     () => ({
+      ...DEFAULT_PERSON_FILTER_STATE,
       query: searchParams.get('q') ?? '',
       groupId: searchParams.get('group') ?? '',
       city: searchParams.get('city') ?? '',
@@ -37,21 +58,24 @@ function MapPageInner() {
       onlyWithinRadius: searchParams.get('within') === '1',
       activeCasesOnly: searchParams.get('activeCases') === '1',
       showRuledOut: searchParams.get('ruledOut') !== '0',
+      managementLevels: searchParams.get('ml')?.split(',').filter(Boolean) ?? [],
+      threatLevels: searchParams.get('tl')?.split(',').filter(Boolean) ?? [],
+      residenceStatuses: searchParams.get('rs')?.split(',').filter(Boolean) ?? [],
+      gender: searchParams.get('gender') ?? '',
+      involvementTypes: searchParams.get('inv')?.split(',').filter(Boolean) ?? [],
+      verificationStatuses: searchParams.get('ver')?.split(',').filter(Boolean) ?? [],
+      criminalRecordFilter: (searchParams.get('rec') as any) || 'all',
+      criminalCharge: searchParams.get('charge') ?? '',
+      gangId: searchParams.get('gang') ?? '',
+      gangRole: searchParams.get('gangRole') ?? '',
+      markTypes: searchParams.get('marks')?.split(',').filter(Boolean) ?? [],
+      vehicleType: searchParams.get('veh') ?? '',
+      onlySuspiciousVehicles: searchParams.get('suspVeh') === '1',
+      onlyMuleAccounts: searchParams.get('mule') === '1',
     }),
     [searchParams]
   );
-  const hasActiveFilters = Boolean(
-    filters.query ||
-      filters.groupId ||
-      filters.city ||
-      filters.region ||
-      filters.country ||
-      filters.caseId ||
-      filters.personId ||
-      (filters.radiusKm && filters.radiusKm > 0) ||
-      filters.onlyWithinRadius ||
-      filters.activeCasesOnly
-  );
+  const hasActiveFilters = countActiveTacticalFilters(filters) > 0 || Boolean(filters.query);
   const focusId = searchParams.get('focus');
 
   useEffect(() => {
@@ -86,6 +110,22 @@ function MapPageInner() {
       if (next.onlyWithinRadius) params.set('within', '1');
       if (next.activeCasesOnly) params.set('activeCases', '1');
       if (next.showRuledOut === false) params.set('ruledOut', '0');
+
+      if (next.managementLevels.length > 0) params.set('ml', next.managementLevels.join(','));
+      if (next.threatLevels.length > 0) params.set('tl', next.threatLevels.join(','));
+      if (next.residenceStatuses.length > 0) params.set('rs', next.residenceStatuses.join(','));
+      if (next.gender) params.set('gender', next.gender);
+      if (next.involvementTypes.length > 0) params.set('inv', next.involvementTypes.join(','));
+      if (next.verificationStatuses.length > 0) params.set('ver', next.verificationStatuses.join(','));
+      if (next.criminalRecordFilter && next.criminalRecordFilter !== 'all') params.set('rec', next.criminalRecordFilter);
+      if (next.criminalCharge) params.set('charge', next.criminalCharge);
+      if (next.gangId) params.set('gang', next.gangId);
+      if (next.gangRole) params.set('gangRole', next.gangRole);
+      if (next.markTypes.length > 0) params.set('marks', next.markTypes.join(','));
+      if (next.vehicleType) params.set('veh', next.vehicleType);
+      if (next.onlySuspiciousVehicles) params.set('suspVeh', '1');
+      if (next.onlyMuleAccounts) params.set('mule', '1');
+
       // Changing filters drops the focus deep link on purpose
       const qs = params.toString();
       router.replace(qs ? `/map?${qs}` : '/map', { scroll: false });
@@ -105,20 +145,7 @@ function MapPageInner() {
       if (needle && !subj.personName.toLowerCase().includes(needle)) {
         return false;
       }
-      if (filters.groupId && !subj.groupIds.includes(filters.groupId)) {
-        return false;
-      }
-      if (filters.caseId) {
-        const link = subj.caseLinks?.find((cl) => cl.eventId === filters.caseId);
-        if (!link) return false;
-        if (filters.showRuledOut === false && link.verificationStatus === 'RULED_OUT') {
-          return false;
-        }
-      } else if (filters.showRuledOut === false && subj.caseLinks && subj.caseLinks.length > 0) {
-        const allRuledOut = subj.caseLinks.every((cl) => cl.verificationStatus === 'RULED_OUT');
-        if (allRuledOut) return false;
-      }
-      return true;
+      return matchesPersonTacticalFilters(subj, filters);
     });
   }, [data, filters]);
 
@@ -261,43 +288,54 @@ function MapPageInner() {
               </button>
             )}
 
-            {/* Collapsible Subject Roster Sidebar */}
-            {rosterOpen && (
-              <aside
-                className="absolute top-3 left-3 bottom-3 z-20 w-72 sm:w-80 bg-surface/95 backdrop-blur border border-border rounded-xl shadow-lg flex flex-col overflow-hidden text-xs"
-                aria-label={t('rosterTitle')}
-              >
-                <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 border-b border-border bg-surface-elevated/60">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground truncate">
-                      📋 {t('rosterTitle')}
-                    </h2>
-                    <span className="px-1.5 py-0.5 rounded-full bg-primary/15 text-primary font-semibold text-[11px] shrink-0">
-                      {visibleMarkers.length}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setRosterOpen(false)}
-                    aria-label={tCommon('close')}
-                    className="p-1 rounded text-muted hover:text-foreground hover:bg-surface transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                    </svg>
-                  </button>
-                </div>
-
-                <MapFilters
-                  filters={filters}
-                  resultCount={visibleMarkers.length}
-                  markers={data.markers}
-                  groups={data.groups}
-                  cases={data.cases ?? []}
-                  onChange={handleFiltersChange}
+            {/* Resizable / Dual-Pane Subject Roster Sidebar */}
+            <TacticalSidebarContainer
+              isOpen={rosterOpen}
+              onClose={() => setRosterOpen(false)}
+              title={t('rosterTitle')}
+              rosterCount={visibleMarkers.length + filteredUnmappedSubjects.length}
+              activeFilterCount={countActiveTacticalFilters(filters)}
+              onClearFilters={() => handleFiltersChange({ ...DEFAULT_PERSON_FILTER_STATE, query: filters.query })}
+              filtersOpen={filtersOpen}
+              onToggleFilters={() => setFiltersOpen((prev) => !prev)}
+              storageKeyPrefix="map-tactical-sidebar"
+              searchBar={
+                <input
+                  type="search"
+                  value={filters.query}
+                  onChange={(e) => handleFiltersChange({ ...filters, query: e.target.value })}
+                  placeholder={t('searchPlaceholder')}
+                  className="w-full px-2.5 py-1.5 bg-surface border border-border rounded-lg text-xs text-foreground placeholder-muted focus:outline-none focus:ring-1 focus:ring-primary"
+                  aria-label={t('searchPlaceholder')}
                 />
-
-                <div className="flex-1 overflow-y-auto divide-y divide-border/60 text-xs">
+              }
+              quickChips={
+                <TacticalQuickChips filters={filters} onChange={handleFiltersChange} />
+              }
+              activeBadges={
+                <ActiveTacticalBadges
+                  filters={filters}
+                  onChange={handleFiltersChange}
+                  cases={data.cases ?? []}
+                  gangs={data.gangs ?? []}
+                  groups={data.groups}
+                />
+              }
+              filterDrawer={
+                <TacticalFilterDrawer
+                  filters={filters}
+                  onChange={handleFiltersChange}
+                  cases={data.cases ?? []}
+                  gangs={data.gangs ?? []}
+                  groups={data.groups}
+                  cities={cities}
+                  regions={regions}
+                  countries={countries}
+                  isGraphMode={false}
+                />
+              }
+              rosterContent={
+                <div className="divide-y divide-border/60 text-xs">
                   {/* Section 1: Located on Map */}
                   <div className="p-2.5">
                     <div className="flex items-center justify-between px-1.5 mb-1.5">
@@ -311,58 +349,87 @@ function MapPageInner() {
                     {visibleMarkers.length === 0 ? (
                       <p className="px-1.5 py-2 text-muted italic">{t('noResults')}</p>
                     ) : (
-                      <ul className="space-y-1">
+                      <div className="space-y-1.5">
                         {visibleMarkers.map((marker) => {
                           const isCrimeScene = marker.source === 'event_address';
-                          return (
-                            <li key={marker.id}>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setFocusRequest((prev) => ({
-                                    id: marker.id,
-                                    seq: (prev?.seq ?? 0) + 1,
-                                  }));
-                                  if (marker.source === 'event_address') {
-                                    handleFiltersChange({
-                                      ...filters,
-                                      caseId: marker.personId,
-                                      personId: '',
-                                      radiusKm: filters.radiusKm || 1,
-                                    });
-                                  } else {
-                                    handleFiltersChange({
-                                      ...filters,
-                                      personId: marker.personId,
-                                      radiusKm: filters.radiusKm || 1,
-                                    });
-                                  }
-                                }}
-                                className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-surface-elevated transition-colors flex items-start gap-2 group"
+                          if (isCrimeScene) {
+                            return (
+                              <div
+                                key={marker.id}
+                                className="rounded-xl hover:bg-surface-elevated transition-colors p-2 border border-border/50 bg-surface text-xs"
                               >
-                                <span
-                                  className="mt-1 w-2.5 h-2.5 rounded-full shrink-0 border border-white/60"
-                                  style={{
-                                    backgroundColor: isCrimeScene
-                                      ? '#ef4444'
-                                      : marker.groupColor ?? '#3b82f6',
-                                  }}
-                                />
-                                <div className="min-w-0 flex-1">
-                                  <div className="font-medium text-foreground truncate group-hover:text-primary transition-colors">
-                                    {marker.personName}
-                                  </div>
-                                  {(marker.city || marker.addressText) && (
-                                    <div className="text-[11px] text-muted truncate">
-                                      {marker.addressText ?? marker.city}
+                                <div className="flex items-center justify-between gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setFocusRequest((prev) => ({
+                                        id: marker.id,
+                                        seq: (prev?.seq ?? 0) + 1,
+                                      }));
+                                      handleFiltersChange({
+                                        ...filters,
+                                        caseId: marker.personId,
+                                        personId: '',
+                                        radiusKm: filters.radiusKm || 1,
+                                      });
+                                    }}
+                                    className="min-w-0 flex-1 text-left flex items-start gap-2 cursor-pointer group"
+                                    title="Tâm điểm hiện trường"
+                                  >
+                                    <span className="mt-1 w-2.5 h-2.5 rounded-full bg-red-500 shrink-0 border border-white/60" />
+                                    <div className="min-w-0 flex-1">
+                                      <div className="font-semibold text-foreground group-hover:text-primary transition-colors truncate">
+                                        {marker.personName}
+                                      </div>
+                                      {(marker.city || marker.addressText) && (
+                                        <div className="text-[11px] text-muted truncate">
+                                          {marker.addressText ?? marker.city}
+                                        </div>
+                                      )}
                                     </div>
-                                  )}
+                                  </button>
+                                  <Link
+                                    href={`/events/${marker.personId}`}
+                                    className="p-1 rounded-md text-muted hover:text-foreground hover:bg-surface-elevated transition-colors shrink-0"
+                                    title="Xem vụ án"
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                    </svg>
+                                  </Link>
                                 </div>
-                              </button>
-                            </li>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <TacticalPersonCard
+                              key={marker.id}
+                              id={marker.personId}
+                              name={marker.personName}
+                              hasPhoto={marker.hasPhoto}
+                              color={marker.groupColor ?? '#3b82f6'}
+                              tacticalData={marker}
+                              subtitle={marker.addressText ?? marker.city}
+                              onFocus={() => {
+                                setFocusRequest((prev) => ({
+                                  id: marker.id,
+                                  seq: (prev?.seq ?? 0) + 1,
+                                }));
+                                handleFiltersChange({
+                                  ...filters,
+                                  personId: marker.personId,
+                                  radiusKm: filters.radiusKm || 1,
+                                });
+                              }}
+                              focusTitle="Định vị trên bản đồ"
+                              detailsHref={`/people/${marker.personId}`}
+                              detailsTitle="Xem hồ sơ"
+                              gangs={data.gangs ?? []}
+                            />
                           );
                         })}
-                      </ul>
+                      </div>
                     )}
                   </div>
 
@@ -384,40 +451,32 @@ function MapPageInner() {
                         {t('rosterUnlocatedEmpty')}
                       </p>
                     ) : (
-                      <ul className="space-y-1">
+                      <div className="space-y-1.5">
                         {filteredUnmappedSubjects.map((subj) => {
                           const activeCaseLink = filters.caseId
                             ? subj.caseLinks?.find((cl) => cl.eventId === filters.caseId)
                             : subj.caseLinks?.[0];
                           return (
-                            <li key={subj.personId}>
-                              <Link
-                                href={`/people/${subj.personId}`}
-                                className="block px-2.5 py-1.5 rounded-lg border border-amber-500/25 bg-surface hover:bg-surface-elevated transition-colors"
-                              >
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="font-medium text-foreground truncate">
-                                    {subj.personName}
-                                  </span>
-                                  <span className="text-[10px] text-primary shrink-0 hover:underline">
-                                    {t('rosterAddCoordsLink')}
-                                  </span>
-                                </div>
-                                {activeCaseLink && (
-                                  <div className="text-[11px] text-muted truncate mt-0.5">
-                                    {activeCaseLink.role || activeCaseLink.eventTitle}
-                                  </div>
-                                )}
-                              </Link>
-                            </li>
+                            <TacticalPersonCard
+                              key={subj.personId}
+                              id={subj.personId}
+                              name={subj.personName}
+                              hasPhoto={false}
+                              color="#f59e0b"
+                              tacticalData={subj}
+                              subtitle={activeCaseLink?.role || activeCaseLink?.eventTitle || t('rosterAddCoordsLink')}
+                              detailsHref={`/people/${subj.personId}`}
+                              detailsTitle="Xem hồ sơ"
+                              gangs={data.gangs ?? []}
+                            />
                           );
                         })}
-                      </ul>
+                      </div>
                     )}
                   </div>
                 </div>
-              </aside>
-            )}
+              }
+            />
 
             {visibleMarkers.length === 0 && (
               <div className="absolute inset-0 z-10 flex items-center justify-center p-8 pointer-events-none">

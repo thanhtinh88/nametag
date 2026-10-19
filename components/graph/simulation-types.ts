@@ -1,9 +1,10 @@
 // components/graph/simulation-types.ts
 import type { SimulationNodeDatum } from 'd3-force';
+import type { PersonTacticalData } from '@/lib/filters/person-filter-types';
 
 export type LODTier = 'dots' | 'labels' | 'full';
 
-export interface PersonSimNode extends SimulationNodeDatum {
+export interface PersonSimNode extends SimulationNodeDatum, PersonTacticalData {
   kind: 'person';
   id: string;
   label: string;

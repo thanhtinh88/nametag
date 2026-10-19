@@ -1,18 +1,11 @@
 import type { MapMarker } from './types';
+import {
+  type UnifiedPersonFilterState,
+  DEFAULT_PERSON_FILTER_STATE,
+  matchesPersonTacticalFilters,
+} from '@/lib/filters/person-filter-types';
 
-export interface MapFilterState {
-  query: string;
-  groupId: string;
-  city: string;
-  region: string;
-  country: string;
-  caseId?: string;
-  personId?: string;
-  radiusKm?: number;
-  onlyWithinRadius?: boolean;
-  activeCasesOnly?: boolean;
-  showRuledOut?: boolean;
-}
+export type MapFilterState = UnifiedPersonFilterState;
 
 /** Calculates great-circle distance in kilometers between two coordinates using the Haversine formula. */
 export function haversineDistanceKm(
@@ -32,16 +25,19 @@ export function haversineDistanceKm(
   return R * c;
 }
 
-export function filterMarkers(markers: MapMarker[], filters: MapFilterState): MapMarker[] {
-  const query = filters.query.trim().toLowerCase();
-  const city = filters.city.trim().toLowerCase();
-  const region = filters.region.trim().toLowerCase();
-  const caseId = filters.caseId?.trim() || '';
-  const personId = filters.personId?.trim() || '';
-  const radiusKm = filters.radiusKm ?? 0;
-  const onlyWithinRadius = Boolean(filters.onlyWithinRadius);
-  const activeCasesOnly = Boolean(filters.activeCasesOnly);
-  const showRuledOut = filters.showRuledOut !== false;
+export function filterMarkers(markers: MapMarker[], filters: Partial<MapFilterState>): MapMarker[] {
+  const resolvedFilters: UnifiedPersonFilterState = {
+    ...DEFAULT_PERSON_FILTER_STATE,
+    ...filters,
+  };
+  const query = resolvedFilters.query.trim().toLowerCase();
+  const city = (resolvedFilters.city ?? '').trim().toLowerCase();
+  const region = (resolvedFilters.region ?? '').trim().toLowerCase();
+  const caseId = resolvedFilters.caseId?.trim() || '';
+  const personId = resolvedFilters.personId?.trim() || '';
+  const radiusKm = resolvedFilters.radiusKm ?? 0;
+  const onlyWithinRadius = Boolean(resolvedFilters.onlyWithinRadius);
+  const activeCasesOnly = Boolean(resolvedFilters.activeCasesOnly);
 
   const crimeSceneMarkers = caseId
     ? markers.filter((m) => m.source === 'event_address' && m.personId === caseId)
@@ -58,12 +54,10 @@ export function filterMarkers(markers: MapMarker[], filters: MapFilterState): Ma
     : null;
 
   return markers.filter((marker) => {
+    // Basic search query
     if (query && !marker.personName.toLowerCase().includes(query)) return false;
-    if (filters.groupId && !marker.groupIds.includes(filters.groupId)) return false;
-    if (city && (marker.city ?? '').toLowerCase() !== city) return false;
-    if (region && (marker.region ?? '').toLowerCase() !== region) return false;
-    if (filters.country && marker.country !== filters.country) return false;
 
+    // Handle crime scene markers (event addresses)
     if (marker.source === 'event_address') {
       if (caseId && marker.personId !== caseId) return false;
       if (
@@ -75,6 +69,10 @@ export function filterMarkers(markers: MapMarker[], filters: MapFilterState): Ma
       ) {
         return false;
       }
+      if (city && (marker.city ?? '').toLowerCase() !== city) return false;
+      if (region && (marker.region ?? '').toLowerCase() !== region) return false;
+      if (filters.country && marker.country !== filters.country) return false;
+
       // If filtering within radius of a target person, apply to crime scenes too
       if (personId && onlyWithinRadius && radiusKm > 0 && targetPersonMarker) {
         const dist = haversineDistanceKm(
@@ -88,14 +86,22 @@ export function filterMarkers(markers: MapMarker[], filters: MapFilterState): Ma
       return true;
     }
 
-    // Subject marker filtering when a Case is selected
-    if (caseId && !showRuledOut && marker.caseLinks) {
-      const linkForCase = marker.caseLinks.find((l) => l.eventId === caseId);
-      if (linkForCase && linkForCase.verificationStatus === 'RULED_OUT') {
-        return false;
-      }
+    // Handle subject markers: apply full tactical filters (managementLevel, threatLevel, gang, record, etc.)
+    if (!matchesPersonTacticalFilters(marker, resolvedFilters)) {
+      return false;
     }
 
+    // Geographic filters
+    if (city && (marker.city ?? '').toLowerCase() !== city) return false;
+    if (region && (marker.region ?? '').toLowerCase() !== region) return false;
+    if (filters.country && marker.country !== filters.country) return false;
+
+    // Direct person focus (if user selected a specific person and radius is not restricted to surrounding)
+    if (personId && !onlyWithinRadius && marker.personId !== personId) {
+      return false;
+    }
+
+    // Radius filtering around selected case's crime scene(s)
     if (caseId && onlyWithinRadius && radiusKm > 0 && crimeSceneMarkers.length > 0) {
       const withinAnyScene = crimeSceneMarkers.some(
         (scene) =>

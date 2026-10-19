@@ -6,7 +6,7 @@ import type { MapGroup, MapMarker, UnlocatedPerson, UnmappedSubject } from '@/li
 
 export const GET = withAuth(async (request, session) => {
   try {
-    const [user, people, pendingCount, failedCount] = await Promise.all([
+    const [user, people, pendingCount, failedCount, allGangs] = await Promise.all([
       prisma.user.findUnique({
         where: { id: session.user.id },
         select: { nameOrder: true, nameDisplayFormat: true, geocodingEnabled: true },
@@ -21,6 +21,33 @@ export const GET = withAuth(async (request, session) => {
           nickname: true,
           displayNameOverride: true,
           photo: true,
+          managementLevel: true,
+          threatLevel: true,
+          residenceStatus: true,
+          gender: true,
+          criminalRecords: {
+            where: { deletedAt: null },
+            select: { id: true, charge: true, recordType: true, isPardoned: true },
+          },
+          gangMemberships: {
+            select: {
+              gangId: true,
+              role: true,
+              gang: { select: { id: true, name: true, color: true } },
+            },
+          },
+          vehicles: {
+            where: { deletedAt: null },
+            select: { id: true, vehicleType: true, plateNumber: true, isSuspicious: true },
+          },
+          physicalMarks: {
+            where: { deletedAt: null },
+            select: { id: true, type: true, location: true },
+          },
+          bankAccounts: {
+            where: { deletedAt: null },
+            select: { id: true, accountType: true },
+          },
           addresses: {
             select: {
               id: true,
@@ -63,6 +90,11 @@ export const GET = withAuth(async (request, session) => {
           geocodeStatus: 'failed',
         },
       }),
+      prisma.gang.findMany({
+        where: { userId: session.user.id, deletedAt: null },
+        select: { id: true, name: true, color: true },
+        orderBy: { name: 'asc' },
+      }),
     ]);
 
     const groupsById = new Map<string, MapGroup>();
@@ -94,11 +126,28 @@ export const GET = withAuth(async (request, session) => {
       // network graph picks a node's fill/ring color.
       const groupColor = person.groups.find((pg) => pg.group.color)?.group.color ?? null;
 
+      const tacticalData = {
+        managementLevel: person.managementLevel,
+        threatLevel: person.threatLevel,
+        residenceStatus: person.residenceStatus,
+        gender: person.gender,
+        hasCriminalRecord: (person.criminalRecords && person.criminalRecords.length > 0) || false,
+        criminalRecordCharges: person.criminalRecords?.map((r) => r.charge) ?? [],
+        hasActiveConviction: person.criminalRecords?.some((r) => r.recordType === 'CONVICTION' && !r.isPardoned) ?? false,
+        gangIds: person.gangMemberships?.map((g) => g.gangId) ?? [],
+        gangRoles: person.gangMemberships?.map((g) => g.role) ?? [],
+        hasSuspiciousVehicle: person.vehicles?.some((v) => v.isSuspicious) ?? false,
+        vehicleTypes: person.vehicles?.map((v) => v.vehicleType) ?? [],
+        markTypes: person.physicalMarks?.map((m) => m.type) ?? [],
+        hasMuleAccount: person.bankAccounts?.some((b) => b.accountType === 'MULE' || b.accountType === 'SUSPICIOUS') ?? false,
+      };
+
       personSummaryList.push({
         personId: person.id,
         personName,
         groupIds,
         groupColor,
+        ...tacticalData,
       });
 
       const personFailedCount = person.addresses.filter(
@@ -139,6 +188,7 @@ export const GET = withAuth(async (request, session) => {
           groupIds,
           hasPhoto,
           groupColor,
+          ...tacticalData,
         });
       }
 
@@ -159,6 +209,7 @@ export const GET = withAuth(async (request, session) => {
           groupIds,
           hasPhoto,
           groupColor,
+          ...tacticalData,
         });
       }
     }
@@ -337,6 +388,7 @@ export const GET = withAuth(async (request, session) => {
     return apiResponse.ok({
       markers,
       groups,
+      gangs: allGangs,
       ...(cases.length > 0 ? { cases } : {}),
       ...(unmappedSubjects.length > 0 ? { unmappedSubjects } : {}),
       pendingCount,
