@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import DeleteGroupButton from '@/components/DeleteGroupButton';
 import Navigation from '@/components/Navigation';
 import GroupMembersManager from '@/components/GroupMembersManager';
+import GroupSuspectedCases, { type SuspectedCaseItem } from '@/components/GroupSuspectedCases';
 import { getTranslations } from 'next-intl/server';
 import { getUserDisplayPreferences } from '@/lib/user-preferences';
 
@@ -70,13 +71,122 @@ export default async function GroupDetailsPage({
     }),
     getUserDisplayPreferences(session.user.id),
   ]);
-  const { nameOrder, nameDisplayFormat } = preferences;
 
   if (!group) {
     notFound();
   }
 
+  const { nameOrder, nameDisplayFormat, dateFormat } = preferences;
   const currentMembers = group.people.map((pg) => pg.person);
+  const currentMemberIds = currentMembers.map((m) => m.id);
+
+  // Fetch suspected cases where members of this group are involved or cases directly assigned to this group
+  const rawEvents = await prisma.event.findMany({
+    where: {
+      userId: session.user.id,
+      deletedAt: null,
+      OR: [
+        {
+          groups: {
+            some: {
+              groupId: id,
+            },
+          },
+        },
+        ...(currentMemberIds.length > 0
+          ? [
+              {
+                people: {
+                  some: {
+                    personId: { in: currentMemberIds },
+                    deletedAt: null,
+                  },
+                },
+              },
+            ]
+          : []),
+      ],
+    },
+    select: {
+      id: true,
+      title: true,
+      caseCode: true,
+      crimeType: true,
+      caseStatus: true,
+      status: true,
+      startDate: true,
+      endDate: true,
+      incidentTimeNotes: true,
+      damageAssessment: true,
+      groups: {
+        where: { groupId: id },
+        select: { groupId: true },
+      },
+      addresses: {
+        select: {
+          id: true,
+          streetLine1: true,
+          locality: true,
+          region: true,
+          country: true,
+        },
+      },
+      people: {
+        where: {
+          deletedAt: null,
+          person: { deletedAt: null },
+        },
+        select: {
+          id: true,
+          personId: true,
+          role: true,
+          involvementType: true,
+          verificationStatus: true,
+          confidence: true,
+          reasonForSuspicion: true,
+          alibi: true,
+          notes: true,
+          person: {
+            select: {
+              id: true,
+              name: true,
+              surname: true,
+              nickname: true,
+              displayNameOverride: true,
+              photo: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'asc' },
+      },
+    },
+    orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
+  });
+
+  const memberIdSet = new Set(currentMemberIds);
+
+  const suspectedCases: SuspectedCaseItem[] = rawEvents
+    .map((e) => {
+      const isDirectlyAssignedToGroup = e.groups.length > 0;
+      const involvedGroupMembers = e.people.filter((p) => memberIdSet.has(p.personId));
+
+      return {
+        id: e.id,
+        title: e.title,
+        caseCode: e.caseCode,
+        crimeType: e.crimeType,
+        caseStatus: e.caseStatus,
+        status: e.status,
+        startDate: e.startDate ? e.startDate.toISOString() : null,
+        endDate: e.endDate ? e.endDate.toISOString() : null,
+        incidentTimeNotes: e.incidentTimeNotes,
+        damageAssessment: e.damageAssessment,
+        isDirectlyAssignedToGroup,
+        addresses: e.addresses,
+        involvedGroupMembers,
+      };
+    })
+    .filter((c) => c.isDirectlyAssignedToGroup || c.involvedGroupMembers.length > 0);
 
   return (
     <div className="min-h-screen bg-background">
@@ -88,9 +198,9 @@ export default async function GroupDetailsPage({
         currentPath="/groups"
       />
 
-      <main className="max-w-4xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          <div className="mb-6">
+      <main className="max-w-5xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div className="px-4 py-6 sm:px-0 space-y-6">
+          <div>
             <Link
               href="/groups"
               className="text-primary hover:underline text-sm"
@@ -140,6 +250,19 @@ export default async function GroupDetailsPage({
                 nameDisplayFormat={nameDisplayFormat}
               />
             </div>
+          </div>
+
+          {/* Suspected Cases Section */}
+          <div className="bg-surface shadow rounded-lg p-6">
+            <GroupSuspectedCases
+              groupId={group.id}
+              groupName={group.name}
+              cases={suspectedCases}
+              groupMembers={currentMembers}
+              dateFormat={dateFormat}
+              nameOrder={nameOrder}
+              nameDisplayFormat={nameDisplayFormat}
+            />
           </div>
         </div>
       </main>

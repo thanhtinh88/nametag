@@ -13,6 +13,8 @@ export interface RenderContext {
   hoveredNodeId: string | null;
   getPhoto: (id: string) => PhotoCacheEntry | undefined;
   formatEdgeLabel?: (edge: SimulationEdge) => EdgeLabelParts;
+  highlightedNodeIds?: Set<string> | null;
+  inspectedNodeId?: string | null;
 }
 
 export interface EdgeLabelParts {
@@ -66,6 +68,14 @@ function drawEdge(rc: RenderContext, edge: SimulationEdge, highlighted: boolean)
   const tgt = edge.target as SimulationNode;
   if (src.x === undefined || tgt.x === undefined) return;
 
+  const isCaseHighlightActive = Boolean(rc.highlightedNodeIds);
+  const isEdgeRelated = isCaseHighlightActive
+    ? rc.highlightedNodeIds!.has(src.id) && rc.highlightedNodeIds!.has(tgt.id)
+    : false;
+  const isEdgePartial = isCaseHighlightActive
+    ? rc.highlightedNodeIds!.has(src.id) || rc.highlightedNodeIds!.has(tgt.id)
+    : false;
+
   rc.ctx.beginPath();
   if (edge.lineStyle === 'dashed') {
     rc.ctx.setLineDash([6, 4]);
@@ -82,13 +92,25 @@ function drawEdge(rc: RenderContext, edge: SimulationEdge, highlighted: boolean)
       ? 0.2
       : 0.45
     : 0.15;
-  rc.ctx.globalAlpha = highlighted ? 0.9 : baseAlpha;
-  rc.ctx.lineWidth = edge.verificationStatus === 'CONFIRMED' ? (highlighted ? 3.5 : 2.75) : 2;
+
+  let alpha = highlighted ? 0.9 : baseAlpha;
+  if (isCaseHighlightActive) {
+    if (isEdgeRelated) {
+      alpha = 0.95;
+    } else if (isEdgePartial) {
+      alpha = 0.25;
+    } else {
+      alpha = 0.05;
+    }
+  }
+
+  rc.ctx.globalAlpha = alpha;
+  rc.ctx.lineWidth = edge.verificationStatus === 'CONFIRMED' || isEdgeRelated ? (highlighted ? 3.5 : 2.75) : 2;
   rc.ctx.stroke();
   rc.ctx.setLineDash([]);
   rc.ctx.globalAlpha = 1;
 
-  if (highlighted) drawArrowMarker(rc, src, tgt, edge.color || '#999');
+  if (highlighted || isEdgeRelated) drawArrowMarker(rc, src, tgt, edge.color || '#999');
 }
 
 function drawArrowMarker(
@@ -149,6 +171,12 @@ function drawRoundedRectPath(
 
 function drawNode(rc: RenderContext, node: SimulationNode): void {
   if (node.x === undefined || node.y === undefined) return;
+  const isDimmed = rc.highlightedNodeIds ? !rc.highlightedNodeIds.has(node.id) : false;
+  if (isDimmed) {
+    rc.ctx.save();
+    rc.ctx.globalAlpha = 0.2;
+  }
+
   const r = nodeRadius(node, rc.isMobile);
   const isEventNode =
     node.kind === 'person' && (node.nodeType === 'event' || node.id.startsWith('event-'));
@@ -159,13 +187,14 @@ function drawNode(rc: RenderContext, node: SimulationNode): void {
     const x = node.x - w / 2;
     const y = node.y - h / 2;
     drawRoundedRectPath(rc.ctx, x, y, w, h, 4);
-    rc.ctx.fillStyle = getNodeFill(node, rc.isDark);
+    rc.ctx.fillStyle = isDimmed ? '#6b7280' : getNodeFill(node, rc.isDark);
     rc.ctx.fill();
     if (rc.lod !== 'dots') {
       rc.ctx.lineWidth = 2.5;
-      rc.ctx.strokeStyle = rc.isDark ? '#FDE68A' : '#92400E';
+      rc.ctx.strokeStyle = isDimmed ? '#4b5563' : (rc.isDark ? '#FDE68A' : '#92400E');
       rc.ctx.stroke();
     }
+    if (isDimmed) rc.ctx.restore();
     return;
   }
 
@@ -182,12 +211,12 @@ function drawNode(rc: RenderContext, node: SimulationNode): void {
   rc.ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
   rc.ctx.fillStyle = willDrawPhoto
     ? (rc.isDark ? '#000000' : '#ffffff')
-    : getNodeFill(node, rc.isDark);
+    : (isDimmed ? '#6b7280' : getNodeFill(node, rc.isDark));
   rc.ctx.fill();
 
   if (rc.lod !== 'dots') {
     rc.ctx.lineWidth = 2;
-    rc.ctx.strokeStyle = getNodeStroke(node, rc.isDark);
+    rc.ctx.strokeStyle = isDimmed ? '#4b5563' : getNodeStroke(node, rc.isDark);
     rc.ctx.stroke();
   }
 
@@ -199,11 +228,33 @@ function drawNode(rc: RenderContext, node: SimulationNode): void {
     rc.ctx.drawImage(photoImage, node.x - r, node.y - r, r * 2, r * 2);
     rc.ctx.restore();
   }
+
+  if (rc.inspectedNodeId && node.id === rc.inspectedNodeId) {
+    rc.ctx.save();
+    rc.ctx.beginPath();
+    rc.ctx.arc(node.x, node.y, r + 4, 0, Math.PI * 2);
+    rc.ctx.lineWidth = 3;
+    rc.ctx.strokeStyle = rc.isDark ? '#60a5fa' : '#2563eb';
+    rc.ctx.setLineDash([4, 2]);
+    rc.ctx.stroke();
+    rc.ctx.restore();
+  }
+
+  if (isDimmed) {
+    rc.ctx.restore();
+  }
 }
 
 function drawLabel(rc: RenderContext, node: SimulationNode, color: string): void {
   if (node.kind !== 'person') return;  // bubble labels are drawn inside drawBubble
   if (node.x === undefined || node.y === undefined) return;
+  const isDimmed = rc.highlightedNodeIds ? !rc.highlightedNodeIds.has(node.id) : false;
+  if (isDimmed) {
+    rc.ctx.save();
+    rc.ctx.globalAlpha = 0.2;
+    color = '#9ca3af';
+  }
+
   const isEventNode = node.nodeType === 'event' || node.id.startsWith('event-');
   const fontSize = nodeFontSize(node, rc.isMobile);
   rc.ctx.font = `${node.isCenter || isEventNode ? '600 ' : ''}${fontSize}px system-ui, -apple-system, sans-serif`;
@@ -212,11 +263,21 @@ function drawLabel(rc: RenderContext, node: SimulationNode, color: string): void
   rc.ctx.textBaseline = 'top';
   const dy = node.isCenter || isEventNode ? (rc.isMobile ? 14 : 17) : (rc.isMobile ? 12 : 14);
   rc.ctx.fillText(node.label, node.x, node.y + dy);
+
+  if (isDimmed) {
+    rc.ctx.restore();
+  }
 }
 
 function drawBubble(rc: RenderContext, node: SimulationNode): void {
   if (node.kind !== 'bubble') return;
   if (node.x === undefined || node.y === undefined) return;
+  const isDimmed = rc.highlightedNodeIds ? !rc.highlightedNodeIds.has(node.id) : false;
+  if (isDimmed) {
+    rc.ctx.save();
+    rc.ctx.globalAlpha = 0.15;
+  }
+
   const r = nodeRadius(node, rc.isMobile);
   const ringColor = getNodeStroke(node, rc.isDark);
   const tintColor = node.color ?? (rc.isDark ? '#9ca3af' : '#6b7280');
@@ -258,6 +319,10 @@ function drawBubble(rc: RenderContext, node: SimulationNode): void {
     const labelOnly = node.label.split(' · ')[0];
     rc.ctx.fillText(labelOnly, node.x, node.y + r + (rc.isMobile ? 5 : 6));
     rc.ctx.globalAlpha = 1;
+  }
+
+  if (isDimmed) {
+    rc.ctx.restore();
   }
 }
 

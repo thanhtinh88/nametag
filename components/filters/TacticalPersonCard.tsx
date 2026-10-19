@@ -19,6 +19,7 @@ export interface TacticalPersonCardProps {
   isSelected?: boolean;
   isCompact?: boolean;
   gangs?: Array<{ id: string; name: string }>;
+  extraActions?: React.ReactNode;
 }
 
 export default function TacticalPersonCard({
@@ -36,6 +37,7 @@ export default function TacticalPersonCard({
   isSelected = false,
   isCompact = false,
   gangs = [],
+  extraActions,
 }: TacticalPersonCardProps) {
   const mgmt = tacticalData?.managementLevel;
   const threat = tacticalData?.threatLevel;
@@ -98,24 +100,24 @@ export default function TacticalPersonCard({
 
               {/* Management Level Pill */}
               {mgmt === 'KEY_TARGET' && (
-                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/30">
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/30 whitespace-nowrap shrink-0">
                   TRỌNG ĐIỂM
                 </span>
               )}
               {mgmt === 'SURVEILLANCE' && (
-                <span className="px-1.5 py-0.2 rounded text-[10px] font-medium bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30">
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 whitespace-nowrap shrink-0">
                   GIÁM SÁT
                 </span>
               )}
 
               {/* Threat Level */}
               {threat === 'ARMED_DANGEROUS' && (
-                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-rose-600 text-white">
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-600 text-white whitespace-nowrap shrink-0">
                   VŨ KHÍ
                 </span>
               )}
               {threat === 'HIGH' && (
-                <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-orange-500/15 text-orange-600 dark:text-orange-400">
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-500/15 text-orange-600 dark:text-orange-400 whitespace-nowrap shrink-0">
                   NGUY HIỂM
                 </span>
               )}
@@ -139,7 +141,7 @@ export default function TacticalPersonCard({
               <div className="flex items-center gap-1.5 flex-wrap mt-1 text-[10px]">
                 {/* Gang membership */}
                 {matchedGangs.length > 0 && (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 whitespace-nowrap shrink-0">
                     <span>👥</span>
                     <span className="truncate max-w-[120px]">{matchedGangs[0].name}</span>
                   </span>
@@ -147,22 +149,22 @@ export default function TacticalPersonCard({
 
                 {/* Criminal Record */}
                 {hasRecord && (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 whitespace-nowrap shrink-0">
                     <span>⚖️</span>
-                    <span>{charges && charges.length > 0 ? charges[0] : 'Tiền án'}</span>
+                    <span className="whitespace-nowrap">{charges && charges.length > 0 ? charges[0] : 'Tiền án'}</span>
                   </span>
                 )}
 
                 {/* Suspicious Vehicle */}
                 {hasSuspiciousCar && (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-400">
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-400 whitespace-nowrap shrink-0">
                     <span>🚗 Xe nghi vấn</span>
                   </span>
                 )}
 
                 {/* Mule Bank Account */}
                 {hasMule && (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-600 dark:text-rose-400">
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-600 dark:text-rose-400 whitespace-nowrap shrink-0">
                     <span>💳 TK nghi vấn</span>
                   </span>
                 )}
@@ -173,7 +175,8 @@ export default function TacticalPersonCard({
 
         {/* Right: Action Buttons */}
         <div className="flex items-center gap-1 shrink-0 pt-0.5">
-          {onFocus && (
+          {extraActions}
+          {onFocus && !extraActions && (
             <button
               type="button"
               onClick={onFocus}

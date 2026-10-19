@@ -27,6 +27,8 @@ import ActiveTacticalBadges from './filters/ActiveTacticalBadges';
 import TacticalFilterDrawer from './filters/TacticalFilterDrawer';
 import TacticalSidebarContainer from './filters/TacticalSidebarContainer';
 import TacticalPersonCard from './filters/TacticalPersonCard';
+import TacticalSectionExpander from './filters/TacticalSectionExpander';
+import QuickLinkCasePopover from './map/QuickLinkCasePopover';
 import {
   DEFAULT_PERSON_FILTER_STATE,
   matchesPersonTacticalFilters,
@@ -83,6 +85,7 @@ export default function UnifiedNetworkGraph({
   const tTactical = useTranslations('tacticalFilters');
   const tPeople = useTranslations('people');
   const tEvents = useTranslations('events');
+  const tMap = useTranslations('map');
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const router = useRouter();
 
@@ -102,8 +105,12 @@ export default function UnifiedNetworkGraph({
   const pinnedPositionsRef = useRef<Record<string, { x: number; y: number }>>({});
   const [contextMenu, setContextMenu] = useState<GraphContextMenuState | null>(null);
   const [graphData, setGraphData] = useState<{ nodes: RawGraphPerson[]; edges: SimulationEdge[] } | null>(null);
-  const [rosterOpen, setRosterOpen] = useState<boolean>(false);
+  const [rosterOpen, setRosterOpen] = useState<boolean>(true);
+  const [casesExpanded, setCasesExpanded] = useState<boolean>(true);
+  const [subjectsExpanded, setSubjectsExpanded] = useState<boolean>(true);
   const [rosterQuery, setRosterQuery] = useState<string>('');
+  const [inspectedPersonId, setInspectedPersonId] = useState<string | null>(null);
+  const [linkingTarget, setLinkingTarget] = useState<{ personId: string; personName: string } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -152,6 +159,7 @@ export default function UnifiedNetworkGraph({
 
   const handleClearFilters = useCallback(() => {
     setSelectedGroupFilters([]);
+    setSelectedCaseId('');
     setIncludeMode('or');
     setTacticalFilters({
       ...DEFAULT_PERSON_FILTER_STATE,
@@ -429,9 +437,81 @@ export default function UnifiedNetworkGraph({
     };
   }, [contextMenu]);
 
+  const activeCaseId = selectedCaseId || tacticalFilters.caseId || '';
+
+  const handleSelectCase = useCallback(
+    (eventId: string) => {
+      const nextId = activeCaseId === eventId ? '' : eventId;
+      setSelectedCaseId(nextId);
+      setTacticalFilters((prev) => ({ ...prev, caseId: nextId }));
+      setInspectedPersonId(null);
+    },
+    [activeCaseId],
+  );
+
+  const highlightedNodeIds = useMemo<Set<string> | null>(() => {
+    if (!activeCaseId) return null;
+    const set = new Set<string>();
+    set.add(activeCaseId);
+    set.add(`event-${activeCaseId}`);
+
+    if (graphData?.nodes) {
+      for (const node of graphData.nodes) {
+        if (node.nodeType === 'event') continue;
+        if (node.caseLinks && node.caseLinks.some((l) => l.eventId === activeCaseId)) {
+          set.add(node.id);
+        }
+      }
+    }
+
+    if (edgesRef.current) {
+      for (const edge of edgesRef.current) {
+        const sId = typeof edge.source === 'object' ? edge.source.id : edge.source;
+        const tId = typeof edge.target === 'object' ? edge.target.id : edge.target;
+        if (sId === activeCaseId || sId === `event-${activeCaseId}`) {
+          set.add(tId);
+        } else if (tId === activeCaseId || tId === `event-${activeCaseId}`) {
+          set.add(sId);
+        }
+      }
+    }
+
+    if (inspectedPersonId) {
+      set.add(inspectedPersonId);
+    }
+
+    return set;
+  }, [activeCaseId, graphData, inspectedPersonId]);
+
+  const highlightedNodeIdsRef = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    highlightedNodeIdsRef.current = highlightedNodeIds;
+    requestPaint();
+  }, [highlightedNodeIds, requestPaint]);
+
+  const inspectedPersonIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    inspectedPersonIdRef.current = inspectedPersonId;
+    requestPaint();
+  }, [inspectedPersonId, requestPaint]);
+
+  const selectedCaseNode = useMemo(() => {
+    if (!activeCaseId) return null;
+    return (
+      graphData?.nodes.find((n) => n.id === activeCaseId || n.id === `event-${activeCaseId}`) ??
+      null
+    );
+  }, [activeCaseId, graphData]);
+
+  const selectedCaseTitle = useMemo(() => {
+    if (selectedCaseNode) return selectedCaseNode.label.replace(/^📅\s*/, '');
+    const found = events?.find((e) => e.id === activeCaseId);
+    return found?.title || 'Vụ án';
+  }, [selectedCaseNode, events, activeCaseId]);
+
   // Items for the Subject & Case Roster Sidebar
   const rosterItems = useMemo(() => {
-    if (!graphData?.nodes) return { cases: [], persons: [] };
+    if (!graphData?.nodes) return { cases: [], persons: [], linkedPersons: [], otherPersons: [] };
     const q = rosterQuery.trim().toLowerCase();
 
     const effectiveFilters = {
@@ -440,17 +520,18 @@ export default function UnifiedNetworkGraph({
       excludeGroupIds,
       groupMatchOperator: includeMode,
     };
+    const filtersWithoutCase = { ...effectiveFilters, caseId: undefined };
 
     const cases: RawGraphPerson[] = [];
     const persons: RawGraphPerson[] = [];
+    const linkedPersons: RawGraphPerson[] = [];
+    const otherPersons: RawGraphPerson[] = [];
 
     for (const node of graphData.nodes) {
       if (node.id.startsWith('user-')) continue;
       if (q && !node.label.toLowerCase().includes(q)) continue;
 
       if (node.nodeType === 'event' || node.id.startsWith('event-')) {
-        const evId = node.id.replace(/^event-/, '');
-        if (effectiveFilters.caseId && evId !== effectiveFilters.caseId) continue;
         if (
           effectiveFilters.activeCasesOnly &&
           node.eventStatus &&
@@ -461,16 +542,113 @@ export default function UnifiedNetworkGraph({
         }
         cases.push(node);
       } else {
-        if (!matchesPersonTacticalFilters(node, effectiveFilters)) continue;
-        persons.push(node);
+        if (activeCaseId) {
+          const isLinked = Boolean(
+            node.caseLinks && node.caseLinks.some((l) => l.eventId === activeCaseId)
+          );
+          if (isLinked) {
+            if (matchesPersonTacticalFilters(node, filtersWithoutCase)) {
+              linkedPersons.push(node);
+            }
+          } else {
+            if (matchesPersonTacticalFilters(node, filtersWithoutCase)) {
+              otherPersons.push(node);
+            }
+          }
+        } else {
+          if (!matchesPersonTacticalFilters(node, effectiveFilters)) continue;
+          persons.push(node);
+        }
       }
     }
 
     cases.sort((a, b) => a.label.localeCompare(b.label));
     persons.sort((a, b) => a.label.localeCompare(b.label));
+    linkedPersons.sort((a, b) => a.label.localeCompare(b.label));
+    otherPersons.sort((a, b) => a.label.localeCompare(b.label));
 
-    return { cases, persons };
-  }, [graphData, rosterQuery, tacticalFilters, includeGroupIds, excludeGroupIds, includeMode]);
+    return { cases, persons, linkedPersons, otherPersons };
+  }, [
+    graphData,
+    rosterQuery,
+    tacticalFilters,
+    includeGroupIds,
+    excludeGroupIds,
+    includeMode,
+    activeCaseId,
+  ]);
+
+  const totalRosterCount = useMemo(() => {
+    return activeCaseId
+      ? rosterItems.cases.length + rosterItems.linkedPersons.length + rosterItems.otherPersons.length
+      : rosterItems.cases.length + rosterItems.persons.length;
+  }, [activeCaseId, rosterItems]);
+
+  const fitNodesInGraph = useCallback(
+    (targetNodeIds: Set<string>) => {
+      const canvas = canvasRef.current;
+      const zoomBehavior = zoomBehaviorRef.current;
+      if (!canvas || !zoomBehavior || targetNodeIds.size === 0) return;
+
+      const matchedNodes = nodesRef.current.filter(
+        (n) => targetNodeIds.has(n.id) && n.x !== undefined && n.y !== undefined
+      );
+      if (matchedNodes.length === 0) return;
+
+      let minX = Infinity;
+      let maxX = -Infinity;
+      let minY = Infinity;
+      let maxY = -Infinity;
+
+      for (const n of matchedNodes) {
+        const nx = n.x ?? 0;
+        const ny = n.y ?? 0;
+        const r = n.kind === 'bubble' ? 40 : 25;
+        minX = Math.min(minX, nx - r);
+        maxX = Math.max(maxX, nx + r);
+        minY = Math.min(minY, ny - r);
+        maxY = Math.max(maxY, ny + r);
+      }
+
+      const rect = canvas.getBoundingClientRect();
+      const boxW = Math.max(maxX - minX, 120);
+      const boxH = Math.max(maxY - minY, 120);
+
+      const paddingLeft = rosterOpen ? 320 : 80;
+      const paddingRight = 80;
+      const paddingTop = 80;
+      const paddingBottom = 80;
+
+      const availW = Math.max(rect.width - paddingLeft - paddingRight, 100);
+      const availH = Math.max(rect.height - paddingTop - paddingBottom, 100);
+
+      const scale = Math.min(availW / boxW, availH / boxH, 1.5);
+      const k = Math.max(scale, 0.4);
+
+      const centerX = (minX + maxX) / 2;
+      const centerY = (minY + maxY) / 2;
+
+      const targetX = rect.width / 2 + (rosterOpen ? 115 : 0) - centerX * k;
+      const targetY = rect.height / 2 - centerY * k;
+
+      select(canvas)
+        .transition()
+        .duration(750)
+        .call(
+          zoomBehavior.transform,
+          zoomIdentity.translate(targetX, targetY).scale(k)
+        );
+    },
+    [rosterOpen]
+  );
+
+  useEffect(() => {
+    if (!activeCaseId || !highlightedNodeIds || highlightedNodeIds.size === 0) return;
+    const timer = setTimeout(() => {
+      fitNodesInGraph(highlightedNodeIds);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [activeCaseId, highlightedNodeIds, fitNodesInGraph]);
 
   const focusNodeInGraph = useCallback(
     (nodeId: string) => {
@@ -505,6 +683,93 @@ export default function UnifiedNetworkGraph({
       }
     },
     [graphData, requestPaint]
+  );
+
+  const toggleInspectPerson = useCallback(
+    (personId: string) => {
+      setInspectedPersonId((prev) => {
+        const next = prev === personId ? null : personId;
+        if (next) {
+          focusNodeInGraph(personId);
+        }
+        return next;
+      });
+    },
+    [focusNodeInGraph],
+  );
+
+  const handlePersonLinked = useCallback(
+    (linkData: {
+      personId: string;
+      involvementType: string;
+      verificationStatus: string;
+      role?: string;
+    }) => {
+      if (!activeCaseId) return;
+      const newLink = {
+        eventId: activeCaseId,
+        eventTitle: selectedCaseTitle,
+        eventStatus: selectedCaseNode?.eventStatus || 'ONGOING',
+        role: linkData.role || linkData.involvementType,
+        involvementType: linkData.involvementType,
+        verificationStatus: linkData.verificationStatus,
+        confidence: null,
+      };
+
+      setGraphData((prev) => {
+        if (!prev) return prev;
+        const newNodes = prev.nodes.map((n) => {
+          if (n.id === linkData.personId) {
+            const existingLinks = n.caseLinks || [];
+            return {
+              ...n,
+              caseLinks: [...existingLinks.filter((l) => l.eventId !== activeCaseId), newLink],
+            };
+          }
+          return n;
+        });
+
+        const caseNodeId = `event-${activeCaseId}`;
+        const hasEdge = prev.edges.some(
+          (e) =>
+            ((typeof e.source === 'object' ? e.source.id : e.source) === linkData.personId &&
+              (typeof e.target === 'object' ? e.target.id : e.target) === caseNodeId) ||
+            ((typeof e.source === 'object' ? e.source.id : e.source) === caseNodeId &&
+              (typeof e.target === 'object' ? e.target.id : e.target) === linkData.personId),
+        );
+
+        let newEdges = prev.edges;
+        if (!hasEdge) {
+          const personNode = prev.nodes.find((n) => n.id === linkData.personId);
+          const isConfirmed = linkData.verificationStatus === 'CONFIRMED';
+          const isRuledOut = linkData.verificationStatus === 'RULED_OUT';
+          const edgeColor = isRuledOut ? '#9ca3af' : isConfirmed ? '#ef4444' : '#f97316';
+          const lineStyle = isRuledOut ? 'dotted' : isConfirmed ? 'solid' : 'dashed';
+
+          newEdges = [
+            ...prev.edges,
+            {
+              source: linkData.personId,
+              target: caseNodeId,
+              type: linkData.involvementType,
+              involvementType: linkData.involvementType,
+              verificationStatus: linkData.verificationStatus,
+              color: edgeColor,
+              lineStyle,
+              sourceLabel: personNode?.label ?? '',
+              targetLabel: selectedCaseTitle,
+            },
+          ];
+        }
+
+        return { nodes: newNodes, edges: newEdges };
+      });
+
+      setLinkingTarget(null);
+      setInspectedPersonId(null);
+      requestPaint();
+    },
+    [activeCaseId, selectedCaseTitle, selectedCaseNode, requestPaint],
   );
 
   const formatEdgeLabel = useCallback((edge: SimulationEdge) => {
@@ -597,6 +862,8 @@ export default function UnifiedNetworkGraph({
         hoveredNodeId: touchSelectedNodeIdRef.current ?? hoveredNodeIdRef.current,
         getPhoto: getCachedPhoto,
         formatEdgeLabel,
+        highlightedNodeIds: highlightedNodeIdsRef.current,
+        inspectedNodeId: inspectedPersonIdRef.current,
       },
       nodesRef.current,
       edgesRef.current,
@@ -753,8 +1020,6 @@ export default function UnifiedNetworkGraph({
     const filteredPeople = incomingPeople.filter((p) => {
       if (p.isCenter || p.id.startsWith('user-')) return true;
       if (p.nodeType === 'event' || p.id.startsWith('event-')) {
-        const evId = p.id.replace(/^event-/, '');
-        if (effectiveFilters.caseId && evId !== effectiveFilters.caseId) return false;
         if (
           effectiveFilters.activeCasesOnly &&
           p.eventStatus &&
@@ -765,7 +1030,12 @@ export default function UnifiedNetworkGraph({
         }
         return true;
       }
-      return matchesPersonTacticalFilters(p, effectiveFilters);
+      // For persons, apply all filters except caseId so non-case persons remain
+      // in the simulation graph and get grayed out by canvas-renderer!
+      const simFilters = effectiveFilters.caseId
+        ? { ...effectiveFilters, caseId: '' }
+        : effectiveFilters;
+      return matchesPersonTacticalFilters(p, simFilters);
     });
 
     // If no groups prop, we're not on the dashboard — skip bubble logic.
@@ -861,10 +1131,7 @@ export default function UnifiedNetworkGraph({
       url.searchParams.set('groupMatchOperator', includeMode);
       if (includeGroupIds.length > 0) url.searchParams.set('includeGroupIds', includeGroupIds.join(','));
       if (excludeGroupIds.length > 0) url.searchParams.set('excludeGroupIds', excludeGroupIds.join(','));
-      if (selectedCaseId) {
-        url.searchParams.set('caseId', selectedCaseId);
-        url.searchParams.set('includeHop', includeHop ? 'true' : 'false');
-      }
+
       if (activeCasesOnly) url.searchParams.set('includeSolvedCases', 'false');
       if (!showRuledOut) url.searchParams.set('includeRuledOut', 'false');
       if (hideUserNode) url.searchParams.set('hideUserNode', 'true');
@@ -902,8 +1169,6 @@ export default function UnifiedNetworkGraph({
     includeMode,
     includeGroupIds,
     excludeGroupIds,
-    selectedCaseId,
-    includeHop,
     activeCasesOnly,
     showRuledOut,
     hideUserNode,
@@ -945,7 +1210,12 @@ export default function UnifiedNetworkGraph({
       const tree = quadtreeRef.current;
       if (!tree) return undefined;
       const [gx, gy] = toGraphCoords(clientX, clientY);
-      return findNodeAtPoint(tree, gx, gy, isMobile ? 28 : 22);
+      const found = findNodeAtPoint(tree, gx, gy, isMobile ? 28 : 22);
+      if (!found) return undefined;
+      if (highlightedNodeIdsRef.current && !highlightedNodeIdsRef.current.has(found.id)) {
+        return undefined;
+      }
+      return found;
     };
 
     const zoomBehavior = zoom<HTMLCanvasElement, unknown>()
@@ -1240,7 +1510,7 @@ export default function UnifiedNetworkGraph({
           >
             <span>📋 {t('rosterToggle')}</span>
             <span className="px-1.5 py-0.5 rounded-full bg-primary/15 text-primary font-semibold">
-              {rosterItems.persons.length + rosterItems.cases.length}
+              {totalRosterCount}
             </span>
             {activeFilterCount > 0 && (
               <span className="px-1.5 py-0.5 rounded-full bg-primary text-white font-semibold">
@@ -1255,12 +1525,14 @@ export default function UnifiedNetworkGraph({
           isOpen={rosterOpen}
           onClose={() => setRosterOpen(false)}
           title={t('rosterTitle')}
-          rosterCount={rosterItems.persons.length + rosterItems.cases.length}
+          rosterCount={totalRosterCount}
           activeFilterCount={activeFilterCount}
           onClearFilters={handleClearFilters}
           filtersOpen={filtersOpen}
           onToggleFilters={() => setFiltersOpen((prev) => !prev)}
-          storageKeyPrefix="graph-tactical-sidebar"
+          storageKeyPrefix="graph-tactical-sidebar-v2"
+          defaultWidth={310}
+          minWidth={280}
           searchBar={
             <input
               type="search"
@@ -1382,85 +1654,255 @@ export default function UnifiedNetworkGraph({
           }
           rosterContent={
             <div className="divide-y divide-border/60 text-xs">
-              {/* Cases section */}
+              {/* Section 1: Cases (Topmost) */}
               {rosterItems.cases.length > 0 && (
-                <div className="p-2.5">
-                  <div className="flex items-center justify-between px-1.5 mb-1.5">
-                    <span className="font-semibold text-muted">
-                      📁 {t('rosterCases')}
-                    </span>
-                    <span className="px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 font-semibold text-[11px]">
-                      {rosterItems.cases.length}
-                    </span>
-                  </div>
-                  <ul className="space-y-1.5">
+                <TacticalSectionExpander
+                  title={t('rosterCases')}
+                  icon="📁"
+                  count={rosterItems.cases.length}
+                  isExpanded={casesExpanded}
+                  onToggle={() => setCasesExpanded((prev) => !prev)}
+                  badgeColor="bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                  emptyMessage={t('noResults')}
+                >
+                  <div className="space-y-1.5">
                     {rosterItems.cases.map((ev) => {
                       const eventId = ev.id.replace(/^event-/, '');
-                      const isSelected = selectedCaseId === eventId;
+                      const isSelected = activeCaseId === eventId;
                       return (
-                        <li key={ev.id} className="rounded-xl hover:bg-surface-elevated transition-colors p-2 border border-border/50 bg-surface">
+                        <div
+                          key={ev.id}
+                          className={`rounded-xl transition-all p-2 border text-xs ${
+                            isSelected
+                              ? 'bg-primary/10 border-primary ring-1 ring-primary/40'
+                              : 'bg-surface hover:bg-surface-elevated border-border/50'
+                          }`}
+                        >
                           <div className="flex items-center justify-between gap-2">
                             <button
                               type="button"
-                              onClick={() => focusNodeInGraph(ev.id)}
-                              className="min-w-0 flex-1 text-left flex items-center gap-2 group cursor-pointer"
-                              title={t('focusInGraph')}
+                              onClick={() => {
+                                handleSelectCase(eventId);
+                                focusNodeInGraph(ev.id);
+                              }}
+                              className="min-w-0 flex-1 text-left flex items-start gap-2 cursor-pointer group"
+                              title={isSelected ? 'Bỏ chọn vụ án' : t('focusInGraph')}
                             >
-                              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
-                              <span className="font-medium text-foreground truncate group-hover:text-primary transition-colors">
-                                {ev.label.replace(/^📅\s*/, '')}
-                              </span>
+                              <span
+                                className={`mt-1 w-2.5 h-2.5 rounded-full shrink-0 border ${
+                                  isSelected
+                                    ? 'bg-primary border-primary'
+                                    : 'bg-amber-500 border-amber-600/40'
+                                }`}
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div
+                                  className={`font-semibold transition-colors truncate ${
+                                    isSelected
+                                      ? 'text-primary'
+                                      : 'text-foreground group-hover:text-primary'
+                                  }`}
+                                >
+                                  {ev.label.replace(/^📅\s*/, '')}
+                                </div>
+                                {ev.eventStatus && (
+                                  <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-muted">
+                                    <span className="px-1 py-0.2 rounded bg-surface-elevated border border-border/60">
+                                      {ev.eventStatus}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
                             </button>
                             <div className="flex items-center gap-1 shrink-0">
-                              {events && (
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedCaseId((prev) => (prev === eventId ? '' : eventId))}
-                                  className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
-                                    isSelected
-                                      ? 'bg-primary text-white'
-                                      : 'bg-surface-elevated text-muted hover:text-foreground'
-                                  }`}
-                                  title={t('contextMenu.focusCase')}
-                                >
-                                  {isSelected ? '✓' : '🎯'}
-                                </button>
-                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleSelectCase(eventId)}
+                                className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors ${
+                                  isSelected
+                                    ? 'bg-primary text-white shadow-sm'
+                                    : 'bg-surface-elevated hover:bg-primary/15 text-muted hover:text-primary border border-border/50'
+                                }`}
+                                title={isSelected ? 'Đang lọc vụ án (nhấp để bỏ lọc)' : 'Lọc theo vụ án'}
+                              >
+                                {isSelected ? '✓ Đang chọn' : 'Chọn'}
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => router.push(`/events/${eventId}`)}
-                                className="px-1.5 py-0.5 rounded text-[10px] text-muted hover:text-foreground bg-surface-elevated hover:bg-surface transition-colors"
+                                className="p-1 rounded-md text-muted hover:text-foreground hover:bg-surface-elevated transition-colors"
                                 title={t('contextMenu.viewDetails')}
                               >
-                                →
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
                               </button>
                             </div>
                           </div>
-                          {ev.eventStatus && (
-                            <div className="pl-4.5 text-[10px] text-muted truncate mt-0.5">
-                              {ev.eventStatus}
-                            </div>
-                          )}
-                        </li>
+                        </div>
                       );
                     })}
-                  </ul>
-                </div>
+                  </div>
+                </TacticalSectionExpander>
               )}
 
-              {/* Persons section */}
-              <div className="p-2.5">
-                <div className="flex items-center justify-between px-1.5 mb-1.5">
-                  <span className="font-semibold text-muted">
-                    👤 {t('rosterPersons')}
-                  </span>
-                  <span className="px-1.5 py-0.5 rounded-full bg-primary/15 text-primary font-semibold text-[11px]">
-                    {rosterItems.persons.length}
-                  </span>
-                </div>
-                {rosterItems.persons.length === 0 ? (
-                  <p className="px-1.5 py-2 text-muted italic">{t('rosterEmpty')}</p>
-                ) : (
+              {/* Section 2: Persons */}
+              {activeCaseId ? (
+                <TacticalSectionExpander
+                  title={t('rosterPersons')}
+                  icon="👤"
+                  count={rosterItems.linkedPersons.length + rosterItems.otherPersons.length}
+                  isExpanded={subjectsExpanded}
+                  onToggle={() => setSubjectsExpanded((prev) => !prev)}
+                  badgeColor="bg-primary/15 text-primary"
+                  emptyMessage={t('rosterEmpty')}
+                >
+                  <div className="space-y-3">
+                    {/* Nhóm 1: Đối tượng liên quan vụ án */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between px-1 py-1 text-[11px] font-semibold text-rose-600 dark:text-rose-400">
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                          <span>{tMap('linkedSubjectsSection')}</span>
+                        </span>
+                        <span className="px-1.5 py-0.2 rounded-full bg-rose-500/15 text-[10px] border border-rose-500/30">
+                          {rosterItems.linkedPersons.length}
+                        </span>
+                      </div>
+
+                      {rosterItems.linkedPersons.length === 0 ? (
+                        <p className="px-2 py-2 text-muted text-[11px] italic">
+                          {t('rosterEmpty')}
+                        </p>
+                      ) : (
+                        rosterItems.linkedPersons.map((person) => {
+                          const caseLink = person.caseLinks?.find((l) => l.eventId === activeCaseId);
+                          let invLabel = caseLink?.role || caseLink?.involvementType;
+                          if (caseLink?.involvementType && invMap[caseLink.involvementType]) {
+                            invLabel = invMap[caseLink.involvementType];
+                          }
+                          return (
+                            <TacticalPersonCard
+                              key={person.id}
+                              id={person.id}
+                              name={person.label}
+                              photoUrl={person.photo ? `/api/photos/${person.id}` : null}
+                              hasPhoto={Boolean(person.photo)}
+                              color={person.colors?.[0] ?? '#3b82f6'}
+                              tacticalData={person}
+                              subtitle={invLabel ? `Vai trò: ${invLabel}` : null}
+                              onFocus={() => focusNodeInGraph(person.id)}
+                              focusTitle={t('focusInGraph')}
+                              detailsHref={`/people/${person.id}`}
+                              detailsTitle={t('contextMenu.viewDetails')}
+                              gangs={gangs}
+                            />
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {/* Nhóm 2: Đối tượng khác trong diện soát xét */}
+                    <div className="pt-2 border-t border-border/50 space-y-1.5">
+                      <div className="flex items-center justify-between px-1 py-1 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-slate-400" />
+                          <span>{tMap('otherSubjectsSection')}</span>
+                        </span>
+                        <span className="px-1.5 py-0.2 rounded-full bg-surface-elevated text-muted text-[10px] border border-border">
+                          {rosterItems.otherPersons.length}
+                        </span>
+                      </div>
+
+                      {rosterItems.otherPersons.length === 0 ? (
+                        <p className="px-2 py-2 text-muted text-[11px] italic">
+                          Không có đối tượng nào khác khớp bộ lọc.
+                        </p>
+                      ) : (
+                        rosterItems.otherPersons.map((person) => {
+                          const isInspected = inspectedPersonId === person.id;
+                          return (
+                            <div
+                              key={person.id}
+                              className={`rounded-xl transition-all ${
+                                isInspected
+                                  ? 'ring-2 ring-primary bg-primary/5 dark:bg-primary/10 shadow-sm'
+                                  : ''
+                              }`}
+                            >
+                              <TacticalPersonCard
+                                id={person.id}
+                                name={person.label}
+                                photoUrl={person.photo ? `/api/photos/${person.id}` : null}
+                                hasPhoto={Boolean(person.photo)}
+                                color={isInspected ? '#2563eb' : (person.colors?.[0] ?? '#64748b')}
+                                tacticalData={person}
+                                onFocus={() => toggleInspectPerson(person.id)}
+                                focusTitle={
+                                  isInspected
+                                    ? 'Đang soát xét trên đồ thị (nhấp để tắt)'
+                                    : 'Soát xét trên đồ thị'
+                                }
+                                detailsHref={`/people/${person.id}`}
+                                detailsTitle={t('contextMenu.viewDetails')}
+                                gangs={gangs}
+                                extraActions={
+                                  <div className="flex flex-col items-end gap-1 shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleInspectPerson(person.id);
+                                      }}
+                                      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold transition-colors whitespace-nowrap shadow-2xs ${
+                                        isInspected
+                                          ? 'bg-primary text-white shadow-xs'
+                                          : 'bg-surface hover:bg-surface-elevated text-foreground border border-border'
+                                      }`}
+                                      title={
+                                        isInspected
+                                          ? 'Đang soát xét trên đồ thị (nhấp để tắt)'
+                                          : 'Bật/tắt làm sáng và hiển thị liên kết của đối tượng này trên đồ thị'
+                                      }
+                                    >
+                                      <span>👁️</span>
+                                      <span>{isInspected ? 'Đang xem' : 'Soát xét'}</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setLinkingTarget({
+                                          personId: person.id,
+                                          personName: person.label,
+                                        });
+                                      }}
+                                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 transition-colors whitespace-nowrap shadow-2xs"
+                                      title={tMap('quickLinkBtn')}
+                                    >
+                                      <span>➕</span>
+                                      <span>Vào vụ án</span>
+                                    </button>
+                                  </div>
+                                }
+                              />
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                </TacticalSectionExpander>
+              ) : (
+                <TacticalSectionExpander
+                  title={t('rosterPersons')}
+                  icon="👤"
+                  count={rosterItems.persons.length}
+                  isExpanded={subjectsExpanded}
+                  onToggle={() => setSubjectsExpanded((prev) => !prev)}
+                  badgeColor="bg-primary/15 text-primary"
+                  emptyMessage={t('rosterEmpty')}
+                >
                   <div className="space-y-1.5">
                     {rosterItems.persons.map((person) => (
                       <TacticalPersonCard
@@ -1479,8 +1921,8 @@ export default function UnifiedNetworkGraph({
                       />
                     ))}
                   </div>
-                )}
-              </div>
+                </TacticalSectionExpander>
+              )}
             </div>
           }
         />
@@ -1803,6 +2245,18 @@ export default function UnifiedNetworkGraph({
             </svg>
           </button>
         </div>
+
+        {linkingTarget && activeCaseId && (
+          <QuickLinkCasePopover
+            isOpen={Boolean(linkingTarget)}
+            onClose={() => setLinkingTarget(null)}
+            personId={linkingTarget.personId}
+            personName={linkingTarget.personName}
+            caseId={activeCaseId}
+            caseTitle={selectedCaseTitle}
+            onLinked={handlePersonLinked}
+          />
+        )}
       </div>
     </div>
   );

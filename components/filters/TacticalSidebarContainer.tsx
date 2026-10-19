@@ -19,6 +19,8 @@ export interface TacticalSidebarContainerProps {
   rosterContent: React.ReactNode;
   extraHeaderActions?: React.ReactNode;
   storageKeyPrefix?: string;
+  defaultWidth?: number;
+  minWidth?: number;
 }
 
 export default function TacticalSidebarContainer({
@@ -37,17 +39,19 @@ export default function TacticalSidebarContainer({
   rosterContent,
   extraHeaderActions,
   storageKeyPrefix = 'tactical-sidebar',
+  defaultWidth = 360,
+  minWidth = 280,
 }: TacticalSidebarContainerProps) {
   const t = useTranslations('tacticalFilters');
 
   // Width management
   const [width, setWidth] = useState<number>(() => {
-    if (typeof window === 'undefined') return 380;
+    if (typeof window === 'undefined') return defaultWidth;
     try {
       const saved = localStorage.getItem(`${storageKeyPrefix}-width`);
-      return saved ? Math.min(Math.max(parseInt(saved, 10), 320), 720) : 380;
+      return saved ? Math.min(Math.max(parseInt(saved, 10), minWidth), 720) : defaultWidth;
     } catch {
-      return 380;
+      return defaultWidth;
     }
   });
 
@@ -80,7 +84,7 @@ export default function TacticalSidebarContainer({
       if (!isDraggingRef.current) return;
       const delta = moveEvent.clientX - startXRef.current;
       const maxWidth = Math.min(window.innerWidth * 0.6, 750);
-      const newWidth = Math.min(Math.max(startWidthRef.current + delta, 320), maxWidth);
+      const newWidth = Math.min(Math.max(startWidthRef.current + delta, minWidth), maxWidth);
       setWidth(newWidth);
     };
 
@@ -99,7 +103,7 @@ export default function TacticalSidebarContainer({
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
-  }, [width, storageKeyPrefix]);
+  }, [width, storageKeyPrefix, minWidth]);
 
   const toggleLayoutMode = useCallback(() => {
     setLayoutMode((prev) => {
@@ -113,13 +117,13 @@ export default function TacticalSidebarContainer({
     });
   }, [storageKeyPrefix]);
 
-  // Width presets: cycle 360 -> 480 -> 600 -> 360
+  // Width presets: cycle base -> medium -> large -> base
   const cycleWidthPreset = useCallback(() => {
     setWidth((prev) => {
-      let next = 360;
-      if (prev < 420) next = 480;
-      else if (prev < 550) next = 600;
-      else next = 360;
+      let next = defaultWidth;
+      if (prev < defaultWidth + 60) next = defaultWidth + 120;
+      else if (prev < defaultWidth + 180) next = defaultWidth + 240;
+      else next = defaultWidth;
       try {
         localStorage.setItem(`${storageKeyPrefix}-width`, String(next));
       } catch {
@@ -127,7 +131,7 @@ export default function TacticalSidebarContainer({
       }
       return next;
     });
-  }, [storageKeyPrefix]);
+  }, [storageKeyPrefix, defaultWidth]);
 
   if (!isOpen) return null;
 

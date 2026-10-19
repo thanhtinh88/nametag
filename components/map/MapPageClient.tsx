@@ -11,6 +11,7 @@ import {
   distinctCountries,
   distinctRegions,
   filterMarkers,
+  haversineDistanceKm,
   type MapFilterState,
 } from '@/lib/map/filter-markers';
 import {
@@ -23,6 +24,8 @@ import TacticalPersonCard from '@/components/filters/TacticalPersonCard';
 import TacticalQuickChips from '@/components/filters/TacticalQuickChips';
 import ActiveTacticalBadges from '@/components/filters/ActiveTacticalBadges';
 import TacticalFilterDrawer from '@/components/filters/TacticalFilterDrawer';
+import TacticalSectionExpander from '@/components/filters/TacticalSectionExpander';
+import QuickLinkCasePopover from './QuickLinkCasePopover';
 
 const MapView = dynamic(() => import('./MapView'), { ssr: false });
 
@@ -37,6 +40,13 @@ function MapPageInner() {
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [unlocatedOpen, setUnlocatedOpen] = useState(false);
   const [rosterOpen, setRosterOpen] = useState(true);
+  const [casesExpanded, setCasesExpanded] = useState<boolean>(true);
+  const [subjectsExpanded, setSubjectsExpanded] = useState<boolean>(true);
+  const [linkingTarget, setLinkingTarget] = useState<{
+    personId: string;
+    personName: string;
+    distanceText?: string | null;
+  } | null>(null);
   const [focusRequest, setFocusRequest] = useState<{ id: string; seq: number } | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
@@ -77,6 +87,8 @@ function MapPageInner() {
   );
   const hasActiveFilters = countActiveTacticalFilters(filters) > 0 || Boolean(filters.query);
   const focusId = searchParams.get('focus');
+  const [inspectedPersonId, setInspectedPersonId] = useState<string | null>(null);
+  const [highlightedPersonId, setHighlightedPersonId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -98,6 +110,14 @@ function MapPageInner() {
 
   const handleFiltersChange = useCallback(
     (next: MapFilterState) => {
+      if (next.caseId !== filters.caseId) {
+        setInspectedPersonId(null);
+        setHighlightedPersonId(null);
+      }
+      // When a case is actively selected, personId must not restrict the case's subjects
+      if (next.caseId) {
+        next.personId = '';
+      }
       const params = new URLSearchParams();
       if (next.query) params.set('q', next.query);
       if (next.groupId) params.set('group', next.groupId);
@@ -130,12 +150,35 @@ function MapPageInner() {
       const qs = params.toString();
       router.replace(qs ? `/map?${qs}` : '/map', { scroll: false });
     },
-    [router]
+    [router, filters.caseId]
   );
 
   const visibleMarkers = useMemo(
-    () => (data ? filterMarkers(data.markers, filters) : []),
-    [data, filters]
+    () => (data ? filterMarkers(data.markers, { ...filters, inspectedPersonId }) : []),
+    [data, filters, inspectedPersonId]
+  );
+
+  const filteredCases = useMemo(() => {
+    if (!data?.cases) return [];
+    let list = data.cases;
+    if (filters.activeCasesOnly) {
+      list = list.filter((c) => c.status === 'PLANNED' || c.status === 'ONGOING');
+    }
+    const needle = filters.query.trim().toLowerCase();
+    if (needle) {
+      list = list.filter((c) => c.title.toLowerCase().includes(needle));
+    }
+    return list;
+  }, [data?.cases, filters.activeCasesOnly, filters.query]);
+
+  const casesWithCoords = useMemo(
+    () => filteredCases.filter((c) => c.latitude !== null && c.longitude !== null),
+    [filteredCases]
+  );
+
+  const casesWithoutCoords = useMemo(
+    () => filteredCases.filter((c) => c.latitude === null || c.longitude === null),
+    [filteredCases]
   );
 
   const filteredUnmappedSubjects = useMemo<UnmappedSubject[]>(() => {
@@ -155,6 +198,173 @@ function MapPageInner() {
         ? data.cases.find((c) => c.id === filters.caseId) ?? null
         : null,
     [data, filters.caseId]
+  );
+
+  const isCaseFocused = Boolean(selectedCase);
+
+  const allScreenedMarkers = useMemo(() => {
+    if (!data) return [];
+    return filterMarkers(data.markers, {
+      ...filters,
+      caseId: undefined,
+      onlyWithinRadius: false,
+    }).filter((m) => m.source !== 'event_address');
+  }, [data, filters]);
+
+  const allScreenedUnmapped = useMemo<UnmappedSubject[]>(() => {
+    if (!data?.unmappedSubjects) return [];
+    const needle = filters.query.trim().toLowerCase();
+    const filtersWithoutCase = { ...filters, caseId: undefined };
+    return data.unmappedSubjects.filter((subj) => {
+      if (needle && !subj.personName.toLowerCase().includes(needle)) {
+        return false;
+      }
+      return matchesPersonTacticalFilters(subj, filtersWithoutCase);
+    });
+  }, [data, filters]);
+
+  const standardMappedSubjects = useMemo(
+    () => visibleMarkers.filter((m) => m.source !== 'event_address'),
+    [visibleMarkers]
+  );
+
+  const linkedMappedSubjects = useMemo(() => {
+    if (!selectedCase) return [];
+    return allScreenedMarkers.filter((m) =>
+      m.caseLinks?.some((cl) => cl.eventId === selectedCase.id)
+    );
+  }, [allScreenedMarkers, selectedCase]);
+
+  const linkedUnmappedSubjects = useMemo(() => {
+    if (!selectedCase) return [];
+    return allScreenedUnmapped.filter((s) =>
+      s.caseLinks?.some((cl) => cl.eventId === selectedCase.id)
+    );
+  }, [allScreenedUnmapped, selectedCase]);
+
+  const otherMappedSubjects = useMemo(() => {
+    if (!selectedCase) return [];
+    const candidates = allScreenedMarkers.filter(
+      (m) => !m.caseLinks?.some((cl) => cl.eventId === selectedCase.id)
+    );
+
+    const withDist = candidates.map((m) => {
+      let distanceKm: number | null = null;
+      if (
+        selectedCase.latitude !== null &&
+        selectedCase.longitude !== null &&
+        m.latitude !== null &&
+        m.longitude !== null
+      ) {
+        distanceKm = haversineDistanceKm(
+          selectedCase.latitude,
+          selectedCase.longitude,
+          m.latitude,
+          m.longitude
+        );
+      }
+      return { marker: m, distanceKm };
+    });
+
+    withDist.sort((a, b) => {
+      if (a.distanceKm !== null && b.distanceKm !== null) {
+        return a.distanceKm - b.distanceKm;
+      }
+      if (a.distanceKm !== null) return -1;
+      if (b.distanceKm !== null) return 1;
+      return a.marker.personName.localeCompare(b.marker.personName);
+    });
+
+    if (filters.onlyWithinRadius && (filters.radiusKm ?? 0) > 0) {
+      return withDist.filter(
+        (item) => item.distanceKm !== null && item.distanceKm <= (filters.radiusKm ?? 0)
+      );
+    }
+
+    return withDist;
+  }, [allScreenedMarkers, selectedCase, filters.onlyWithinRadius, filters.radiusKm]);
+
+  const otherUnmappedSubjects = useMemo(() => {
+    if (!selectedCase) return [];
+    return allScreenedUnmapped.filter(
+      (s) => !s.caseLinks?.some((cl) => cl.eventId === selectedCase.id)
+    );
+  }, [allScreenedUnmapped, selectedCase]);
+
+  const rosterSubjectsCount = isCaseFocused
+    ? linkedMappedSubjects.length +
+      linkedUnmappedSubjects.length +
+      otherMappedSubjects.length +
+      otherUnmappedSubjects.length
+    : standardMappedSubjects.length + filteredUnmappedSubjects.length;
+
+  const rosterTotalCount = filteredCases.length + rosterSubjectsCount;
+
+  const handlePersonLinked = useCallback(
+    (linkData: {
+      personId: string;
+      involvementType: string;
+      verificationStatus: string;
+      role?: string;
+    }) => {
+      if (!selectedCase) return;
+      const newLink = {
+        eventId: selectedCase.id,
+        eventTitle: selectedCase.title,
+        eventStatus: selectedCase.status,
+        role: linkData.role || linkData.involvementType,
+        involvementType: linkData.involvementType,
+        verificationStatus: linkData.verificationStatus,
+        confidence: null,
+      };
+
+      setData((prev) => {
+        if (!prev) return prev;
+        const updatedMarkers = prev.markers.map((m) => {
+          if (m.personId === linkData.personId) {
+            const caseLinks = m.caseLinks ? [...m.caseLinks] : [];
+            const existingIdx = caseLinks.findIndex((cl) => cl.eventId === selectedCase.id);
+            if (existingIdx >= 0) {
+              caseLinks[existingIdx] = newLink;
+            } else {
+              caseLinks.push(newLink);
+            }
+            return {
+              ...m,
+              caseLinks,
+            };
+          }
+          return m;
+        });
+
+        const updatedUnmapped = (prev.unmappedSubjects ?? []).map((s) => {
+          if (s.personId === linkData.personId) {
+            const caseLinks = s.caseLinks ? [...s.caseLinks] : [];
+            const existingIdx = caseLinks.findIndex((cl) => cl.eventId === selectedCase.id);
+            if (existingIdx >= 0) {
+              caseLinks[existingIdx] = newLink;
+            } else {
+              caseLinks.push(newLink);
+            }
+            return {
+              ...s,
+              caseLinks,
+            };
+          }
+          return s;
+        });
+
+        return {
+          ...prev,
+          markers: updatedMarkers,
+          unmappedSubjects: updatedUnmapped,
+        };
+      });
+
+      setLinkingTarget(null);
+      setInspectedPersonId((prev) => (prev === linkData.personId ? null : prev));
+    },
+    [selectedCase]
   );
 
   const radiusCenter = useMemo(() => {
@@ -195,6 +405,97 @@ function MapPageInner() {
       </div>
     );
   }
+
+  const renderCaseItem = (c: (typeof filteredCases)[number]) => {
+    const isSelected = filters.caseId === c.id;
+    return (
+      <div
+        key={c.id}
+        className={`rounded-xl transition-all p-2 border text-xs ${
+          isSelected
+            ? 'bg-primary/10 border-primary ring-1 ring-primary/40'
+            : 'bg-surface hover:bg-surface-elevated border-border/50'
+        }`}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              handleFiltersChange({
+                ...filters,
+                caseId: isSelected ? '' : c.id,
+                personId: '',
+              });
+            }}
+            className="min-w-0 flex-1 text-left flex items-start gap-2 cursor-pointer group"
+            title={isSelected ? 'Bỏ chọn vụ án' : 'Lọc đối tượng theo vụ án'}
+          >
+            <span
+              className={`mt-1 w-2.5 h-2.5 rounded-full shrink-0 border ${
+                isSelected
+                  ? 'bg-primary border-primary'
+                  : 'bg-amber-500 border-amber-600/40'
+              }`}
+            />
+            <div className="min-w-0 flex-1">
+              <div
+                className={`font-semibold transition-colors truncate ${
+                  isSelected
+                    ? 'text-primary'
+                    : 'text-foreground group-hover:text-primary'
+                }`}
+              >
+                {c.title}
+              </div>
+              <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-muted">
+                <span className="px-1 py-0.2 rounded bg-surface-elevated border border-border/60">
+                  {c.status}
+                </span>
+                {c.latitude !== null && c.longitude !== null ? (
+                  <span className="text-emerald-600 dark:text-emerald-400">
+                    📍 Đã định vị
+                  </span>
+                ) : (
+                  <span className="text-muted">
+                    Chưa có GPS
+                  </span>
+                )}
+              </div>
+            </div>
+          </button>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                handleFiltersChange({
+                  ...filters,
+                  caseId: isSelected ? '' : c.id,
+                  personId: '',
+                });
+              }}
+              className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors ${
+                isSelected
+                  ? 'bg-primary text-white shadow-sm'
+                  : 'bg-surface-elevated hover:bg-primary/15 text-muted hover:text-primary border border-border/50'
+              }`}
+              title={isSelected ? 'Đang lọc vụ án (nhấp để bỏ lọc)' : 'Lọc theo vụ án'}
+            >
+              {isSelected ? '✓ Đang chọn' : 'Chọn'}
+            </button>
+            <Link
+              href={`/events/${c.id}`}
+              className="p-1 rounded-md text-muted hover:text-foreground hover:bg-surface-elevated transition-colors"
+              title="Xem chi tiết hồ sơ vụ án"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const showBanner = !bannerDismissed && (data.pendingCount > 0 || data.failedCount > 0);
 
@@ -242,24 +543,32 @@ function MapPageInner() {
               markers={visibleMarkers}
               focusId={focusId}
               focusRequest={focusRequest}
-              filtersKey={`${filters.query}|${filters.groupId}|${filters.city}|${filters.region}|${filters.country}|${filters.caseId ?? ''}|${filters.personId ?? ''}|${filters.radiusKm ?? 0}|${filters.onlyWithinRadius ? '1' : ''}|${filters.activeCasesOnly ? '1' : ''}|${filters.showRuledOut === false ? '0' : ''}`}
+              filtersKey={`${filters.query}|${filters.groupId}|${filters.city}|${filters.region}|${filters.country}|${filters.caseId ?? ''}|${filters.personId ?? ''}|${filters.radiusKm ?? 0}|${filters.onlyWithinRadius ? '1' : ''}|${filters.activeCasesOnly ? '1' : ''}|${filters.showRuledOut === false ? '0' : ''}|${inspectedPersonId ?? ''}`}
               selectedCase={selectedCase}
               radiusCenter={radiusCenter}
               radiusKm={filters.radiusKm ?? 0}
+              inspectedPersonId={inspectedPersonId}
               onSelectMarker={(marker) => {
                 if (marker.source === 'event_address') {
-                  handleFiltersChange({
-                    ...filters,
-                    caseId: marker.personId,
-                    personId: '',
-                    radiusKm: filters.radiusKm || 1,
-                  });
+                  if (filters.caseId !== marker.personId) {
+                    handleFiltersChange({
+                      ...filters,
+                      caseId: marker.personId,
+                      personId: '',
+                      radiusKm: filters.radiusKm || 1,
+                    });
+                  }
                 } else {
-                  handleFiltersChange({
-                    ...filters,
-                    personId: marker.personId,
-                    radiusKm: filters.radiusKm || 1,
-                  });
+                  setHighlightedPersonId(marker.personId);
+                  if (selectedCase && !marker.caseLinks?.some((cl) => cl.eventId === selectedCase.id)) {
+                    setInspectedPersonId(marker.personId);
+                  }
+                  setRosterOpen(true);
+                  setSubjectsExpanded(true);
+                  setTimeout(() => {
+                    const el = document.getElementById(`person-card-${marker.personId}`);
+                    el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                  }, 60);
                 }
               }}
             />
@@ -293,7 +602,7 @@ function MapPageInner() {
               isOpen={rosterOpen}
               onClose={() => setRosterOpen(false)}
               title={t('rosterTitle')}
-              rosterCount={visibleMarkers.length + filteredUnmappedSubjects.length}
+              rosterCount={rosterTotalCount}
               activeFilterCount={countActiveTacticalFilters(filters)}
               onClearFilters={() => handleFiltersChange({ ...DEFAULT_PERSON_FILTER_STATE, query: filters.query })}
               filtersOpen={filtersOpen}
@@ -336,144 +645,483 @@ function MapPageInner() {
               }
               rosterContent={
                 <div className="divide-y divide-border/60 text-xs">
-                  {/* Section 1: Located on Map */}
-                  <div className="p-2.5">
-                    <div className="flex items-center justify-between px-1.5 mb-1.5">
-                      <span className="font-semibold text-muted">
-                        📍 {t('rosterLocatedSection')}
-                      </span>
-                      <span className="px-1.5 py-0.5 rounded-full bg-primary/15 text-primary font-semibold text-[11px]">
-                        {visibleMarkers.length}
-                      </span>
-                    </div>
-                    {visibleMarkers.length === 0 ? (
-                      <p className="px-1.5 py-2 text-muted italic">{t('noResults')}</p>
-                    ) : (
+                  {/* Section 1: Cases (Topmost) */}
+                  {filteredCases.length > 0 && (
+                    <TacticalSectionExpander
+                      title={t('rosterCasesTitle')}
+                      icon="📁"
+                      count={filteredCases.length}
+                      isExpanded={casesExpanded}
+                      onToggle={() => setCasesExpanded((prev) => !prev)}
+                      badgeColor="bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                      emptyMessage={t('noResults')}
+                    >
                       <div className="space-y-1.5">
-                        {visibleMarkers.map((marker) => {
-                          const isCrimeScene = marker.source === 'event_address';
-                          if (isCrimeScene) {
-                            return (
-                              <div
-                                key={marker.id}
-                                className="rounded-xl hover:bg-surface-elevated transition-colors p-2 border border-border/50 bg-surface text-xs"
-                              >
-                                <div className="flex items-center justify-between gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setFocusRequest((prev) => ({
-                                        id: marker.id,
-                                        seq: (prev?.seq ?? 0) + 1,
-                                      }));
+                        {casesWithCoords.map((c) => renderCaseItem(c))}
+
+                        {casesWithoutCoords.length > 0 && (
+                          <div className="pt-2 pb-1 border-t border-border/50">
+                            <div className="flex items-center gap-1.5 px-1 py-1 text-[11px] font-semibold text-muted">
+                              <span>❓</span>
+                              <span>{t('withoutCoordsSection')}</span>
+                              <span className="px-1.5 py-0.2 rounded-full bg-surface-elevated text-[10px] border border-border">
+                                {casesWithoutCoords.length}
+                              </span>
+                            </div>
+                            <div className="mt-1 space-y-1.5">
+                              {casesWithoutCoords.map((c) => renderCaseItem(c))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </TacticalSectionExpander>
+                  )}
+
+                  {/* Section 2: Subjects */}
+                  <TacticalSectionExpander
+                    title={t('rosterSubjectsTitle')}
+                    icon="👤"
+                    count={rosterSubjectsCount}
+                    isExpanded={subjectsExpanded}
+                    onToggle={() => setSubjectsExpanded((prev) => !prev)}
+                    badgeColor="bg-primary/15 text-primary"
+                    emptyMessage={t('noResults')}
+                  >
+                    {isCaseFocused ? (
+                      <div className="space-y-3">
+                        {/* Nhóm 1: Đối tượng trong vụ án */}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between px-1 py-1 text-[11px] font-semibold text-foreground">
+                            <span className="flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-red-500" />
+                              {t('linkedSubjectsSection')}
+                            </span>
+                            <span className="px-1.5 py-0.2 rounded-full bg-red-500/15 text-red-600 dark:text-red-400 text-[10px] font-bold">
+                              {linkedMappedSubjects.length + linkedUnmappedSubjects.length}
+                            </span>
+                          </div>
+
+                          {linkedMappedSubjects.length === 0 && linkedUnmappedSubjects.length === 0 ? (
+                            <p className="px-2 py-2 text-muted text-[11px] italic bg-surface-elevated/40 rounded-lg border border-dashed border-border/60">
+                              Chưa có đối tượng nào được gắn vào vụ án này. Bạn có thể chọn đối tượng từ danh sách soát xét bên dưới để đưa vào vụ án.
+                            </p>
+                          ) : (
+                            <>
+                              {linkedMappedSubjects.map((marker) => {
+                                const activeCaseLink = marker.caseLinks?.find((cl) => cl.eventId === selectedCase!.id);
+                                const isHighlighted = highlightedPersonId === marker.personId;
+                                return (
+                                  <div
+                                    key={marker.id}
+                                    id={`person-card-${marker.personId}`}
+                                    className={`rounded-xl transition-all ${
+                                      isHighlighted
+                                        ? 'ring-2 ring-primary bg-primary/5 dark:bg-primary/10 shadow-sm'
+                                        : ''
+                                    }`}
+                                  >
+                                    <TacticalPersonCard
+                                      id={marker.personId}
+                                      name={marker.personName}
+                                      hasPhoto={marker.hasPhoto}
+                                      color={marker.groupColor ?? '#3b82f6'}
+                                      tacticalData={marker}
+                                      subtitle={
+                                        activeCaseLink?.role ||
+                                        activeCaseLink?.involvementType ||
+                                        (marker.addressText ?? marker.city)
+                                      }
+                                      onFocus={() => {
+                                        setHighlightedPersonId(marker.personId);
+                                        setFocusRequest((prev) => ({
+                                          id: marker.id,
+                                          seq: (prev?.seq ?? 0) + 1,
+                                        }));
+                                      }}
+                                      focusTitle="Định vị trên bản đồ"
+                                      detailsHref={`/people/${marker.personId}`}
+                                      detailsTitle="Xem hồ sơ"
+                                      gangs={data.gangs ?? []}
+                                    />
+                                  </div>
+                                );
+                              })}
+
+                              {linkedUnmappedSubjects.length > 0 && (
+                                <div className="pt-2 border-t border-border/50 space-y-1.5">
+                                  <div className="flex items-center gap-1.5 px-1 py-1 text-[11px] font-semibold text-muted">
+                                    <span>❓</span>
+                                    <span>{t('withoutCoordsSection')}</span>
+                                    <span className="px-1.5 py-0.2 rounded-full bg-surface-elevated text-[10px] border border-border">
+                                      {linkedUnmappedSubjects.length}
+                                    </span>
+                                  </div>
+                                  {linkedUnmappedSubjects.map((subj) => {
+                                    const activeCaseLink = subj.caseLinks?.find((cl) => cl.eventId === selectedCase!.id);
+                                    const isHighlighted = highlightedPersonId === subj.personId;
+                                    return (
+                                      <div
+                                        key={subj.personId}
+                                        id={`person-card-${subj.personId}`}
+                                        className={`rounded-xl transition-all ${
+                                          isHighlighted
+                                            ? 'ring-2 ring-primary bg-primary/5 dark:bg-primary/10 shadow-sm'
+                                            : ''
+                                        }`}
+                                      >
+                                        <TacticalPersonCard
+                                          id={subj.personId}
+                                          name={subj.personName}
+                                          hasPhoto={false}
+                                          color="#f59e0b"
+                                          tacticalData={subj}
+                                          subtitle={
+                                            activeCaseLink?.role ||
+                                            activeCaseLink?.involvementType ||
+                                            t('rosterAddCoordsLink')
+                                          }
+                                          detailsHref={`/people/${subj.personId}`}
+                                          detailsTitle="Xem hồ sơ"
+                                          gangs={data.gangs ?? []}
+                                        />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+
+                        {/* Nhóm 2: Đối tượng khác trong diện soát xét */}
+                        <div className="pt-3 border-t border-border/70 space-y-2">
+                          <div className="flex items-center justify-between px-1 text-[11px] font-semibold text-foreground">
+                            <span className="flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-slate-400" />
+                              {t('otherSubjectsSection')}
+                            </span>
+                            <span className="px-1.5 py-0.2 rounded-full bg-surface-elevated text-muted text-[10px] border border-border">
+                              {otherMappedSubjects.length + otherUnmappedSubjects.length}
+                            </span>
+                          </div>
+
+                          {/* Radius controls if selected case has coords */}
+                          {selectedCase!.latitude !== null && selectedCase!.longitude !== null && (
+                            <div className="p-2 rounded-xl bg-surface-elevated/70 border border-border/60 space-y-2 text-[11px]">
+                              <div className="flex items-center justify-between gap-2">
+                                <label className="text-xs font-medium text-foreground">
+                                  {t('radiusFilterLabel')}
+                                </label>
+                                <label className="flex items-center gap-1.5 cursor-pointer text-muted hover:text-foreground">
+                                  <input
+                                    type="checkbox"
+                                    checked={filters.onlyWithinRadius}
+                                    onChange={(e) =>
                                       handleFiltersChange({
                                         ...filters,
-                                        caseId: marker.personId,
-                                        personId: '',
+                                        onlyWithinRadius: e.target.checked,
                                         radiusKm: filters.radiusKm || 1,
-                                      });
-                                    }}
-                                    className="min-w-0 flex-1 text-left flex items-start gap-2 cursor-pointer group"
-                                    title="Tâm điểm hiện trường"
-                                  >
-                                    <span className="mt-1 w-2.5 h-2.5 rounded-full bg-red-500 shrink-0 border border-white/60" />
-                                    <div className="min-w-0 flex-1">
-                                      <div className="font-semibold text-foreground group-hover:text-primary transition-colors truncate">
-                                        {marker.personName}
-                                      </div>
-                                      {(marker.city || marker.addressText) && (
-                                        <div className="text-[11px] text-muted truncate">
-                                          {marker.addressText ?? marker.city}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </button>
-                                  <Link
-                                    href={`/events/${marker.personId}`}
-                                    className="p-1 rounded-md text-muted hover:text-foreground hover:bg-surface-elevated transition-colors shrink-0"
-                                    title="Xem vụ án"
-                                  >
-                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                    </svg>
-                                  </Link>
-                                </div>
+                                      })
+                                    }
+                                    className="rounded border-border text-primary focus:ring-primary w-3.5 h-3.5"
+                                  />
+                                  <span>{t('withinRadiusOnly')}</span>
+                                </label>
                               </div>
-                            );
-                          }
 
-                          return (
-                            <TacticalPersonCard
-                              key={marker.id}
-                              id={marker.personId}
-                              name={marker.personName}
-                              hasPhoto={marker.hasPhoto}
-                              color={marker.groupColor ?? '#3b82f6'}
-                              tacticalData={marker}
-                              subtitle={marker.addressText ?? marker.city}
-                              onFocus={() => {
-                                setFocusRequest((prev) => ({
-                                  id: marker.id,
-                                  seq: (prev?.seq ?? 0) + 1,
-                                }));
-                                handleFiltersChange({
-                                  ...filters,
-                                  personId: marker.personId,
-                                  radiusKm: filters.radiusKm || 1,
-                                });
-                              }}
-                              focusTitle="Định vị trên bản đồ"
-                              detailsHref={`/people/${marker.personId}`}
-                              detailsTitle="Xem hồ sơ"
-                              gangs={data.gangs ?? []}
-                            />
-                          );
-                        })}
+                              {/* Quick Radius Chips */}
+                              <div className="flex items-center gap-1 flex-wrap">
+                                {[
+                                  { label: 'Tất cả', km: 0 },
+                                  { label: '500m', km: 0.5 },
+                                  { label: '1km', km: 1 },
+                                  { label: '2km', km: 2 },
+                                  { label: '5km', km: 5 },
+                                  { label: '10km', km: 10 },
+                                  { label: '20km', km: 20 },
+                                  { label: '50km', km: 50 },
+                                ].map((chip) => {
+                                  const isActive =
+                                    chip.km === 0
+                                      ? !filters.onlyWithinRadius || filters.radiusKm === 0
+                                      : filters.onlyWithinRadius && filters.radiusKm === chip.km;
+                                  return (
+                                    <button
+                                      key={chip.km}
+                                      type="button"
+                                      onClick={() =>
+                                        handleFiltersChange({
+                                          ...filters,
+                                          radiusKm: chip.km,
+                                          onlyWithinRadius: chip.km > 0,
+                                        })
+                                      }
+                                      className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition-all ${
+                                        isActive
+                                          ? 'bg-primary text-white shadow-sm'
+                                          : 'bg-surface hover:bg-surface-elevated text-muted hover:text-foreground border border-border/50'
+                                      }`}
+                                    >
+                                      {chip.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+
+                              {/* Slider */}
+                              <div className="flex items-center gap-2 pt-0.5">
+                                <input
+                                  type="range"
+                                  min="0"
+                                  max="50"
+                                  step="0.5"
+                                  value={filters.radiusKm || 0}
+                                  onChange={(e) => {
+                                    const km = parseFloat(e.target.value);
+                                    handleFiltersChange({
+                                      ...filters,
+                                      radiusKm: km,
+                                      onlyWithinRadius: km > 0,
+                                    });
+                                  }}
+                                  className="w-full h-1.5 bg-border rounded-lg appearance-none cursor-pointer accent-primary"
+                                />
+                                <span className="text-[11px] font-mono text-muted shrink-0 w-12 text-right">
+                                  {(filters.radiusKm || 0) > 0 ? `${filters.radiusKm} km` : '0 km'}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Other mapped subjects */}
+                          <div className="space-y-1.5">
+                            {otherMappedSubjects.length === 0 && otherUnmappedSubjects.length === 0 ? (
+                              <p className="px-2 py-2 text-muted text-[11px] italic">
+                                Không có đối tượng nào khác khớp bộ lọc.
+                              </p>
+                            ) : (
+                              otherMappedSubjects.map(({ marker, distanceKm }) => {
+                                const distText =
+                                  distanceKm !== null ? `${distanceKm.toFixed(2)} km` : null;
+                                const isInspected = inspectedPersonId === marker.personId;
+                                return (
+                                  <div
+                                    key={marker.id}
+                                    id={`person-card-${marker.personId}`}
+                                    className={`rounded-xl transition-all ${
+                                      isInspected || highlightedPersonId === marker.personId
+                                        ? 'ring-2 ring-primary bg-primary/5 dark:bg-primary/10 shadow-sm'
+                                        : ''
+                                    }`}
+                                  >
+                                    <TacticalPersonCard
+                                      id={marker.personId}
+                                      name={marker.personName}
+                                      hasPhoto={marker.hasPhoto}
+                                      color={isInspected ? '#2563eb' : (marker.groupColor ?? '#64748b')}
+                                      tacticalData={marker}
+                                      subtitle={
+                                        distText
+                                          ? t('distanceKmFromScene', { km: distanceKm!.toFixed(2) })
+                                          : marker.addressText ?? marker.city
+                                      }
+                                      onFocus={() => {
+                                        setInspectedPersonId((prev) =>
+                                          prev === marker.personId ? null : marker.personId
+                                        );
+                                      }}
+                                      focusTitle={isInspected ? 'Đang soát xét trên bản đồ (nhấn để tắt)' : 'Soát xét trên bản đồ'}
+                                      detailsHref={`/people/${marker.personId}`}
+                                      detailsTitle="Xem hồ sơ"
+                                      gangs={data.gangs ?? []}
+                                      extraActions={
+                                        <div className="flex flex-col items-end gap-1 shrink-0">
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setInspectedPersonId((prev) =>
+                                                prev === marker.personId ? null : marker.personId
+                                              );
+                                            }}
+                                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold transition-colors whitespace-nowrap shadow-2xs ${
+                                              isInspected
+                                                ? 'bg-primary text-white shadow-xs'
+                                                : 'bg-surface hover:bg-surface-elevated text-foreground border border-border'
+                                            }`}
+                                            title={
+                                              isInspected
+                                                ? 'Đang soát xét trên bản đồ (nhấn để tắt)'
+                                                : 'Bật/tắt hiển thị đối tượng này trên bản đồ cùng vụ án'
+                                            }
+                                          >
+                                            <span>👁️</span>
+                                            <span>{isInspected ? 'Đang xem' : 'Soát xét'}</span>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setLinkingTarget({
+                                                personId: marker.personId,
+                                                personName: marker.personName,
+                                                distanceText: distText,
+                                              });
+                                            }}
+                                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 transition-colors whitespace-nowrap shadow-2xs"
+                                            title={t('quickLinkBtn')}
+                                          >
+                                            <span>➕</span>
+                                            <span>Vào vụ án</span>
+                                          </button>
+                                        </div>
+                                      }
+                                    />
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+
+                          {/* Other unmapped subjects */}
+                          {otherUnmappedSubjects.length > 0 && (
+                            <div className="pt-2 border-t border-border/50 space-y-1.5">
+                              <div className="flex items-center gap-1.5 px-1 py-1 text-[11px] font-semibold text-muted">
+                                <span>❓</span>
+                                <span>{t('withoutCoordsSection')}</span>
+                                <span className="px-1.5 py-0.2 rounded-full bg-surface-elevated text-[10px] border border-border">
+                                  {otherUnmappedSubjects.length}
+                                </span>
+                              </div>
+                              {otherUnmappedSubjects.map((subj) => {
+                                const isHighlighted = highlightedPersonId === subj.personId;
+                                return (
+                                  <div
+                                    key={subj.personId}
+                                    id={`person-card-${subj.personId}`}
+                                    className={`rounded-xl transition-all ${
+                                      isHighlighted
+                                        ? 'ring-2 ring-primary bg-primary/5 dark:bg-primary/10 shadow-sm'
+                                        : ''
+                                    }`}
+                                  >
+                                    <TacticalPersonCard
+                                      id={subj.personId}
+                                      name={subj.personName}
+                                      hasPhoto={false}
+                                      color="#94a3b8"
+                                      tacticalData={subj}
+                                      subtitle={t('rosterAddCoordsLink')}
+                                      detailsHref={`/people/${subj.personId}`}
+                                      detailsTitle="Xem hồ sơ"
+                                      gangs={data.gangs ?? []}
+                                      extraActions={
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setLinkingTarget({
+                                              personId: subj.personId,
+                                              personName: subj.personName,
+                                              distanceText: null,
+                                            });
+                                          }}
+                                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 transition-colors whitespace-nowrap shadow-2xs"
+                                          title={t('quickLinkBtn')}
+                                        >
+                                          <span>➕</span>
+                                          <span>Vào vụ án</span>
+                                        </button>
+                                      }
+                                    />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    )}
-                  </div>
-
-                  {/* Section 2: Unlocated Subjects */}
-                  <div className="p-2.5 bg-amber-500/5">
-                    <div className="flex items-center justify-between px-1.5 mb-1">
-                      <span className="font-semibold text-amber-700 dark:text-amber-300">
-                        ❓ {t('rosterUnlocatedSection')}
-                      </span>
-                      <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 font-semibold text-[11px]">
-                        {filteredUnmappedSubjects.length}
-                      </span>
-                    </div>
-                    <p className="px-1.5 mb-2 text-[11px] text-muted">
-                      {t('rosterUnlocatedHint')}
-                    </p>
-                    {filteredUnmappedSubjects.length === 0 ? (
-                      <p className="px-1.5 py-1 text-[11px] text-muted italic">
-                        {t('rosterUnlocatedEmpty')}
-                      </p>
                     ) : (
                       <div className="space-y-1.5">
-                        {filteredUnmappedSubjects.map((subj) => {
-                          const activeCaseLink = filters.caseId
-                            ? subj.caseLinks?.find((cl) => cl.eventId === filters.caseId)
-                            : subj.caseLinks?.[0];
+                        {standardMappedSubjects.map((marker) => {
+                          const isHighlighted = highlightedPersonId === marker.personId;
                           return (
-                            <TacticalPersonCard
-                              key={subj.personId}
-                              id={subj.personId}
-                              name={subj.personName}
-                              hasPhoto={false}
-                              color="#f59e0b"
-                              tacticalData={subj}
-                              subtitle={activeCaseLink?.role || activeCaseLink?.eventTitle || t('rosterAddCoordsLink')}
-                              detailsHref={`/people/${subj.personId}`}
-                              detailsTitle="Xem hồ sơ"
-                              gangs={data.gangs ?? []}
-                            />
+                            <div
+                              key={marker.id}
+                              id={`person-card-${marker.personId}`}
+                              className={`rounded-xl transition-all ${
+                                isHighlighted
+                                  ? 'ring-2 ring-primary bg-primary/5 dark:bg-primary/10 shadow-sm'
+                                  : ''
+                              }`}
+                            >
+                              <TacticalPersonCard
+                                id={marker.personId}
+                                name={marker.personName}
+                                hasPhoto={marker.hasPhoto}
+                                color={marker.groupColor ?? '#3b82f6'}
+                                tacticalData={marker}
+                                subtitle={marker.addressText ?? marker.city}
+                                onFocus={() => {
+                                  setHighlightedPersonId(marker.personId);
+                                  setFocusRequest((prev) => ({
+                                    id: marker.id,
+                                    seq: (prev?.seq ?? 0) + 1,
+                                  }));
+                                }}
+                                focusTitle="Định vị trên bản đồ"
+                                detailsHref={`/people/${marker.personId}`}
+                                detailsTitle="Xem hồ sơ"
+                                gangs={data.gangs ?? []}
+                              />
+                            </div>
                           );
                         })}
+
+                        {filteredUnmappedSubjects.length > 0 && (
+                          <div className="pt-2 border-t border-border/50 space-y-1.5">
+                            <div className="flex items-center gap-1.5 px-1 py-1 text-[11px] font-semibold text-muted">
+                              <span>❓</span>
+                              <span>{t('withoutCoordsSection')}</span>
+                              <span className="px-1.5 py-0.2 rounded-full bg-surface-elevated text-[10px] border border-border">
+                                {filteredUnmappedSubjects.length}
+                              </span>
+                            </div>
+                            <p className="px-1.5 text-[11px] text-muted">
+                              {t('rosterUnlocatedHint')}
+                            </p>
+                            {filteredUnmappedSubjects.map((subj) => {
+                              const activeCaseLink = subj.caseLinks?.[0];
+                              const isHighlighted = highlightedPersonId === subj.personId;
+                              return (
+                                <div
+                                  key={subj.personId}
+                                  id={`person-card-${subj.personId}`}
+                                  className={`rounded-xl transition-all ${
+                                    isHighlighted
+                                      ? 'ring-2 ring-primary bg-primary/5 dark:bg-primary/10 shadow-sm'
+                                      : ''
+                                  }`}
+                                >
+                                  <TacticalPersonCard
+                                    id={subj.personId}
+                                    name={subj.personName}
+                                    hasPhoto={false}
+                                    color="#f59e0b"
+                                    tacticalData={subj}
+                                    subtitle={activeCaseLink?.role || activeCaseLink?.eventTitle || t('rosterAddCoordsLink')}
+                                    detailsHref={`/people/${subj.personId}`}
+                                    detailsTitle="Xem hồ sơ"
+                                    gangs={data.gangs ?? []}
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     )}
-                  </div>
+                  </TacticalSectionExpander>
                 </div>
               }
             />
@@ -524,6 +1172,19 @@ function MapPageInner() {
               ))}
             </ul>
           </div>
+        )}
+
+        {linkingTarget && selectedCase && (
+          <QuickLinkCasePopover
+            isOpen={Boolean(linkingTarget)}
+            onClose={() => setLinkingTarget(null)}
+            personId={linkingTarget.personId}
+            personName={linkingTarget.personName}
+            caseId={selectedCase.id}
+            caseTitle={selectedCase.title}
+            distanceText={linkingTarget.distanceText}
+            onLinked={handlePersonLinked}
+          />
         )}
       </div>
     </div>

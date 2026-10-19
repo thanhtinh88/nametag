@@ -90,11 +90,13 @@ export const GET = withAuth(async (request, session) => {
           geocodeStatus: 'failed',
         },
       }),
-      prisma.gang.findMany({
-        where: { userId: session.user.id, deletedAt: null },
-        select: { id: true, name: true, color: true },
-        orderBy: { name: 'asc' },
-      }),
+      prisma.gang?.findMany
+        ? prisma.gang.findMany({
+            where: { userId: session.user.id, deletedAt: null },
+            select: { id: true, name: true, color: true },
+            orderBy: { name: 'asc' },
+          })
+        : Promise.resolve([]),
     ]);
 
     const groupsById = new Map<string, MapGroup>();

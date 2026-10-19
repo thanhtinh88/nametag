@@ -421,7 +421,9 @@ export default function PersonInvestigationDossier({
           <div className="p-3 bg-surface-elevated rounded-lg">
             <span className="text-xs text-muted block">{tForm('residenceStatusLabel')}</span>
             <span className="font-medium text-foreground">
-              {tForm(`residenceStatusOptions.${person.residenceStatus}` as never) || person.residenceStatus}
+              {tForm.has(`residenceStatusOptions.${person.residenceStatus}`)
+                ? tForm(`residenceStatusOptions.${person.residenceStatus}` as never)
+                : person.residenceStatus}
             </span>
           </div>
         )}
@@ -472,7 +474,7 @@ export default function PersonInvestigationDossier({
                 <div className="font-semibold text-foreground text-sm flex items-center justify-between">
                   <span>{m.gang.name}</span>
                   <span className="text-xs px-2 py-0.5 rounded bg-surface border border-border">
-                    {t(`roles.${m.role}` as never) || m.role}
+                    {t.has(`roles.${m.role}`) ? t(`roles.${m.role}` as never) : m.role}
                   </span>
                 </div>
                 {m.gang.turf && (
@@ -742,7 +744,7 @@ export default function PersonInvestigationDossier({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold px-2 py-0.5 rounded bg-primary/10 text-primary">
-                      {t(`markTypes.${m.type}` as never) || m.type}
+                      {t.has(`markTypes.${m.type}`) ? t(`markTypes.${m.type}` as never) : m.type}
                     </span>
                     <button
                       type="button"
@@ -897,7 +899,7 @@ export default function PersonInvestigationDossier({
                           : 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30'
                       }`}
                     >
-                      {t(`recordTypes.${r.recordType}` as never) || r.recordType}
+                      {t.has(`recordTypes.${r.recordType}`) ? t(`recordTypes.${r.recordType}` as never) : r.recordType}
                     </span>
                     <span className="font-semibold text-sm text-foreground">{r.charge}</span>
                     {r.isPardoned && (
@@ -1096,7 +1098,7 @@ export default function PersonInvestigationDossier({
                           : 'bg-red-500/15 text-red-700 dark:text-red-300'
                       }`}
                     >
-                      {t(`accountTypes.${b.accountType}` as never) || b.accountType}
+                      {t.has(`accountTypes.${b.accountType}`) ? t(`accountTypes.${b.accountType}` as never) : b.accountType}
                     </span>
                   </div>
                   {b.notes && <p className="text-xs text-muted italic mt-1">{b.notes}</p>}

@@ -141,6 +141,7 @@ interface MapViewProps {
   selectedCase?: MapCase | null;
   radiusKm?: number;
   radiusCenter?: RadiusCenter | null;
+  inspectedPersonId?: string | null;
   onSelectMarker?: (marker: MapMarker) => void;
 }
 
@@ -156,6 +157,8 @@ interface MarkerProperties {
   dotColor?: string;
   isCrimeScene?: boolean;
   colocatedCount: number;
+  isDimmed?: boolean;
+  isInspected?: boolean;
 }
 
 function useIsDarkTheme(): boolean {
@@ -188,7 +191,9 @@ function isWebGLAvailable(): boolean {
 
 function toGeoJSON(
   markers: MapMarker[],
-  registeredIconPersonIds: ReadonlySet<string>
+  registeredIconPersonIds: ReadonlySet<string>,
+  selectedCaseId?: string | null,
+  inspectedPersonId?: string | null,
 ): GeoJSON.FeatureCollection<GeoJSON.Point, MarkerProperties> {
   const groups = groupByCoordinates(markers);
   const features: GeoJSON.Feature<GeoJSON.Point, MarkerProperties>[] = [];
@@ -199,6 +204,15 @@ function toGeoJSON(
     const isSolo = count === 1;
     const isCrimeScene = representative.source === 'event_address';
     const names = groupMarkers.map((m) => m.personName).join(', ');
+    const isInspected = Boolean(
+      inspectedPersonId && groupMarkers.some((m) => m.personId === inspectedPersonId)
+    );
+
+    const isRelated = !selectedCaseId
+      ? true
+      : (isCrimeScene && representative.personId === selectedCaseId) ||
+        groupMarkers.some((m) => m.caseLinks?.some((cl) => cl.eventId === selectedCaseId));
+    const isDimmed = selectedCaseId ? (!isRelated && !isInspected) : false;
 
     features.push({
       type: 'Feature',
@@ -217,6 +231,8 @@ function toGeoJSON(
         ...(representative.groupColor ? { dotColor: representative.groupColor } : {}),
         ...(isCrimeScene ? { isCrimeScene: true } : {}),
         colocatedCount: count,
+        ...(isDimmed ? { isDimmed: true } : {}),
+        ...(isInspected ? { isInspected: true } : {}),
       },
     });
   }
@@ -232,6 +248,7 @@ export default function MapView({
   selectedCase = null,
   radiusKm = 0,
   radiusCenter = null,
+  inspectedPersonId = null,
   onSelectMarker,
 }: MapViewProps) {
   const t = useTranslations('map');
@@ -239,6 +256,7 @@ export default function MapView({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const currentStyleRef = useRef<string | null>(null);
   const markersRef = useRef<MapMarker[]>(markers);
+  const inspectedPersonIdRef = useRef<string | null>(inspectedPersonId);
   const selectedCaseRef = useRef<MapCase | null>(selectedCase);
   const radiusKmRef = useRef<number>(radiusKm);
   const focusHandledRef = useRef<string | null>(null);
@@ -272,6 +290,7 @@ export default function MapView({
   const registeredColorRef = useRef(new Map<string, string>());
   const ensureIconsRef = useRef<(() => void) | null>(null);
   const pendingSourceUpdateRef = useRef(false);
+  const lastFocusedCaseIdRef = useRef<string | null>(null);
 
   // Keep "latest value" refs in sync via effects rather than during render,
   // since the map init effect below registers event handlers once (empty
@@ -306,11 +325,121 @@ export default function MapView({
     radiusKmRef.current = radiusKm;
     const map = mapRef.current;
     if (!map) return;
+
     const radiusSource = map.getSource(RADIUS_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
     if (radiusSource) {
       radiusSource.setData(buildRadiusGeoJSON(effectiveRadiusCenter, radiusKm));
     }
-  }, [selectedCase, effectiveRadiusCenter, radiusKm]);
+
+    const markerSource = map.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+    if (markerSource) {
+      markerSource.setData(toGeoJSON(markers, new Set(registeredColorRef.current.keys()), selectedCase?.id, inspectedPersonId));
+    }
+
+    // Auto-fit camera when selectedCase is chosen (unless user is currently inspecting a candidate person)
+    if (selectedCase && !inspectedPersonId) {
+      const caseId = selectedCase.id;
+      if (lastFocusedCaseIdRef.current !== caseId) {
+        lastFocusedCaseIdRef.current = caseId;
+        const coords: [number, number][] = [];
+        if (selectedCase.latitude !== null && selectedCase.longitude !== null) {
+          coords.push([selectedCase.longitude, selectedCase.latitude]);
+        }
+        for (const m of markers) {
+          if (m.latitude === null || m.longitude === null) continue;
+          const isScene = m.source === 'event_address' && m.personId === caseId;
+          const isLinked = m.source !== 'event_address' && m.caseLinks?.some((cl) => cl.eventId === caseId);
+          if (isScene || isLinked) {
+            if (!coords.some((c) => c[0] === m.longitude && c[1] === m.latitude)) {
+              coords.push([m.longitude, m.latitude]);
+            }
+          }
+        }
+
+        const isDesktop = map.getContainer().clientWidth >= 768;
+        const leftPad = isDesktop ? 380 : 40;
+
+        if (coords.length === 1) {
+          map.easeTo({
+            center: coords[0],
+            zoom: FOCUS_ZOOM,
+            duration: CAMERA_ANIMATION_MS,
+          });
+        } else if (coords.length > 1) {
+          const bounds = new maplibregl.LngLatBounds(coords[0], coords[0]);
+          for (const pt of coords) {
+            bounds.extend(pt);
+          }
+          map.fitBounds(bounds, {
+            padding: { top: 80, bottom: 80, left: leftPad, right: 80 },
+            maxZoom: FOCUS_ZOOM,
+            duration: CAMERA_ANIMATION_MS,
+          });
+        }
+      }
+    } else if (!selectedCase) {
+      lastFocusedCaseIdRef.current = null;
+    }
+  }, [selectedCase, effectiveRadiusCenter, radiusKm, markers, inspectedPersonId]);
+
+  // Focus and fit bounds around inspected candidate person and crime scene
+  useEffect(() => {
+    inspectedPersonIdRef.current = inspectedPersonId;
+    const map = mapRef.current;
+    if (!map) return;
+
+    // Refresh GeoJSON so isInspected styles and dimmed states update immediately
+    const markerSource = map.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+    if (markerSource) {
+      markerSource.setData(toGeoJSON(markers, new Set(registeredColorRef.current.keys()), selectedCase?.id, inspectedPersonId));
+    }
+
+    if (!inspectedPersonId) return;
+
+    const target = markers.find((m) => m.personId === inspectedPersonId);
+    if (!target || target.latitude === null || target.longitude === null) return;
+
+    const coords: [number, number][] = [[target.longitude, target.latitude]];
+    if (selectedCase && selectedCase.latitude !== null && selectedCase.longitude !== null) {
+      coords.push([selectedCase.longitude, selectedCase.latitude]);
+    }
+
+    const isDesktop = map.getContainer().clientWidth >= 768;
+    const leftPad = isDesktop ? 390 : 50;
+
+    if (coords.length > 1) {
+      const bounds = new maplibregl.LngLatBounds(coords[0], coords[0]);
+      coords.forEach((pt) => bounds.extend(pt));
+      map.fitBounds(bounds, {
+        padding: { top: 90, bottom: 90, left: leftPad, right: 90 },
+        maxZoom: 15,
+        duration: CAMERA_ANIMATION_MS,
+      });
+    } else {
+      map.easeTo({
+        center: coords[0],
+        zoom: FOCUS_ZOOM,
+        duration: CAMERA_ANIMATION_MS,
+      });
+    }
+
+    openPopup(
+      map,
+      [target.longitude, target.latitude],
+      {
+        id: target.id,
+        personId: target.personId,
+        personName: target.personName,
+        label: target.label,
+        ...(target.addressText ? { addressText: target.addressText } : {}),
+        isInspected: true,
+        colocatedCount: 1,
+      },
+      translationsRef.current,
+      selectedCaseRef.current,
+      radiusCenterRef.current,
+    );
+  }, [inspectedPersonId, markers, selectedCase]);
 
   useEffect(() => {
     translationsRef.current = {
@@ -387,7 +516,7 @@ export default function MapView({
         if (mapDisposed) return;
         const source = map.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
         if (!source) return;
-        source.setData(toGeoJSON(markersRef.current, new Set(registeredColorRef.current.keys())));
+        source.setData(toGeoJSON(markersRef.current, new Set(registeredColorRef.current.keys()), selectedCaseRef.current?.id, inspectedPersonIdRef.current));
       });
     };
 
@@ -500,7 +629,7 @@ export default function MapView({
 
       map.addSource(SOURCE_ID, {
         type: 'geojson',
-        data: toGeoJSON(markersRef.current, new Set(registeredColorRef.current.keys())),
+        data: toGeoJSON(markersRef.current, new Set(registeredColorRef.current.keys()), selectedCaseRef.current?.id, inspectedPersonIdRef.current),
         cluster: true,
         clusterMaxZoom: 14,
         clusterRadius: 50,
@@ -544,10 +673,44 @@ export default function MapView({
         source: SOURCE_ID,
         filter: ['all', ['!', ['has', 'point_count']], ['!', ['has', 'iconId']], ['==', ['get', 'colocatedCount'], 1]],
         paint: {
-          'circle-color': ['coalesce', ['get', 'dotColor'], primary],
-          'circle-radius': ['case', ['==', ['get', 'isCrimeScene'], true], 10, 7],
-          'circle-stroke-width': ['case', ['==', ['get', 'isCrimeScene'], true], 3, 2],
-          'circle-stroke-color': ['case', ['==', ['get', 'isCrimeScene'], true], '#fde047', '#ffffff'],
+          'circle-color': [
+            'case',
+            ['==', ['get', 'isInspected'], true],
+            '#2563eb',
+            ['==', ['get', 'isDimmed'], true],
+            '#9ca3af',
+            ['coalesce', ['get', 'dotColor'], primary],
+          ],
+          'circle-opacity': [
+            'case',
+            ['==', ['get', 'isInspected'], true],
+            1,
+            ['==', ['get', 'isDimmed'], true],
+            0.7,
+            1,
+          ],
+          'circle-radius': [
+            'case',
+            ['==', ['get', 'isInspected'], true],
+            9,
+            ['case', ['==', ['get', 'isCrimeScene'], true], 10, 7],
+          ],
+          'circle-stroke-width': [
+            'case',
+            ['==', ['get', 'isInspected'], true],
+            3.5,
+            ['==', ['get', 'isDimmed'], true],
+            1.5,
+            ['case', ['==', ['get', 'isCrimeScene'], true], 3, 2],
+          ],
+          'circle-stroke-color': [
+            'case',
+            ['==', ['get', 'isInspected'], true],
+            '#60a5fa',
+            ['==', ['get', 'isDimmed'], true],
+            '#cbd5e1',
+            ['case', ['==', ['get', 'isCrimeScene'], true], '#fde047', '#ffffff'],
+          ],
         },
       });
 
@@ -560,8 +723,18 @@ export default function MapView({
         filter: ['all', ['!', ['has', 'point_count']], ['has', 'iconId'], ['==', ['get', 'colocatedCount'], 1]],
         layout: {
           'icon-image': ['get', 'iconId'],
-          'icon-size': 1,
+          'icon-size': ['case', ['==', ['get', 'isInspected'], true], 1.25, 1],
           'icon-allow-overlap': true,
+        },
+        paint: {
+          'icon-opacity': [
+            'case',
+            ['==', ['get', 'isInspected'], true],
+            1,
+            ['==', ['get', 'isDimmed'], true],
+            0.7,
+            1,
+          ],
         },
       });
 
@@ -574,8 +747,18 @@ export default function MapView({
         source: SOURCE_ID,
         filter: ['all', ['!', ['has', 'point_count']], ['>', ['get', 'colocatedCount'], 1]],
         paint: {
-          'circle-color': primary,
-          'circle-opacity': 0.85,
+          'circle-color': [
+            'case',
+            ['==', ['get', 'isDimmed'], true],
+            '#9ca3af',
+            primary,
+          ],
+          'circle-opacity': [
+            'case',
+            ['==', ['get', 'isDimmed'], true],
+            0.7,
+            0.85,
+          ],
           'circle-radius': 14,
         },
       });
@@ -589,7 +772,15 @@ export default function MapView({
           'text-field': ['to-string', ['get', 'colocatedCount']],
           'text-size': 12,
         },
-        paint: { 'text-color': '#ffffff' },
+        paint: {
+          'text-color': '#ffffff',
+          'text-opacity': [
+            'case',
+            ['==', ['get', 'isDimmed'], true],
+            0.8,
+            1,
+          ],
+        },
       });
 
       // Text labels directly below unclustered markers (Subject name or Case title)
@@ -600,7 +791,12 @@ export default function MapView({
         filter: ['all', ['!', ['has', 'point_count']], ['==', ['get', 'colocatedCount'], 1]],
         layout: {
           'text-field': ['get', 'personName'],
-          'text-size': ['case', ['==', ['get', 'isCrimeScene'], true], 12, 11],
+          'text-size': [
+            'case',
+            ['==', ['get', 'isInspected'], true],
+            13,
+            ['case', ['==', ['get', 'isCrimeScene'], true], 12, 11],
+          ],
           'text-offset': [0, 1.15],
           'text-anchor': 'top',
           'text-max-width': 14,
@@ -609,9 +805,19 @@ export default function MapView({
         paint: {
           'text-color': [
             'case',
-            ['==', ['get', 'isCrimeScene'], true],
-            darkTheme ? '#fde047' : '#b91c1c',
-            darkTheme ? '#f3f4f6' : '#111827',
+            ['==', ['get', 'isInspected'], true],
+            darkTheme ? '#60a5fa' : '#2563eb',
+            ['==', ['get', 'isDimmed'], true],
+            '#64748b',
+            ['case', ['==', ['get', 'isCrimeScene'], true], darkTheme ? '#fde047' : '#b91c1c', darkTheme ? '#f3f4f6' : '#111827'],
+          ],
+          'text-opacity': [
+            'case',
+            ['==', ['get', 'isInspected'], true],
+            1,
+            ['==', ['get', 'isDimmed'], true],
+            0.75,
+            1,
           ],
           'text-halo-color': darkTheme ? 'rgba(17, 24, 39, 0.92)' : 'rgba(255, 255, 255, 0.95)',
           'text-halo-width': 1.75,
@@ -817,7 +1023,7 @@ export default function MapView({
     ensureIconsRef.current?.();
     const source = map.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
     if (source) {
-      source.setData(toGeoJSON(markers, new Set(registeredColorRef.current.keys())));
+      source.setData(toGeoJSON(markers, new Set(registeredColorRef.current.keys()), selectedCaseRef.current?.id, inspectedPersonIdRef.current));
     }
   }, [markers]);
 
@@ -884,7 +1090,7 @@ export default function MapView({
   // user changes filters, including clearing them back to "all".
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || focusId) {
+    if (!map || focusId || selectedCase || inspectedPersonId) {
       appliedFiltersKeyRef.current = filtersKey;
       return;
     }
@@ -902,7 +1108,7 @@ export default function MapView({
       duration: CAMERA_ANIMATION_MS,
       animate: !prefersReducedMotion(),
     });
-  }, [markers, focusId, filtersKey]);
+  }, [markers, focusId, filtersKey, selectedCase]);
 
   if (webglUnavailable) {
     return (

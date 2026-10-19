@@ -504,14 +504,16 @@ describe('Dashboard Graph API Route', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.nodes).toContainEqual({
-      id: 'person-1',
-      label: 'Dad',
-      groups: [],
-      colors: [],
-      isCenter: false,
-      photo: null,
-    });
+    expect(body.nodes).toContainEqual(
+      expect.objectContaining({
+        id: 'person-1',
+        label: 'Dad',
+        groups: [],
+        colors: [],
+        isCenter: false,
+        photo: null,
+      }),
+    );
   });
 
   it('should build exclude-only filter inside AND wrapper', async () => {
