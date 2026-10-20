@@ -54,6 +54,13 @@ interface CandidateSuspect {
   closestAddressText: string | null;
   matchReasons: string[];
   score: number;
+  temporalSignals?: {
+    hasAlibi: boolean;
+    isIncarcerated: boolean;
+    recentConvictionMatch: boolean;
+    disappearedPostIncident: boolean;
+    journalActivityNearby: boolean;
+  };
   isLinked: boolean;
   linkedInvolvementType: string | null;
   linkedVerificationStatus: string | null;
@@ -90,6 +97,8 @@ export default function SuspectMatcherModal({
   const [matchCrimeType, setMatchCrimeType] = useState<boolean>(false);
   const [historyOnly, setHistoryOnly] = useState<boolean>(false);
   const [managementFilter, setManagementFilter] = useState<string>('SUSPECTS_ONLY');
+  const [hideAlibi, setHideAlibi] = useState<boolean>(true);
+  const [temporalSignalsOnly, setTemporalSignalsOnly] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   const fetchCandidates = useCallback(async () => {
@@ -100,6 +109,8 @@ export default function SuspectMatcherModal({
       if (matchCrimeType) params.set('matchCrimeType', 'true');
       if (historyOnly) params.set('historyOnly', 'true');
       if (managementFilter) params.set('managementFilter', managementFilter);
+      if (hideAlibi) params.set('hideAlibi', 'true');
+      if (temporalSignalsOnly) params.set('temporalSignalsOnly', 'true');
       if (searchQuery.trim()) params.set('q', searchQuery.trim());
 
       const res = await fetch(`/api/events/${eventId}/candidate-suspects?${params.toString()}`);
@@ -113,7 +124,16 @@ export default function SuspectMatcherModal({
     } finally {
       setIsLoading(false);
     }
-  }, [eventId, radiusKm, matchCrimeType, historyOnly, managementFilter, searchQuery]);
+  }, [
+    eventId,
+    radiusKm,
+    matchCrimeType,
+    historyOnly,
+    managementFilter,
+    hideAlibi,
+    temporalSignalsOnly,
+    searchQuery,
+  ]);
 
   useEffect(() => {
     if (isOpen) {
@@ -292,6 +312,31 @@ export default function SuspectMatcherModal({
                   <span>📋 {t('historyOnly')}</span>
                 </label>
 
+                {/* Temporal Toggles */}
+                <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={hideAlibi}
+                    onChange={(e) => setHideAlibi(e.target.checked)}
+                    className="rounded border-border text-primary focus:ring-primary"
+                  />
+                  <span className="text-emerald-700 dark:text-emerald-400 font-medium">
+                    🛡️ Ẩn ngoại phạm / Đang thụ án
+                  </span>
+                </label>
+
+                <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={temporalSignalsOnly}
+                    onChange={(e) => setTemporalSignalsOnly(e.target.checked)}
+                    className="rounded border-border text-primary focus:ring-primary"
+                  />
+                  <span className="text-amber-700 dark:text-amber-400 font-medium">
+                    ⏱️ Có biến động quanh ngày án
+                  </span>
+                </label>
+
                 {!hasSceneCoords && (
                   <span className="text-[11px] text-amber-600 dark:text-amber-400">
                     ℹ️ {t('noCrimeSceneCoordinates')}
@@ -381,6 +426,33 @@ export default function SuspectMatcherModal({
                               {candidate.person.citizenId && (
                                 <span className="text-[11px] px-1.5 py-0.5 rounded bg-muted/40 text-muted font-mono">
                                   🆔 {candidate.person.citizenId}
+                                </span>
+                              )}
+
+                              {/* Temporal Badges */}
+                              {candidate.temporalSignals?.hasAlibi && (
+                                <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                                  🟢 Ngoại phạm
+                                </span>
+                              )}
+                              {candidate.temporalSignals?.isIncarcerated && (
+                                <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-300">
+                                  🔒 Đang thụ án
+                                </span>
+                              )}
+                              {candidate.temporalSignals?.recentConvictionMatch && (
+                                <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                                  ⚡ Mới tái hòa nhập
+                                </span>
+                              )}
+                              {candidate.temporalSignals?.disappearedPostIncident && (
+                                <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300">
+                                  ⚠️ Vắng mặt sau án
+                                </span>
+                              )}
+                              {candidate.temporalSignals?.journalActivityNearby && (
+                                <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
+                                  📝 Có nhật ký quanh ngày án
                                 </span>
                               )}
                             </div>

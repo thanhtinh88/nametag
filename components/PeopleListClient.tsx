@@ -32,6 +32,11 @@ interface PersonRow {
   managementLevel?: string | null;
   threatLevel?: string | null;
   citizenId?: string | null;
+  vehicles?: Array<{ plateNumber: string; brandModel: string | null; color: string | null }>;
+  physicalMarks?: Array<{ type: string; location: string; description: string | null }>;
+  criminalRecordsCount?: number;
+  gangs?: Array<{ id: string; name: string; color: string | null }>;
+  casesCount?: number;
 }
 
 interface Group {
@@ -55,6 +60,68 @@ interface QuickCounts {
   countUnassignedGroup: number;
 }
 
+export function getContactStatusBadge(lastContact: Date | string | null | undefined): {
+  label: string;
+  badgeClass: string;
+  icon: string;
+} {
+  if (!lastContact) {
+    return {
+      label: 'Chưa kiểm diện',
+      badgeClass:
+        'bg-slate-100 text-slate-600 dark:bg-slate-900 dark:text-slate-400 border border-slate-200 dark:border-slate-800',
+      icon: '⚪',
+    };
+  }
+
+  const contactTime = new Date(lastContact).getTime();
+  if (isNaN(contactTime)) {
+    return {
+      label: 'Chưa kiểm diện',
+      badgeClass:
+        'bg-slate-100 text-slate-600 dark:bg-slate-900 dark:text-slate-400 border border-slate-200 dark:border-slate-800',
+      icon: '⚪',
+    };
+  }
+
+  const now = Date.now();
+  const diffDays = Math.max(0, Math.floor((now - contactTime) / (1000 * 60 * 60 * 24)));
+
+  if (diffDays <= 7) {
+    return {
+      label: diffDays === 0 ? 'Kiểm diện hôm nay' : `Đã kiểm diện (${diffDays} ngày trước)`,
+      badgeClass:
+        'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800',
+      icon: '🟢',
+    };
+  }
+
+  if (diffDays <= 30) {
+    return {
+      label: `Bình thường (${diffDays} ngày trước)`,
+      badgeClass:
+        'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800',
+      icon: '🔵',
+    };
+  }
+
+  if (diffDays <= 90) {
+    return {
+      label: `Quá hạn (${diffDays} ngày trước)`,
+      badgeClass:
+        'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-medium',
+      icon: '⚠️',
+    };
+  }
+
+  return {
+    label: `Mất dấu vết (${diffDays} ngày trước)`,
+    badgeClass:
+      'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300 border border-red-200 dark:border-red-800 font-bold',
+    icon: '🚨',
+  };
+}
+
 interface PeopleListClientProps {
   people: PersonRow[];
   totalCount: number;
@@ -68,6 +135,8 @@ interface PeopleListClientProps {
   managementFilter?: string;
   threatFilter?: string;
   hasRecordFilter?: string;
+  contactRecencyFilter?: string;
+  recordRecencyFilter?: string;
   query?: string;
   cfFilter: { slug: string; value: string } | null;
   quickCounts?: QuickCounts;
@@ -250,6 +319,227 @@ function NameCell({
   );
 }
 
+function TacticalDossierCard({
+  person,
+  isSelected,
+  onToggle,
+  nameOrder,
+  onStatusUpdate,
+}: {
+  person: PersonRow;
+  isSelected: boolean;
+  onToggle: () => void;
+  nameOrder?: 'WESTERN' | 'EASTERN';
+  onStatusUpdate: (id: string, newLevel: 'NORMAL' | 'SURVEILLANCE' | 'KEY_TARGET') => void;
+}) {
+  const fullDisplayName = formatCanonicalName(person, nameOrder);
+  const contactStatus = getContactStatusBadge(person.lastContact);
+  const isKey = person.managementLevel === 'KEY_TARGET';
+  const isSurveillance = person.managementLevel === 'SURVEILLANCE';
+  const isArmed = person.threatLevel === 'ARMED_DANGEROUS';
+  const isHighThreat = person.threatLevel === 'HIGH';
+
+  return (
+    <div
+      className={`rounded-xl border transition-all p-4 flex flex-col justify-between ${
+        isSelected
+          ? 'border-primary ring-2 ring-primary/20 bg-primary/[0.03] shadow-sm'
+          : isKey
+          ? 'border-red-500/50 bg-surface hover:border-red-500 shadow-xs'
+          : isSurveillance
+          ? 'border-amber-500/50 bg-surface hover:border-amber-500 shadow-xs'
+          : 'border-border bg-surface hover:border-primary/50 hover:shadow-xs'
+      }`}
+    >
+      <div className="space-y-3">
+        {/* Header: Checkbox + Avatar + Name + Nickname + Status */}
+        <div className="flex items-start gap-3">
+          <div className="pt-1">
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={onToggle}
+              className="w-4 h-4 text-primary bg-surface border-border rounded focus:ring-primary cursor-pointer"
+              aria-label={`Chọn đối tượng ${fullDisplayName}`}
+            />
+          </div>
+
+          <Link href={`/people/${person.id}`} className="shrink-0 relative group">
+            <PersonAvatar
+              personId={person.id}
+              photo={person.photo}
+              name={fullDisplayName}
+              size={48}
+            />
+            {isKey && (
+              <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-red-600 border-2 border-surface animate-pulse" />
+            )}
+          </Link>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Link
+                href={`/people/${person.id}`}
+                className="font-bold text-sm text-foreground hover:text-primary transition-colors truncate block"
+              >
+                {fullDisplayName}
+              </Link>
+              {person.nickname && (
+                <span className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-purple-500/10 text-purple-700 dark:text-purple-300 border border-purple-500/20 truncate max-w-[140px]">
+                  🎭 &quot;{person.nickname}&quot;
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5 flex-wrap mt-1">
+              <QuickStatusSelector
+                personId={person.id}
+                currentLevel={person.managementLevel}
+                personName={fullDisplayName}
+                onUpdate={onStatusUpdate}
+              />
+              {isArmed && (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-600 text-white shadow-xs">
+                  ⚠️ Vũ khí
+                </span>
+              )}
+              {isHighThreat && !isArmed && (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-500/15 text-orange-600 dark:text-orange-400">
+                  ⚡ Nguy hiểm
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Tactical Info Section */}
+        <div className="bg-surface-elevated/50 rounded-lg p-2.5 text-xs space-y-1.5 border border-border/60">
+          {/* Citizen ID & Contact status */}
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-1 font-mono text-muted-foreground">
+              <span className="text-muted">🆔</span>
+              {person.citizenId ? (
+                <span className="font-semibold text-foreground">{person.citizenId}</span>
+              ) : (
+                <span className="text-muted italic">Chưa có CCCD</span>
+              )}
+            </div>
+
+            <span
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] ${contactStatus.badgeClass}`}
+            >
+              <span>{contactStatus.icon}</span>
+              <span>{contactStatus.label}</span>
+            </span>
+          </div>
+
+          {/* Vehicle plate */}
+          {person.vehicles && person.vehicles.length > 0 && (
+            <div className="flex items-center gap-1.5 text-muted-foreground truncate pt-0.5">
+              <span>🚗</span>
+              <span className="font-medium text-foreground">
+                {person.vehicles[0].plateNumber}
+              </span>
+              {(person.vehicles[0].brandModel || person.vehicles[0].color) && (
+                <span className="text-muted text-[11px] truncate">
+                  ({[person.vehicles[0].brandModel, person.vehicles[0].color].filter(Boolean).join(' ')})
+                </span>
+              )}
+              {person.vehicles.length > 1 && (
+                <span className="text-[10px] text-muted">+{person.vehicles.length - 1} xe</span>
+              )}
+            </div>
+          )}
+
+          {/* Physical mark */}
+          {person.physicalMarks && person.physicalMarks.length > 0 && (
+            <div className="flex items-center gap-1.5 text-muted-foreground truncate">
+              <span>🔍</span>
+              <span className="truncate text-foreground text-[11px]">
+                {person.physicalMarks[0].type} ở {person.physicalMarks[0].location}
+                {person.physicalMarks[0].description ? `: ${person.physicalMarks[0].description}` : ''}
+              </span>
+            </div>
+          )}
+
+          {/* Gang membership */}
+          {person.gangs && person.gangs.length > 0 && (
+            <div className="flex items-center gap-1.5 text-muted-foreground truncate">
+              <span>👥</span>
+              <span className="text-indigo-600 dark:text-indigo-400 font-medium text-[11px] truncate">
+                {person.gangs.map((g) => g.name).join(', ')}
+              </span>
+            </div>
+          )}
+
+          {/* Records & Cases metrics */}
+          <div className="flex items-center gap-2 pt-1 border-t border-border/40 text-[11px]">
+            <span className="text-muted-foreground flex items-center gap-1">
+              <span>⚖️</span>
+              <span className="font-semibold text-foreground">
+                {person.criminalRecordsCount ?? 0}
+              </span>{' '}
+              tiền án/tiền sự
+            </span>
+            <span className="text-border">•</span>
+            <span className="text-muted-foreground flex items-center gap-1">
+              <span>📁</span>
+              <span className="font-semibold text-foreground">
+                {person.casesCount ?? 0}
+              </span>{' '}
+              vụ án liên quan
+            </span>
+          </div>
+        </div>
+
+        {/* Groups */}
+        {person.groups.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {person.groups.map((pg) => (
+              <span
+                key={pg.groupId}
+                className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium"
+                style={{
+                  backgroundColor: pg.group.color ? `${pg.group.color}20` : 'var(--badge-bg)',
+                  color: pg.group.color || 'var(--badge-text)',
+                }}
+              >
+                {pg.group.name}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Card Footer */}
+      <div className="pt-3 mt-2 border-t border-border/60 flex items-center justify-between">
+        <Link
+          href={`/people/${person.id}`}
+          className="text-xs font-semibold text-primary hover:underline flex items-center gap-1"
+        >
+          <span>Xem hồ sơ chi tiết</span>
+          <span>→</span>
+        </Link>
+
+        <Link
+          href={`/people/${person.id}/edit`}
+          className="p-1.5 rounded-md text-muted hover:text-foreground hover:bg-surface-elevated transition-colors"
+          title="Chỉnh sửa thông tin"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+            />
+          </svg>
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 export default function PeopleListClient({
   people: initialPeople,
   totalCount,
@@ -263,6 +553,8 @@ export default function PeopleListClient({
   managementFilter = '',
   threatFilter = '',
   hasRecordFilter = '',
+  contactRecencyFilter = '',
+  recordRecencyFilter = '',
   query = '',
   cfFilter,
   quickCounts,
@@ -287,6 +579,8 @@ export default function PeopleListClient({
     setPeople(initialPeople);
   }, [initialPeople]);
 
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+
   const handleStatusUpdate = useCallback((id: string, newLevel: 'NORMAL' | 'SURVEILLANCE' | 'KEY_TARGET') => {
     setPeople((prev) =>
       prev.map((p) => (p.id === id ? { ...p, managementLevel: newLevel } : p))
@@ -301,6 +595,23 @@ export default function PeopleListClient({
   useEffect(() => {
     setSearchInput(query);
   }, [query]);
+
+  const hasActiveFilters = Boolean(
+    groupFilter ||
+      relationshipFilter ||
+      managementFilter ||
+      threatFilter ||
+      hasRecordFilter ||
+      contactRecencyFilter ||
+      recordRecencyFilter ||
+      query ||
+      cfFilter
+  );
+
+  const clearAllFilters = () => {
+    setSearchInput('');
+    router.push('/people');
+  };
 
   // Save current people list URL so back link returns here
   useEffect(() => {
@@ -395,11 +706,24 @@ export default function PeopleListClient({
     if (managementFilter) params.set('managementLevel', managementFilter);
     if (threatFilter) params.set('threatLevel', threatFilter);
     if (hasRecordFilter) params.set('hasRecord', hasRecordFilter);
+    if (contactRecencyFilter) params.set('contactRecency', contactRecencyFilter);
+    if (recordRecencyFilter) params.set('recordRecency', recordRecencyFilter);
     if (query) params.set('q', query);
     if (cfFilter) params.set('cf', `${cfFilter.slug}:${cfFilter.value}`);
     if (pageSize !== 25) params.set('pageSize', String(pageSize));
     return params;
-  }, [groupFilter, relationshipFilter, managementFilter, threatFilter, hasRecordFilter, query, cfFilter, pageSize]);
+  }, [
+    groupFilter,
+    relationshipFilter,
+    managementFilter,
+    threatFilter,
+    hasRecordFilter,
+    contactRecencyFilter,
+    recordRecencyFilter,
+    query,
+    cfFilter,
+    pageSize,
+  ]);
 
   const buildSortUrl = (col: string) => {
     const params = buildFilterParams();
@@ -432,6 +756,8 @@ export default function PeopleListClient({
       managementLevel: managementFilter,
       threatLevel: threatFilter,
       hasRecord: hasRecordFilter,
+      contactRecency: contactRecencyFilter,
+      recordRecency: recordRecencyFilter,
       q: query,
       cf: cfFilter ? `${cfFilter.slug}:${cfFilter.value}` : '',
       [key]: value,
@@ -442,6 +768,8 @@ export default function PeopleListClient({
     if (filters.managementLevel) params.set('managementLevel', filters.managementLevel);
     if (filters.threatLevel) params.set('threatLevel', filters.threatLevel);
     if (filters.hasRecord) params.set('hasRecord', filters.hasRecord);
+    if (filters.contactRecency) params.set('contactRecency', filters.contactRecency);
+    if (filters.recordRecency) params.set('recordRecency', filters.recordRecency);
     if (filters.q) params.set('q', filters.q);
     if (filters.cf) params.set('cf', filters.cf);
 
@@ -572,35 +900,88 @@ export default function PeopleListClient({
       )}
 
       {/* 2. Search & Detailed Filter Bar */}
-      <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-        {/* Search bar */}
-        <form onSubmit={handleSearchSubmit} className="flex-1 max-w-md relative">
-          <input
-            type="text"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Tìm theo tên, biệt danh, CCCD..."
-            className="w-full pl-9 pr-8 py-2 text-sm border border-border rounded-lg bg-surface text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
-          />
-          <svg className="w-4 h-4 text-muted absolute left-3 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          {searchInput && (
-            <button
-              type="button"
-              onClick={() => {
-                setSearchInput('');
-                handleFilterChange('q', '');
-              }}
-              className="absolute right-2.5 top-2.5 text-muted hover:text-foreground text-xs"
+      <div className="mb-4 bg-surface border border-border rounded-lg p-3 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          {/* Search bar */}
+          <form onSubmit={handleSearchSubmit} className="flex-1 max-w-md relative">
+            <input
+              type="text"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Tìm theo tên, biệt danh, CCCD, biển số xe, hình xăm..."
+              className="w-full pl-9 pr-8 py-2 text-sm border border-border rounded-lg bg-surface-elevated text-foreground focus:ring-2 focus:ring-primary focus:border-primary"
+            />
+            <svg
+              className="w-4 h-4 text-muted absolute left-3 top-3"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
             >
-              ✕
-            </button>
-          )}
-        </form>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
+            </svg>
+            {searchInput && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchInput('');
+                  handleFilterChange('q', '');
+                }}
+                className="absolute right-2.5 top-2.5 text-muted hover:text-foreground text-xs"
+              >
+                ✕
+              </button>
+            )}
+          </form>
+
+          {/* View Mode & Sorters */}
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={clearAllFilters}
+                className="px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg border border-red-200 dark:border-red-900 transition-colors"
+              >
+                ✕ Xóa bộ lọc
+              </button>
+            )}
+
+            {/* View Mode Switcher */}
+            <div className="flex items-center border border-border rounded-lg bg-surface-elevated p-0.5">
+              <button
+                type="button"
+                onClick={() => setViewMode('grid')}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                  viewMode === 'grid'
+                    ? 'bg-primary text-on-primary shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                title="Hiển thị dạng thẻ hồ sơ trinh sát"
+              >
+                <span>🔲</span> Dạng thẻ
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('table')}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                  viewMode === 'table'
+                    ? 'bg-primary text-on-primary shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                title="Hiển thị dạng sổ danh sách quản lý"
+              >
+                <span>📋</span> Sổ quản lý
+              </button>
+            </div>
+          </div>
+        </div>
 
         {/* Dropdowns */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border">
           <select
             value={managementFilter}
             onChange={(e) => handleFilterChange('managementLevel', e.target.value)}
@@ -637,6 +1018,28 @@ export default function PeopleListClient({
             ))}
           </select>
 
+          {/* Temporal Investigation Filters */}
+          <select
+            value={contactRecencyFilter}
+            onChange={(e) => handleFilterChange('contactRecency', e.target.value)}
+            className="px-3 py-1.5 text-sm border border-border rounded-lg bg-surface text-foreground focus:ring-2 focus:ring-primary"
+          >
+            <option value="">-- Mức độ kiểm diện / Tiếp xúc --</option>
+            <option value="uncontacted_30d">⚠️ Mất liên lạc &gt; 30 ngày</option>
+            <option value="uncontacted_90d">🚨 Vắng mặt &gt; 90 ngày</option>
+            <option value="contacted_7d">✅ Đã kiểm diện trong 7 ngày</option>
+          </select>
+
+          <select
+            value={recordRecencyFilter}
+            onChange={(e) => handleFilterChange('recordRecency', e.target.value)}
+            className="px-3 py-1.5 text-sm border border-border rounded-lg bg-surface text-foreground focus:ring-2 focus:ring-primary"
+          >
+            <option value="">-- Mốc tiền án / tiền sự --</option>
+            <option value="record_within_1y">⚡ Tiền án trong 1 năm qua (Mới về)</option>
+            <option value="record_within_3y">📅 Tiền án trong 3 năm qua</option>
+          </select>
+
           <CustomFieldFilter
             templates={customFieldTemplates}
             current={cfFilter}
@@ -671,190 +1074,322 @@ export default function PeopleListClient({
         )}
       </div>
 
-      {/* Table */}
-      <div className="bg-surface shadow-sm rounded-lg overflow-hidden border border-border">
-        <div className="overflow-x-auto max-w-full">
-          <table className="min-w-full divide-y divide-border">
-            <thead className="bg-surface-elevated">
-              <tr>
-                <th className="pl-4 pr-2 py-3 w-10">
-                  <input
-                    type="checkbox"
-                    checked={allPageSelected}
-                    onChange={togglePage}
-                    className="w-4 h-4 text-primary bg-surface-elevated border-border rounded focus:ring-primary"
-                    title={t('selectAll')}
-                    aria-label={t('selectAll')}
-                  />
-                </th>
-                <th className="w-[32px] py-3 px-2" />
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
-                  <Link href={buildSortUrl(fullNameSortKey)} className="flex items-center gap-1 hover:text-foreground py-2 -my-2 min-h-11 sm:min-h-0">
-                    {tt.fullName}
-                    {sortBy === fullNameSortKey && <span className="text-primary">{order === 'asc' ? '↑' : '↓'}</span>}
-                  </Link>
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
-                  <Link href={buildSortUrl('managementLevel')} className="flex items-center gap-1 hover:text-foreground py-2 -my-2 min-h-11 sm:min-h-0">
-                    Diện quản lý
-                    {sortBy === 'managementLevel' && <span className="text-primary">{order === 'asc' ? '↑' : '↓'}</span>}
-                  </Link>
-                </th>
-                <th className="hidden sm:table-cell px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
-                  <Link href={buildSortUrl('citizenId')} className="flex items-center gap-1 hover:text-foreground py-2 -my-2 min-h-11 sm:min-h-0">
-                    Số CCCD / CMND
-                    {sortBy === 'citizenId' && <span className="text-primary">{order === 'asc' ? '↑' : '↓'}</span>}
-                  </Link>
-                </th>
-                <th className="hidden lg:table-cell px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
-                  <Link href={buildSortUrl('relationship')} className="flex items-center gap-1 hover:text-foreground py-2 -my-2 min-h-11 sm:min-h-0">
-                    {tt.relationshipToUser}
-                    {sortBy === 'relationship' && <span className="text-primary">{order === 'asc' ? '↑' : '↓'}</span>}
-                  </Link>
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
-                  <Link href={buildSortUrl('group')} className="flex items-center gap-1 hover:text-foreground py-2 -my-2 min-h-11 sm:min-h-0">
-                    {tt.groups}
-                    {sortBy === 'group' && <span className="text-primary">{order === 'asc' ? '↑' : '↓'}</span>}
-                  </Link>
-                </th>
-                <th className="hidden md:table-cell px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
-                  <Link href={buildSortUrl('lastContact')} className="flex items-center gap-1 hover:text-foreground py-2 -my-2 min-h-11 sm:min-h-0">
-                    {tt.lastContact}
-                    {sortBy === 'lastContact' && <span className="text-primary">{order === 'asc' ? '↑' : '↓'}</span>}
-                  </Link>
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-muted uppercase tracking-wider">
-                  {tt.actions}
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-surface divide-y divide-border">
-              {people.map((person) => {
-                const isSelected = selectedIds.has(person.id);
-                const isOrphan =
-                  person.relationshipsFrom.length === 0 &&
-                  person.relationshipsTo.length === 0 &&
-                  !person.relationshipToUser;
-                const fullDisplayName = formatCanonicalName(person, nameOrder);
-                const combinedName = formatCanonicalName(person, nameOrder, nameDisplayFormat);
-
-                return (
-                  <tr
-                    key={person.id}
-                    className={`hover:bg-surface-elevated transition-colors ${isSelected ? 'bg-primary/5' : ''}`}
-                  >
-                    <td className="pl-4 pr-2 py-4 whitespace-nowrap">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => togglePerson(person.id)}
-                        className="w-4 h-4 text-primary bg-surface-elevated border-border rounded focus:ring-primary"
-                        aria-label={`Select ${fullDisplayName}`}
-                      />
-                    </td>
-                    <td className="w-[32px] py-4 px-2">
-                      <PersonAvatar
-                        personId={person.id}
-                        name={fullDisplayName}
-                        photo={person.photo}
-                        size={32}
-                      />
-                    </td>
-                    {/* Cột Họ và tên gộp chung */}
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <NameCell
-                        href={`/people/${person.id}`}
-                        label={combinedName}
-                        isOrphan={isOrphan}
-                        orphanWarning={tt.orphanWarning}
-                        displayNameOverride={person.displayNameOverride}
-                      />
-                    </td>
-                    {/* Cột Diện quản lý riêng */}
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <QuickStatusSelector
-                          personId={person.id}
-                          currentLevel={person.managementLevel}
-                          personName={fullDisplayName}
-                          onUpdate={handleStatusUpdate}
-                        />
-                        {(person.threatLevel === 'HIGH' || person.threatLevel === 'ARMED_DANGEROUS') && (
-                          <span
-                            className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-600 text-white shadow-xs"
-                            title={person.threatLevel === 'ARMED_DANGEROUS' ? 'Có vũ khí, cực kỳ nguy hiểm' : 'Nguy hiểm cao'}
-                          >
-                            ⚠️ {person.threatLevel === 'ARMED_DANGEROUS' ? 'Vũ khí' : 'Nguy hiểm'}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    {/* Cột Số CCCD riêng */}
-                    <td className="hidden sm:table-cell px-6 py-4 whitespace-nowrap text-xs font-mono">
-                      {person.citizenId ? (
-                        <span className="px-2 py-0.5 rounded bg-surface-elevated border border-border/70 font-semibold text-foreground">
-                          {person.citizenId}
-                        </span>
-                      ) : (
-                        <span className="text-muted">—</span>
+      {/* 3. People List Render (Grid or Table) */}
+      {people.length === 0 ? (
+        <div className="bg-surface border border-border rounded-lg p-12 text-center">
+          <p className="text-base text-muted-foreground mb-4">
+            {totalCount === 0 && !hasActiveFilters
+              ? 'Chưa có đối tượng nào trong hệ thống.'
+              : 'Không tìm thấy đối tượng phù hợp với bộ lọc hiện tại.'}
+          </p>
+          {totalCount === 0 && !hasActiveFilters ? (
+            <Link
+              href="/people/new"
+              className="inline-flex items-center px-4 py-2 bg-primary text-on-primary rounded-lg font-medium hover:opacity-90 transition-opacity"
+            >
+              + Thêm đối tượng mới
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              className="inline-flex items-center px-4 py-2 bg-surface-elevated border border-border text-foreground rounded-lg font-medium hover:bg-surface transition-colors"
+            >
+              ✕ Xóa bộ lọc tìm kiếm
+            </button>
+          )}
+        </div>
+      ) : viewMode === 'grid' ? (
+        /* GRID VIEW - TACTICAL DOSSIER CARDS */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+          {people.map((person) => {
+            const isSelected = selectedIds.has(person.id);
+            return (
+              <TacticalDossierCard
+                key={person.id}
+                person={person}
+                isSelected={isSelected}
+                onToggle={() => togglePerson(person.id)}
+                nameOrder={nameOrder}
+                onStatusUpdate={handleStatusUpdate}
+              />
+            );
+          })}
+        </div>
+      ) : (
+        /* TABLE VIEW - ENHANCED DOSSIER LEDGER */
+        <div className="bg-surface shadow-sm rounded-lg overflow-hidden border border-border mb-4">
+          <div className="overflow-x-auto max-w-full">
+            <table className="min-w-full divide-y divide-border">
+              <thead className="bg-surface-elevated">
+                <tr>
+                  <th className="pl-4 pr-2 py-3 w-10">
+                    <input
+                      type="checkbox"
+                      checked={allPageSelected}
+                      onChange={togglePage}
+                      className="w-4 h-4 text-primary bg-surface-elevated border-border rounded focus:ring-primary cursor-pointer"
+                      title={t('selectAll')}
+                      aria-label={t('selectAll')}
+                    />
+                  </th>
+                  <th className="w-[32px] py-3 px-2" />
+                  <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
+                    <Link
+                      href={buildSortUrl(fullNameSortKey)}
+                      className="flex items-center gap-1 hover:text-foreground py-2 -my-2 min-h-11 sm:min-h-0"
+                    >
+                      {tt.fullName}
+                      {sortBy === fullNameSortKey && (
+                        <span className="text-primary">{order === 'asc' ? '↑' : '↓'}</span>
                       )}
-                    </td>
-                    <td className="hidden lg:table-cell px-6 py-4 whitespace-nowrap">
-                      {(() => {
-                        const count = person.relationshipsFrom.length + person.relationshipsTo.length;
-                        return count > 0 ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary border border-primary/20">
-                            {count} liên kết
+                    </Link>
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
+                    <Link
+                      href={buildSortUrl('managementLevel')}
+                      className="flex items-center gap-1 hover:text-foreground py-2 -my-2 min-h-11 sm:min-h-0"
+                    >
+                      Diện quản lý
+                      {sortBy === 'managementLevel' && (
+                        <span className="text-primary">{order === 'asc' ? '↑' : '↓'}</span>
+                      )}
+                    </Link>
+                  </th>
+                  <th className="hidden sm:table-cell px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
+                    <Link
+                      href={buildSortUrl('citizenId')}
+                      className="flex items-center gap-1 hover:text-foreground py-2 -my-2 min-h-11 sm:min-h-0"
+                    >
+                      Số CCCD / CMND
+                      {sortBy === 'citizenId' && (
+                        <span className="text-primary">{order === 'asc' ? '↑' : '↓'}</span>
+                      )}
+                    </Link>
+                  </th>
+                  <th className="hidden md:table-cell px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
+                    <Link
+                      href={buildSortUrl('lastContact')}
+                      className="flex items-center gap-1 hover:text-foreground py-2 -my-2 min-h-11 sm:min-h-0"
+                    >
+                      Kiểm diện / Tiếp xúc
+                      {sortBy === 'lastContact' && (
+                        <span className="text-primary">{order === 'asc' ? '↑' : '↓'}</span>
+                      )}
+                    </Link>
+                  </th>
+                  <th className="hidden lg:table-cell px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
+                    Án tích &amp; Vụ việc
+                  </th>
+                  <th className="hidden sm:table-cell px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
+                    <Link
+                      href={buildSortUrl('group')}
+                      className="flex items-center gap-1 hover:text-foreground py-2 -my-2 min-h-11 sm:min-h-0"
+                    >
+                      {tt.groups}
+                      {sortBy === 'group' && (
+                        <span className="text-primary">{order === 'asc' ? '↑' : '↓'}</span>
+                      )}
+                    </Link>
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-muted uppercase tracking-wider">
+                    {tt.actions}
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-surface divide-y divide-border">
+                {people.map((person) => {
+                  const isSelected = selectedIds.has(person.id);
+                  const isOrphan =
+                    person.relationshipsFrom.length === 0 &&
+                    person.relationshipsTo.length === 0 &&
+                    !person.relationshipToUser;
+                  const fullDisplayName = formatCanonicalName(person, nameOrder);
+                  const combinedName = formatCanonicalName(person, nameOrder, nameDisplayFormat);
+                  const contactStatus = getContactStatusBadge(person.lastContact);
+
+                  return (
+                    <tr
+                      key={person.id}
+                      className={`hover:bg-surface-elevated transition-colors ${
+                        isSelected ? 'bg-primary/5' : ''
+                      }`}
+                    >
+                      <td className="pl-4 pr-2 py-4 whitespace-nowrap">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => togglePerson(person.id)}
+                          className="w-4 h-4 text-primary bg-surface-elevated border-border rounded focus:ring-primary cursor-pointer"
+                          aria-label={`Select ${fullDisplayName}`}
+                        />
+                      </td>
+                      <td className="w-[32px] py-4 px-2">
+                        <PersonAvatar
+                          personId={person.id}
+                          name={fullDisplayName}
+                          photo={person.photo}
+                          size={34}
+                        />
+                      </td>
+                      {/* Name + Nickname */}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex flex-col">
+                          <NameCell
+                            href={`/people/${person.id}`}
+                            label={combinedName}
+                            isOrphan={isOrphan}
+                            orphanWarning={tt.orphanWarning}
+                            displayNameOverride={person.displayNameOverride}
+                          />
+                          {person.nickname && (
+                            <span className="text-xs text-purple-700 dark:text-purple-300 font-medium">
+                              Biệt danh: &quot;{person.nickname}&quot;
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      {/* Management Level */}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <QuickStatusSelector
+                            personId={person.id}
+                            currentLevel={person.managementLevel}
+                            personName={fullDisplayName}
+                            onUpdate={handleStatusUpdate}
+                          />
+                          {(person.threatLevel === 'HIGH' ||
+                            person.threatLevel === 'ARMED_DANGEROUS') && (
+                            <span
+                              className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-600 text-white shadow-xs"
+                              title={
+                                person.threatLevel === 'ARMED_DANGEROUS'
+                                  ? 'Có vũ khí, cực kỳ nguy hiểm'
+                                  : 'Nguy hiểm cao'
+                              }
+                            >
+                              ⚠️ {person.threatLevel === 'ARMED_DANGEROUS' ? 'Vũ khí' : 'Nguy hiểm'}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      {/* CCCD */}
+                      <td className="hidden sm:table-cell px-6 py-4 whitespace-nowrap text-xs font-mono">
+                        {person.citizenId ? (
+                          <span className="px-2 py-0.5 rounded bg-surface-elevated border border-border/70 font-semibold text-foreground">
+                            {person.citizenId}
                           </span>
                         ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium text-muted bg-surface-elevated">
-                            {tt.indirect}
-                          </span>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex flex-wrap gap-1">
-                        {person.groups.map((pg) => (
+                          <span className="text-muted italic">—</span>
+                        )}
+                      </td>
+                      {/* Contact Status Badge */}
+                      <td className="hidden md:table-cell px-6 py-4 whitespace-nowrap text-xs">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] ${contactStatus.badgeClass}`}
+                        >
+                          <span>{contactStatus.icon}</span>
+                          <span>{contactStatus.label}</span>
+                        </span>
+                      </td>
+                      {/* Records & Cases metrics */}
+                      <td className="hidden lg:table-cell px-6 py-4 whitespace-nowrap text-xs">
+                        <div className="flex items-center gap-2">
                           <span
-                            key={pg.groupId}
-                            className="inline-flex items-center px-2 py-1 rounded text-xs font-medium"
-                            style={{
-                              backgroundColor: pg.group.color ? `${pg.group.color}20` : 'var(--badge-bg)',
-                              color: pg.group.color || 'var(--badge-text)',
-                            }}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-elevated border border-border text-foreground"
+                            title={`${person.criminalRecordsCount ?? 0} tiền án/tiền sự`}
                           >
-                            {pg.group.name}
+                            <span>⚖️</span>
+                            <span>{person.criminalRecordsCount ?? 0}</span>
                           </span>
-                        ))}
-                        {person.groups.length === 0 && <span className="text-sm text-muted">{'—'}</span>}
-                      </div>
-                    </td>
-                    <td className="hidden md:table-cell px-6 py-4 whitespace-nowrap text-sm text-muted">
-                      {person.lastContact ? formatDate(parseCalendarDate(person.lastContact), dateFormat) : '—'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <div className="flex justify-end gap-3">
-                        <Link href={`/people/${person.id}/edit`} className="text-primary hover:text-primary-dark transition-colors" title={tc.edit}>
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                        </Link>
-                        <Link href={`/people/${person.id}`} className="text-muted hover:text-foreground transition-colors" title={tc.view}>
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                          </svg>
-                        </Link>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                          <span
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-elevated border border-border text-foreground"
+                            title={`${person.casesCount ?? 0} vụ án liên quan`}
+                          >
+                            <span>📁</span>
+                            <span>{person.casesCount ?? 0}</span>
+                          </span>
+                        </div>
+                      </td>
+                      {/* Groups */}
+                      <td className="hidden sm:table-cell px-6 py-4 whitespace-nowrap">
+                        <div className="flex flex-wrap gap-1">
+                          {person.groups.map((pg) => (
+                            <span
+                              key={pg.groupId}
+                              className="inline-flex items-center px-2 py-1 rounded text-xs font-medium"
+                              style={{
+                                backgroundColor: pg.group.color
+                                  ? `${pg.group.color}20`
+                                  : 'var(--badge-bg)',
+                                color: pg.group.color || 'var(--badge-text)',
+                              }}
+                            >
+                              {pg.group.name}
+                            </span>
+                          ))}
+                          {person.groups.length === 0 && (
+                            <span className="text-sm text-muted">{'—'}</span>
+                          )}
+                        </div>
+                      </td>
+                      {/* Actions */}
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        <div className="flex justify-end gap-3">
+                          <Link
+                            href={`/people/${person.id}/edit`}
+                            className="text-primary hover:text-primary-dark transition-colors"
+                            title={tc.edit}
+                          >
+                            <svg
+                              className="w-5 h-5"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                              />
+                            </svg>
+                          </Link>
+                          <Link
+                            href={`/people/${person.id}`}
+                            className="text-muted hover:text-foreground transition-colors"
+                            title={tc.view}
+                          >
+                            <svg
+                              className="w-5 h-5"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                              />
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                              />
+                            </svg>
+                          </Link>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
+      )}
 
         {/* Enhanced Pagination Bar */}
         {totalPages > 1 && (
@@ -976,7 +1511,6 @@ export default function PeopleListClient({
             </div>
           </div>
         )}
-      </div>
 
       {/* Floating action bar */}
       <div

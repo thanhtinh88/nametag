@@ -12,6 +12,7 @@ import PersonAvatar from './PersonPhoto';
 import BulkEventCaseStatusModal from './BulkEventCaseStatusModal';
 import BulkEventGroupModal from './BulkEventGroupModal';
 import BulkEventDeleteModal from './BulkEventDeleteModal';
+import InvestigationDateRangeFilter from './filters/InvestigationDateRangeFilter';
 
 export interface SerializedEventItem {
   id: string;
@@ -103,6 +104,10 @@ interface EventsListClientProps {
   personFilter: string;
   categoryFilter: string;
   query: string;
+  fromDateFilter?: string;
+  toDateFilter?: string;
+  datePresetFilter?: string;
+  dateFieldFilter?: string;
   quickCounts?: QuickEventCounts;
   crossCaseSuspects?: CrossCaseSuspectEntry[];
   categories: string[];
@@ -257,6 +262,10 @@ export default function EventsListClient({
   personFilter,
   categoryFilter,
   query,
+  fromDateFilter = '',
+  toDateFilter = '',
+  datePresetFilter = '',
+  dateFieldFilter = 'startDate',
   quickCounts,
   crossCaseSuspects = [],
   categories,
@@ -362,9 +371,25 @@ export default function EventsListClient({
     if (personFilter) params.set('person', personFilter);
     if (categoryFilter) params.set('category', categoryFilter);
     if (query) params.set('q', query);
+    if (fromDateFilter) params.set('fromDate', fromDateFilter);
+    if (toDateFilter) params.set('toDate', toDateFilter);
+    if (datePresetFilter) params.set('datePreset', datePresetFilter);
+    if (dateFieldFilter && dateFieldFilter !== 'startDate') params.set('dateField', dateFieldFilter);
     if (pageSize !== 25) params.set('pageSize', String(pageSize));
     return params;
-  }, [caseStatusFilter, statusFilter, groupFilter, personFilter, categoryFilter, query, pageSize]);
+  }, [
+    caseStatusFilter,
+    statusFilter,
+    groupFilter,
+    personFilter,
+    categoryFilter,
+    query,
+    fromDateFilter,
+    toDateFilter,
+    datePresetFilter,
+    dateFieldFilter,
+    pageSize,
+  ]);
 
   const buildSortUrl = (col: string) => {
     const params = buildFilterParams();
@@ -384,28 +409,48 @@ export default function EventsListClient({
   };
 
   const handleFilterChange = (key: string, value: string) => {
-    const params = new URLSearchParams();
-    if (sortBy !== 'startDate') params.set('sortBy', sortBy);
-    if (order !== 'desc') params.set('order', order);
-    if (pageSize !== 25) params.set('pageSize', String(pageSize));
+    const params = buildFilterParams();
+    if (value) {
+      params.set(key, value);
+    } else {
+      params.delete(key);
+    }
+    params.set('page', '1');
+    router.push(`/events?${params.toString()}`);
+  };
 
-    const currentFilters: Record<string, string> = {
-      caseStatus: caseStatusFilter,
-      status: statusFilter,
-      group: groupFilter,
-      person: personFilter,
-      category: categoryFilter,
-      q: query,
-      [key]: value,
-    };
+  const handleDateFilterApply = (filters: {
+    fromDate?: string;
+    toDate?: string;
+    datePreset?: string;
+    dateField?: string;
+  }) => {
+    const params = buildFilterParams();
+    if (filters.fromDate) params.set('fromDate', filters.fromDate);
+    else params.delete('fromDate');
 
-    if (currentFilters.caseStatus) params.set('caseStatus', currentFilters.caseStatus);
-    if (currentFilters.status) params.set('status', currentFilters.status);
-    if (currentFilters.group) params.set('group', currentFilters.group);
-    if (currentFilters.person) params.set('person', currentFilters.person);
-    if (currentFilters.category) params.set('category', currentFilters.category);
-    if (currentFilters.q) params.set('q', currentFilters.q);
+    if (filters.toDate) params.set('toDate', filters.toDate);
+    else params.delete('toDate');
 
+    if (filters.datePreset) params.set('datePreset', filters.datePreset);
+    else params.delete('datePreset');
+
+    if (filters.dateField && filters.dateField !== 'startDate') {
+      params.set('dateField', filters.dateField);
+    } else {
+      params.delete('dateField');
+    }
+
+    params.set('page', '1');
+    router.push(`/events?${params.toString()}`);
+  };
+
+  const handleDateFilterClear = () => {
+    const params = buildFilterParams();
+    params.delete('fromDate');
+    params.delete('toDate');
+    params.delete('datePreset');
+    params.delete('dateField');
     params.set('page', '1');
     router.push(`/events?${params.toString()}`);
   };
@@ -448,7 +493,15 @@ export default function EventsListClient({
   };
 
   const hasActiveFilters = Boolean(
-    caseStatusFilter || statusFilter || groupFilter || personFilter || categoryFilter || query
+    caseStatusFilter ||
+      statusFilter ||
+      groupFilter ||
+      personFilter ||
+      categoryFilter ||
+      query ||
+      fromDateFilter ||
+      toDateFilter ||
+      datePresetFilter
   );
 
   return (
@@ -698,6 +751,16 @@ export default function EventsListClient({
             </div>
           </div>
         </div>
+
+        {/* Temporal Investigation Filter Bar */}
+        <InvestigationDateRangeFilter
+          fromDate={fromDateFilter}
+          toDate={toDateFilter}
+          datePreset={datePresetFilter}
+          dateField={dateFieldFilter}
+          onApply={handleDateFilterApply}
+          onClear={handleDateFilterClear}
+        />
 
         {/* Dropdowns */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 pt-2 border-t border-border">

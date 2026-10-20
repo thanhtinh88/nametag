@@ -12,6 +12,12 @@ import { canCreateResource } from '@/lib/billing/subscription';
 import { getTranslations } from 'next-intl/server';
 import PeopleListClient from '@/components/PeopleListClient';
 import { getUserDisplayPreferences } from '@/lib/user-preferences';
+import {
+  getContactRecencyFilter,
+  getRecordRecencyFilter,
+  type ContactRecencyPreset,
+  type RecordRecencyPreset,
+} from '@/lib/investigation-dates';
 
 const DEFAULT_PAGE_SIZE = 25;
 const ALLOWED_PAGE_SIZES = [10, 25, 50, 100];
@@ -31,6 +37,8 @@ export default async function PeoplePage({
     hasRecord?: string;
     q?: string;
     cf?: string;
+    contactRecency?: string;
+    recordRecency?: string;
   }>;
 }) {
   const session = await auth();
@@ -59,6 +67,8 @@ export default async function PeoplePage({
   const managementFilter = params.managementLevel || '';
   const threatFilter = params.threatLevel || '';
   const hasRecordFilter = params.hasRecord || '';
+  const contactRecencyFilter = params.contactRecency || '';
+  const recordRecencyFilter = params.recordRecency || '';
   const query = (params.q || '').trim();
 
   const cfParam = params.cf || '';
@@ -85,6 +95,22 @@ export default async function PeoplePage({
       { surname: { contains: query, mode: 'insensitive' } },
       { nickname: { contains: query, mode: 'insensitive' } },
       { citizenId: { contains: query, mode: 'insensitive' } },
+      {
+        vehicles: {
+          some: {
+            plateNumber: { contains: query, mode: 'insensitive' },
+            deletedAt: null,
+          },
+        },
+      },
+      {
+        physicalMarks: {
+          some: {
+            description: { contains: query, mode: 'insensitive' },
+            deletedAt: null,
+          },
+        },
+      },
     ];
   }
 
@@ -122,6 +148,39 @@ export default async function PeoplePage({
 
   if (hasRecordFilter === 'true') {
     peopleWhere.criminalRecords = { some: { deletedAt: null } };
+  }
+
+  if (contactRecencyFilter) {
+    const filter = getContactRecencyFilter(contactRecencyFilter as ContactRecencyPreset);
+    if (filter) {
+      if (filter.condition === 'lt') {
+        peopleWhere.AND = [
+          ...(Array.isArray(peopleWhere.AND)
+            ? peopleWhere.AND
+            : peopleWhere.AND
+            ? [peopleWhere.AND]
+            : []),
+          { OR: [{ lastContact: { lt: filter.threshold } }, { lastContact: null }] },
+        ];
+      } else {
+        peopleWhere.lastContact = { gte: filter.threshold };
+      }
+    }
+  }
+
+  if (recordRecencyFilter) {
+    const threshold = getRecordRecencyFilter(recordRecencyFilter as RecordRecencyPreset);
+    if (threshold) {
+      peopleWhere.criminalRecords = {
+        some: {
+          deletedAt: null,
+          OR: [
+            { verdictDate: { gte: threshold } },
+            { incidentDate: { gte: threshold } },
+          ],
+        },
+      };
+    }
   }
 
   if (cfFilter) {
@@ -195,6 +254,11 @@ export default async function PeoplePage({
     managementLevel?: string | null;
     threatLevel?: string | null;
     citizenId?: string | null;
+    vehicles?: Array<{ plateNumber: string; brandModel: string | null; color: string | null }>;
+    physicalMarks?: Array<{ type: string; location: string; description: string | null }>;
+    criminalRecordsCount?: number;
+    gangs?: Array<{ id: string; name: string; color: string | null }>;
+    casesCount?: number;
   }> = [];
 
   const personInclude = {
@@ -205,6 +269,28 @@ export default async function PeoplePage({
     },
     relationshipsFrom: { select: { id: true } },
     relationshipsTo: { select: { id: true } },
+    vehicles: {
+      where: { deletedAt: null },
+      select: { plateNumber: true, brandModel: true, color: true },
+      take: 3,
+    },
+    physicalMarks: {
+      where: { deletedAt: null },
+      select: { type: true, location: true, description: true },
+      take: 3,
+    },
+    criminalRecords: {
+      where: { deletedAt: null },
+      select: { id: true },
+    },
+    gangMemberships: {
+      where: { gang: { deletedAt: null } },
+      include: { gang: { select: { id: true, name: true, color: true } } },
+    },
+    events: {
+      where: { deletedAt: null },
+      select: { eventId: true },
+    },
   };
 
   if (isDbSortable) {
@@ -221,13 +307,21 @@ export default async function PeoplePage({
       prismaOrderBy = [{ nickname: order }, { name: 'asc' }];
     }
 
-    people = await prisma.person.findMany({
+    const rawPeople = await prisma.person.findMany({
       where: peopleWhere,
       include: personInclude,
       orderBy: prismaOrderBy,
       skip,
       take: pageSize,
     });
+    people = rawPeople.map((p) => ({
+      ...p,
+      vehicles: p.vehicles,
+      physicalMarks: p.physicalMarks,
+      criminalRecordsCount: p.criminalRecords.length,
+      gangs: p.gangMemberships.map((gm) => gm.gang),
+      casesCount: p.events.length,
+    }));
   } else {
     // In-memory sort fallback for relations count or groups
     const allPeople = await prisma.person.findMany({
@@ -264,7 +358,14 @@ export default async function PeoplePage({
       return aFallback.localeCompare(bFallback);
     });
 
-    people = sortedPeople.slice(skip, skip + pageSize);
+    people = sortedPeople.slice(skip, skip + pageSize).map((p) => ({
+      ...p,
+      vehicles: p.vehicles,
+      physicalMarks: p.physicalMarks,
+      criminalRecordsCount: p.criminalRecords.length,
+      gangs: p.gangMemberships.map((gm) => gm.gang),
+      casesCount: p.events.length,
+    }));
   }
 
   const quickCounts = {
@@ -347,6 +448,8 @@ export default async function PeoplePage({
               managementFilter={managementFilter}
               threatFilter={threatFilter}
               hasRecordFilter={hasRecordFilter}
+              contactRecencyFilter={contactRecencyFilter}
+              recordRecencyFilter={recordRecencyFilter}
               query={query}
               cfFilter={cfFilter}
               quickCounts={quickCounts}

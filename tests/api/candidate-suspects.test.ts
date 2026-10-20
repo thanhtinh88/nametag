@@ -241,5 +241,98 @@ describe('Candidate Suspects Smart Matcher API', () => {
     const bodyMark = await resMark.json();
     expect(bodyMark.candidates.length).toBe(1);
   });
+
+  it('evaluates temporal signals: handles alibi, incarceration, and recent convictions', async () => {
+    const timedEvent = {
+      ...mockEvent,
+      startDate: new Date('2026-10-10T14:00:00Z'),
+    };
+    mocks.eventFindUnique.mockResolvedValue(timedEvent);
+
+    // Subject 1: Serving prison sentence at the time of the event
+    const incarceratedPerson = {
+      id: 'person-in-prison',
+      name: 'Nguyễn Văn',
+      surname: 'Tù',
+      nickname: null,
+      displayNameOverride: null,
+      photo: null,
+      managementLevel: 'SURVEILLANCE',
+      threatLevel: 'MEDIUM',
+      citizenId: '001200000010',
+      modusOperandi: null,
+      addresses: [],
+      vehicles: [],
+      physicalMarks: [],
+      criminalRecords: [
+        {
+          charge: 'Trộm cắp tài sản',
+          verdictDate: new Date('2025-01-01'),
+          sentenceDetail: '3 năm tù giam',
+          recordType: 'CONVICTION',
+        },
+      ],
+      events: [],
+      journalEntries: [],
+      gangMemberships: [],
+    };
+
+    // Subject 2: Recently released / convicted 3 months prior to event
+    const recentConvict = {
+      id: 'person-recent-convict',
+      name: 'Hoàng Văn',
+      surname: 'Mới',
+      nickname: null,
+      displayNameOverride: null,
+      photo: null,
+      managementLevel: 'SURVEILLANCE',
+      threatLevel: 'HIGH',
+      citizenId: '001200000020',
+      modusOperandi: null,
+      addresses: [],
+      vehicles: [],
+      physicalMarks: [],
+      criminalRecords: [
+        {
+          charge: 'Trộm cắp tài sản',
+          incidentDate: new Date('2026-07-01'),
+          verdictDate: new Date('2026-08-01'),
+          sentenceDetail: '6 tháng tù treo',
+          recordType: 'CONVICTION',
+        },
+      ],
+      events: [],
+      journalEntries: [],
+      gangMemberships: [],
+    };
+
+    mocks.personFindMany.mockResolvedValue([incarceratedPerson, recentConvict]);
+
+    // Query with hideAlibi=true (default)
+    const reqHideAlibi = new Request(
+      'http://localhost/api/events/ev-1/candidate-suspects?hideAlibi=true&managementFilter=ALL'
+    );
+    const resHideAlibi = await GET(reqHideAlibi, { params: Promise.resolve({ id: 'ev-1' }) });
+    const bodyHideAlibi = await resHideAlibi.json();
+
+    // The incarcerated person should be filtered out
+    expect(bodyHideAlibi.candidates.length).toBe(1);
+    expect(bodyHideAlibi.candidates[0].person.id).toBe('person-recent-convict');
+    expect(bodyHideAlibi.candidates[0].temporalSignals.recentConvictionMatch).toBe(true);
+
+    // Query with hideAlibi=false
+    const reqShowAll = new Request(
+      'http://localhost/api/events/ev-1/candidate-suspects?hideAlibi=false&managementFilter=ALL'
+    );
+    const resShowAll = await GET(reqShowAll, { params: Promise.resolve({ id: 'ev-1' }) });
+    const bodyShowAll = await resShowAll.json();
+
+    expect(bodyShowAll.candidates.length).toBe(2);
+    const inPrisonCandidate = bodyShowAll.candidates.find(
+      (c: any) => c.person.id === 'person-in-prison'
+    );
+    expect(inPrisonCandidate).toBeDefined();
+    expect(inPrisonCandidate.temporalSignals.isIncarcerated).toBe(true);
+  });
 });
 

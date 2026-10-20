@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { apiResponse, handleApiError, withAuth } from '@/lib/api-utils';
 import { haversineDistanceKm } from '@/lib/map/filter-markers';
 import { normalizeForSearch } from '@/lib/search';
+import { evaluateTemporalSuspectSignals } from '@/lib/investigation-dates';
 
 // GET /api/events/[id]/candidate-suspects
 export const GET = withAuth(async (request, session, context) => {
@@ -14,6 +15,8 @@ export const GET = withAuth(async (request, session, context) => {
     const matchCrimeType = searchParams.get('matchCrimeType') === 'true';
     const historyOnly = searchParams.get('historyOnly') === 'true';
     const managementFilter = searchParams.get('managementFilter') || 'ALL';
+    const hideAlibi = searchParams.get('hideAlibi') === 'true';
+    const temporalSignalsOnly = searchParams.get('temporalSignalsOnly') === 'true';
     const query = searchParams.get('q')?.trim() || '';
 
     // 1. Fetch event
@@ -23,6 +26,7 @@ export const GET = withAuth(async (request, session, context) => {
         id: true,
         title: true,
         crimeType: true,
+        startDate: true,
         addresses: {
           where: { latitude: { not: null }, longitude: { not: null } },
           select: { latitude: true, longitude: true, locality: true, streetLine1: true },
@@ -64,6 +68,7 @@ export const GET = withAuth(async (request, session, context) => {
         threatLevel: true,
         citizenId: true,
         modusOperandi: true,
+        lastContact: true,
         addresses: {
           select: {
             id: true,
@@ -83,7 +88,24 @@ export const GET = withAuth(async (request, session, context) => {
         },
         criminalRecords: {
           where: { deletedAt: null },
-          select: { charge: true, sentenceDetail: true, recordType: true },
+          select: {
+            charge: true,
+            sentenceDetail: true,
+            recordType: true,
+            incidentDate: true,
+            verdictDate: true,
+          },
+        },
+        events: {
+          where: { deletedAt: null },
+          select: { verificationStatus: true, alibi: true, eventId: true },
+        },
+        journalEntries: {
+          select: {
+            journalEntry: {
+              select: { date: true, title: true },
+            },
+          },
         },
         gangMemberships: {
           where: { gang: { deletedAt: null } },
@@ -214,6 +236,41 @@ export const GET = withAuth(async (request, session, context) => {
         matchReasons.push(`Băng nhóm: ${person.gangMemberships.map((g) => g.gang.name).join(', ')}`);
       }
 
+      // Temporal signals evaluation (alibi, incarceration, recency, disappearance, journal)
+      const temporalSignals = evaluateTemporalSuspectSignals(event.startDate, {
+        lastContact: person.lastContact,
+        criminalRecords: person.criminalRecords || [],
+        alibisOrRuledOut: (person.events || []).map((e) => ({
+          verificationStatus: e.verificationStatus,
+          alibi: e.alibi,
+        })),
+        journalEntries: (person.journalEntries || []).map((j) => ({
+          date: j.journalEntry ? j.journalEntry.date : (j as any).date,
+          title: j.journalEntry ? j.journalEntry.title : (j as any).title,
+        })),
+      });
+
+      // Filter: hideAlibi
+      if (hideAlibi && (temporalSignals.hasAlibi || temporalSignals.isIncarcerated)) {
+        continue;
+      }
+
+      // Filter: temporalSignalsOnly
+      if (
+        temporalSignalsOnly &&
+        !temporalSignals.recentConvictionMatch &&
+        !temporalSignals.disappearedPostIncident &&
+        !temporalSignals.journalActivityNearby
+      ) {
+        continue;
+      }
+
+      // Apply temporal bonus / penalty
+      score = Math.max(0, score + temporalSignals.scoreBonus - temporalSignals.scorePenalty);
+      if (temporalSignals.reasons.length > 0) {
+        matchReasons.push(...temporalSignals.reasons);
+      }
+
       const linkedInfo = linkedPersonMap.get(person.id);
 
       candidates.push({
@@ -227,6 +284,7 @@ export const GET = withAuth(async (request, session, context) => {
           managementLevel: person.managementLevel,
           threatLevel: person.threatLevel,
           citizenId: person.citizenId,
+          lastContact: person.lastContact,
           vehicles: person.vehicles,
           physicalMarks: person.physicalMarks,
           criminalRecords: person.criminalRecords,
@@ -236,6 +294,13 @@ export const GET = withAuth(async (request, session, context) => {
         closestAddressText,
         matchReasons,
         score,
+        temporalSignals: {
+          hasAlibi: temporalSignals.hasAlibi,
+          isIncarcerated: temporalSignals.isIncarcerated,
+          recentConvictionMatch: temporalSignals.recentConvictionMatch,
+          disappearedPostIncident: temporalSignals.disappearedPostIncident,
+          journalActivityNearby: temporalSignals.journalActivityNearby,
+        },
         isLinked: Boolean(linkedInfo),
         linkedInvolvementType: linkedInfo?.involvementType ?? null,
         linkedVerificationStatus: linkedInfo?.verificationStatus ?? null,

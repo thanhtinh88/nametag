@@ -30,6 +30,10 @@ export default async function EventsPage({
     person?: string;
     category?: string;
     q?: string;
+    fromDate?: string;
+    toDate?: string;
+    datePreset?: string;
+    dateField?: string;
   }>;
 }) {
   const session = await auth();
@@ -59,6 +63,10 @@ export default async function EventsPage({
   const personFilter = params.person || '';
   const categoryFilter = params.category || '';
   const query = (params.q || '').trim();
+  const fromDate = params.fromDate || '';
+  const toDate = params.toDate || '';
+  const datePreset = params.datePreset || '';
+  const dateField = params.dateField === 'createdAt' ? 'createdAt' : 'startDate';
 
   const skip = (currentPage - 1) * pageSize;
 
@@ -67,6 +75,13 @@ export default async function EventsPage({
     userId: session.user.id,
     deletedAt: null,
   };
+
+  if (fromDate || toDate) {
+    eventsWhere[dateField] = {
+      ...(fromDate ? { gte: new Date(`${fromDate}T00:00:00.000Z`) } : {}),
+      ...(toDate ? { lte: new Date(`${toDate}T23:59:59.999Z`) } : {}),
+    };
+  }
 
   if (query) {
     eventsWhere.OR = [
@@ -424,6 +439,10 @@ export default async function EventsPage({
             personFilter={personFilter}
             categoryFilter={categoryFilter}
             query={query}
+            fromDateFilter={fromDate}
+            toDateFilter={toDate}
+            datePresetFilter={datePreset}
+            dateFieldFilter={dateField}
             quickCounts={quickCounts}
             crossCaseSuspects={crossCaseSuspects}
             categories={availableCategories}
