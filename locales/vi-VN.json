@@ -961,11 +961,84 @@
   },
   "dashboard": {
     "title": "Bảng điều khiển điều tra",
+    "subtitle": "Hệ thống quản lý đối tượng & hồ sơ vụ án nghiệp vụ",
     "greetingMorning": "Chào buổi sáng, {name}",
     "greetingAfternoon": "Chào buổi chiều, {name}",
     "greetingEvening": "Chào buổi tối, {name}",
     "upcomingEvents": "Mốc thời gian & Nhắc nhở sắp tới",
     "yourNetwork": "Đồ thị mạng lưới đối tượng & Vụ án",
+    "actions": {
+      "newPerson": "+ Hồ sơ đối tượng",
+      "newEvent": "+ Mở chuyên án",
+      "newJournal": "+ Ghi nhật ký",
+      "newGang": "+ Thêm băng nhóm",
+      "advancedFilter": "Lọc nâng cao"
+    },
+    "metrics": {
+      "peopleTitle": "Hồ sơ đối tượng",
+      "peopleSubtitle": "{convicted} có tiền án/tiền sự • {recent} lập mới tháng này",
+      "casesTitle": "Chuyên án & Vụ việc",
+      "casesSubtitle": "{unresolved} chưa rõ đối tượng • {ongoing} đang xác minh",
+      "gangsTitle": "Băng nhóm quản lý",
+      "gangsSubtitle": "{turfs} địa bàn hoạt động ghi nhận",
+      "journalTitle": "Nhật ký điều tra",
+      "journalSubtitle": "{recent} ghi chép mới tháng này"
+    },
+    "priorityCases": {
+      "title": "Vụ án / Chuyên án trọng điểm đang thụ lý",
+      "viewAll": "Xem tất cả {count} vụ án →",
+      "noCases": "Chưa có vụ án nào đang trong diện thụ lý điều tra",
+      "unresolved": "Chưa rõ đối tượng",
+      "investigating": "Đang xác minh",
+      "participants": "đối tượng",
+      "updatedAt": "Cập nhật"
+    },
+    "recentJournal": {
+      "title": "Nhật ký điều tra & Di biến động mới nhất",
+      "viewAll": "Xem tất cả nhật ký →",
+      "noEntries": "Chưa có ghi chép nhật ký trinh sát nào",
+      "relatedPeople": "Đối tượng liên quan",
+      "relatedCase": "Vụ án"
+    },
+    "alerts": {
+      "title": "Cảnh báo nghiệp vụ & Nhắc việc",
+      "noAlerts": "Không có cảnh báo nghiệp vụ nào cần xử lý gấp",
+      "staleCase": "Chưa cập nhật di biến động > 14 ngày",
+      "upcomingTimeline": "Mốc thời gian & Sự vụ sắp tới",
+      "suspiciousAssets": "Phương tiện / Tài khoản khả nghi cần xác minh"
+    },
+    "gangs": {
+      "title": "Băng nhóm nổi cộm trên địa bàn",
+      "viewAll": "Xem tất cả {count} băng nhóm →",
+      "noGangs": "Chưa ghi nhận băng nhóm nào",
+      "members": "đối tượng",
+      "turf": "Địa bàn"
+    },
+    "recentPeople": {
+      "title": "Hồ sơ đối tượng mới cập nhật",
+      "viewAll": "Xem tất cả {count} đối tượng →",
+      "noPeople": "Chưa có hồ sơ đối tượng nào",
+      "records": "{count} tiền án",
+      "noRecords": "Chưa có tiền án"
+    },
+    "toolkit": {
+      "title": "Công cụ truy vết & Thao tác nghiệp vụ",
+      "suspectMatcher": "Khớp đặc điểm nhận dạng",
+      "suspectMatcherDesc": "So khớp hình thể, hình xăm, sẹo dị tật và phương tiện nghi vấn",
+      "searchPlate": "Tra cứu Biển số xe khả nghi",
+      "searchPlateDesc": "Tìm kiếm phương tiện di chuyển trong diện truy tìm",
+      "searchAccount": "Tra cứu Tài khoản ngân hàng",
+      "searchAccountDesc": "Rà soát tài khoản 'Mule' nhận tiền phạm pháp",
+      "viewMap": "Bản đồ nhiệt tác chiến",
+      "viewMapDesc": "Xem phân bố đối tượng và hiện trường vụ việc theo địa bàn"
+    },
+    "graphWidget": {
+      "title": "Mạng lưới đối tượng & Vụ án điều tra",
+      "subtitle": "{people} đối tượng • {events} chuyên án",
+      "collapse": "Thu gọn đồ thị ▲",
+      "expand": "Mở rộng đồ thị ▼",
+      "openMap": "Bản đồ tác chiến →"
+    },
     "emptyNetwork": {
       "title": "Bắt đầu xây dựng hồ sơ điều tra",
       "description": "Thêm các đối tượng nghi vấn và vụ án để trực quan hóa mạng lưới quan hệ và giả thuyết điều tra.",

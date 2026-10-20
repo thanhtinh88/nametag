@@ -960,12 +960,85 @@
     }
   },
   "dashboard": {
-    "title": "Dashboard",
+    "title": "Investigation Command Dashboard",
+    "subtitle": "Target suspect management and case investigation system",
     "greetingMorning": "Good morning, {name}",
     "greetingAfternoon": "Good afternoon, {name}",
     "greetingEvening": "Good evening, {name}",
-    "upcomingEvents": "Upcoming Events",
-    "yourNetwork": "Your Network",
+    "upcomingEvents": "Upcoming Events & Deadlines",
+    "yourNetwork": "Target & Case Network Graph",
+    "actions": {
+      "newPerson": "+ New Subject",
+      "newEvent": "+ New Case",
+      "newJournal": "+ Log Scout Note",
+      "newGang": "+ New Gang",
+      "advancedFilter": "Advanced Filters"
+    },
+    "metrics": {
+      "peopleTitle": "Target Subjects",
+      "peopleSubtitle": "{convicted} with criminal record • {recent} added this month",
+      "casesTitle": "Active Cases & Inquiries",
+      "casesSubtitle": "{unresolved} unresolved • {ongoing} investigating",
+      "gangsTitle": "Criminal Gangs",
+      "gangsSubtitle": "{turfs} operating turfs identified",
+      "journalTitle": "Investigation Logs",
+      "journalSubtitle": "{recent} entries added this month"
+    },
+    "priorityCases": {
+      "title": "Priority Cases Under Investigation",
+      "viewAll": "View all {count} cases →",
+      "noCases": "No active cases currently being investigated",
+      "unresolved": "Unresolved",
+      "investigating": "Investigating",
+      "participants": "subjects",
+      "updatedAt": "Updated"
+    },
+    "recentJournal": {
+      "title": "Recent Investigation & Scout Logs",
+      "viewAll": "View all journal logs →",
+      "noEntries": "No recent investigation journal entries recorded",
+      "relatedPeople": "Involved Subjects",
+      "relatedCase": "Related Case"
+    },
+    "alerts": {
+      "title": "Actionable Alerts & Deadlines",
+      "noAlerts": "No urgent investigation alerts at this time",
+      "staleCase": "No updates for > 14 days",
+      "upcomingTimeline": "Upcoming Legal & Case Deadlines",
+      "suspiciousAssets": "Suspect vehicles or accounts pending verification"
+    },
+    "gangs": {
+      "title": "Prominent Gangs & Turf Watch",
+      "viewAll": "View all {count} gangs →",
+      "noGangs": "No criminal gangs recorded yet",
+      "members": "subjects",
+      "turf": "Turf"
+    },
+    "recentPeople": {
+      "title": "Recently Updated Subjects",
+      "viewAll": "View all {count} subjects →",
+      "noPeople": "No subjects recorded yet",
+      "records": "{count} priors",
+      "noRecords": "No priors"
+    },
+    "toolkit": {
+      "title": "Investigation Toolkit & Quick Lookups",
+      "suspectMatcher": "Match Physical Characteristics",
+      "suspectMatcherDesc": "Match bodily scars, tattoos, deformities, and suspect vehicles",
+      "searchPlate": "Lookup Suspect Vehicle Plate",
+      "searchPlateDesc": "Search wanted or spotted vehicle license plates",
+      "searchAccount": "Lookup Bank Account",
+      "searchAccountDesc": "Review suspect mule and rental bank accounts",
+      "viewMap": "Tactical Heat Map",
+      "viewMapDesc": "View geographic distribution of suspects and crime scenes"
+    },
+    "graphWidget": {
+      "title": "Investigation Network Graph",
+      "subtitle": "{people} subjects • {events} cases",
+      "collapse": "Collapse Graph ▲",
+      "expand": "Expand Graph ▼",
+      "openMap": "Tactical Map →"
+    },
     "emptyNetwork": {
       "title": "Everyone starts somewhere",
       "description": "Add the people who matter to you and watch your network come to life.",
