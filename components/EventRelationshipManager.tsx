@@ -27,6 +27,7 @@ interface EventRelationshipManagerProps {
   eventId: string;
   relationships: EventRelationshipItem[];
   availableEvents: RelatedEventItem[];
+  onMutate?: () => void;
 }
 
 const inputClass =
@@ -36,6 +37,7 @@ export default function EventRelationshipManager({
   eventId,
   relationships,
   availableEvents,
+  onMutate,
 }: EventRelationshipManagerProps) {
   const t = useTranslations('events.detail');
   const tCommon = useTranslations('common');
@@ -93,6 +95,7 @@ export default function EventRelationshipManager({
       setShowAddModal(false);
       setFormData({ relatedEventId: '', relationshipType: '', notes: '' });
       router.refresh();
+      onMutate?.();
     } catch {
       setError('Unable to connect to server. Please check your connection and try again.');
     } finally {
@@ -130,6 +133,7 @@ export default function EventRelationshipManager({
       setShowEditModal(false);
       setSelectedRel(null);
       router.refresh();
+      onMutate?.();
     } catch {
       setError('Unable to connect to server. Please check your connection and try again.');
     } finally {
@@ -160,6 +164,7 @@ export default function EventRelationshipManager({
       setShowDeleteModal(false);
       setSelectedRel(null);
       router.refresh();
+      onMutate?.();
     } catch {
       setError('Unable to connect to server. Please check your connection and try again.');
     } finally {

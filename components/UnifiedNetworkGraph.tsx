@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   forceSimulation, forceLink, forceManyBody, forceCenter,
   forceCollide, forceX, forceY, type Simulation,
+  type ForceLink, type ForceManyBody,
 } from 'd3-force';
 import { select } from 'd3-selection';
 import { zoom, zoomIdentity, type ZoomTransform, type ZoomBehavior } from 'd3-zoom';
@@ -106,6 +107,8 @@ export default function UnifiedNetworkGraph({
   const [contextMenu, setContextMenu] = useState<GraphContextMenuState | null>(null);
   const [graphData, setGraphData] = useState<{ nodes: RawGraphPerson[]; edges: SimulationEdge[] } | null>(null);
   const [rosterOpen, setRosterOpen] = useState<boolean>(true);
+  const [sidebarWidth, setSidebarWidth] = useState<number>(310);
+  const [distanceScale, setDistanceScale] = useState<number>(1);
   const [casesExpanded, setCasesExpanded] = useState<boolean>(true);
   const [subjectsExpanded, setSubjectsExpanded] = useState<boolean>(true);
   const [rosterQuery, setRosterQuery] = useState<string>('');
@@ -337,36 +340,53 @@ export default function UnifiedNetworkGraph({
     };
   }, []);
 
-  // Re-center the graph view
+  // Re-center the graph view (offsetting for sidebar if open)
   const recenterGraph = useCallback(() => {
     const canvas = canvasRef.current;
     const zoomBehavior = zoomBehaviorRef.current;
     if (!canvas || !zoomBehavior) return;
+    const offsetX = rosterOpen ? (sidebarWidth + 12) / 2 : 0;
     select(canvas)
       .transition()
       .duration(750)
-      .call(zoomBehavior.transform, zoomIdentity);
+      .call(zoomBehavior.transform, zoomIdentity.translate(offsetX, 0));
+  }, [rosterOpen, sidebarWidth]);
+
+  // Adjust node distance multiplier
+  const handleIncreaseDistance = useCallback(() => {
+    setDistanceScale((prev) => Math.min(2.5, Math.round((prev + 0.25) * 100) / 100));
   }, []);
 
-  // Reset all pinned node positions and re-run force layout
-  const resetGraphLayout = useCallback(() => {
-    pinnedPositionsRef.current = {};
-    if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'test') {
-      try {
-        window.localStorage.removeItem(positionsStorageKey);
-      } catch {
-        // Ignore storage errors
-      }
+  const handleDecreaseDistance = useCallback(() => {
+    setDistanceScale((prev) => Math.max(0.5, Math.round((prev - 0.25) * 100) / 100));
+  }, []);
+
+  // Dynamically update physics distance and charge when distanceScale changes
+  useEffect(() => {
+    const sim = simRef.current;
+    if (!sim) return;
+
+    const effectiveLinkDist = Math.round((isMobile ? 110 : linkDistance) * distanceScale);
+    const effectiveCharge = Math.round((isMobile ? -250 : chargeStrength) * distanceScale);
+    const membershipDist = Math.round((isMobile ? 22 : 32) * Math.max(distanceScale * 0.8, 0.6));
+    const aggregatedDist = Math.round((isMobile ? 150 : 220) * distanceScale);
+
+    const linkForce = sim.force('link') as ForceLink<SimulationNode, SimulationEdge> | undefined;
+    if (linkForce) {
+      linkForce.distance((e) => {
+        if (e.type === 'membership') return membershipDist;
+        if (e.type === 'aggregated') return aggregatedDist;
+        return effectiveLinkDist;
+      });
     }
-    for (const node of nodesRef.current) {
-      node.fx = null;
-      node.fy = null;
+
+    const chargeForce = sim.force('charge') as ForceManyBody<SimulationNode> | undefined;
+    if (chargeForce) {
+      chargeForce.strength(effectiveCharge).distanceMax(Math.round(380 * distanceScale));
     }
-    if (simRef.current) {
-      simRef.current.alpha(0.6).restart();
-    }
-    recenterGraph();
-  }, [positionsStorageKey, recenterGraph]);
+
+    sim.alpha(0.4).restart();
+  }, [distanceScale, isMobile, linkDistance, chargeStrength]);
 
   const toggleFilterSign = (id: string) => {
     setSelectedGroupFilters((prev) =>
@@ -614,7 +634,7 @@ export default function UnifiedNetworkGraph({
       const boxW = Math.max(maxX - minX, 120);
       const boxH = Math.max(maxY - minY, 120);
 
-      const paddingLeft = rosterOpen ? 320 : 80;
+      const paddingLeft = rosterOpen ? (sidebarWidth + 24) : 80;
       const paddingRight = 80;
       const paddingTop = 80;
       const paddingBottom = 80;
@@ -628,7 +648,8 @@ export default function UnifiedNetworkGraph({
       const centerX = (minX + maxX) / 2;
       const centerY = (minY + maxY) / 2;
 
-      const targetX = rect.width / 2 + (rosterOpen ? 115 : 0) - centerX * k;
+      const offsetX = rosterOpen ? (sidebarWidth + 12) / 2 : 0;
+      const targetX = rect.width / 2 + offsetX - centerX * k;
       const targetY = rect.height / 2 - centerY * k;
 
       select(canvas)
@@ -639,7 +660,7 @@ export default function UnifiedNetworkGraph({
           zoomIdentity.translate(targetX, targetY).scale(k)
         );
     },
-    [rosterOpen]
+    [rosterOpen, sidebarWidth]
   );
 
   useEffect(() => {
@@ -671,7 +692,8 @@ export default function UnifiedNetworkGraph({
       if (canvas && zoomBehavior && node && node.x !== undefined && node.y !== undefined) {
         const rect = canvas.getBoundingClientRect();
         const k = Math.max(transformRef.current.k, 1);
-        const targetX = rect.width / 2 - node.x * k;
+        const offsetX = rosterOpen ? (sidebarWidth + 12) / 2 : 0;
+        const targetX = rect.width / 2 + offsetX - node.x * k;
         const targetY = rect.height / 2 - node.y * k;
         select(canvas)
           .transition()
@@ -682,7 +704,7 @@ export default function UnifiedNetworkGraph({
           );
       }
     },
-    [graphData, requestPaint]
+    [graphData, requestPaint, rosterOpen, sidebarWidth]
   );
 
   const toggleInspectPerson = useCallback(
@@ -889,10 +911,13 @@ export default function UnifiedNetworkGraph({
     const canvas = canvasRef.current;
     if (!canvas) return null;
     const rect = canvas.getBoundingClientRect();
-    const width = rect.width;
-    const height = rect.height;
-    const mobileLinkDistance = isMobile ? 110 : linkDistance;
-    const mobileChargeStrength = isMobile ? -250 : chargeStrength;
+    const width = rect.width || 800;
+    const height = rect.height || 600;
+    const cx = width / 2;
+    const cy = height / 2;
+
+    const effectiveLinkDistance = Math.round((isMobile ? 110 : linkDistance) * distanceScale);
+    const effectiveChargeStrength = Math.round((isMobile ? -250 : chargeStrength) * distanceScale);
     const personCollisionR = isMobile ? 38 : 52;
 
     // Visible-radius-aware collision so bubbles don't overlap "you" or each other.
@@ -901,8 +926,25 @@ export default function UnifiedNetworkGraph({
       return personCollisionR;
     };
 
-    const membershipLinkDistance = isMobile ? 22 : 32;
-    const aggregatedLinkDistance = isMobile ? 150 : 220;
+    const membershipLinkDistance = Math.round((isMobile ? 22 : 32) * Math.max(distanceScale * 0.8, 0.6));
+    const aggregatedLinkDistance = Math.round((isMobile ? 150 : 220) * distanceScale);
+
+    // Seed unpositioned nodes evenly in an orbit around the center (cx, cy)
+    // so nodes never start at (0, 0) and crawl across the canvas on resets or load
+    const unpositionedNodes = nodes.filter((n) => n.x === undefined || (n.x === 0 && n.y === 0));
+    if (unpositionedNodes.length > 0) {
+      unpositionedNodes.forEach((node, idx) => {
+        if (node.kind === 'person' && node.isCenter) {
+          node.x = cx;
+          node.y = cy;
+        } else {
+          const angle = (idx / unpositionedNodes.length) * 2 * Math.PI;
+          const r = Math.min(effectiveLinkDistance, 140) + (idx % 3) * 25;
+          node.x = cx + Math.cos(angle) * r;
+          node.y = cy + Math.sin(angle) * r;
+        }
+      });
+    }
 
     // Custom force: each expanded ghost behaves like an "invisible big bubble".
     // Members get strongly pulled toward the ghost (orbiting close to it);
@@ -980,10 +1022,10 @@ export default function UnifiedNetworkGraph({
         .distance((e) => {
           if (e.type === 'membership') return membershipLinkDistance;
           if (e.type === 'aggregated') return aggregatedLinkDistance;
-          return mobileLinkDistance;
+          return effectiveLinkDistance;
         })
         .strength((e) => e.type === 'membership' ? 0.4 : 0.7))
-      .force('charge', forceManyBody<SimulationNode>().strength(mobileChargeStrength).distanceMax(380))
+      .force('charge', forceManyBody<SimulationNode>().strength(effectiveChargeStrength).distanceMax(Math.round(380 * distanceScale)))
       // Stable centering forces acting on each node independently, avoiding centroid runaway
       .force('centerX', forceX<SimulationNode>(width / 2).strength((d) => {
         if (d.kind === 'person' && d.isCenter) return 0.5;
@@ -998,13 +1040,18 @@ export default function UnifiedNetworkGraph({
       .force('collision', forceCollide<SimulationNode>().radius(collisionForNode))
       .force('expandedCluster', expandedClusterField);
 
+    // Warm up the simulation synchronously so it settles immediately into equilibrium
+    for (let i = 0; i < 90; ++i) {
+      sim.tick();
+    }
+
     sim.on('tick', () => {
       quadtreeRef.current = buildQuadtree(nodes);
       requestPaint();
     });
 
     return sim;
-  }, [isMobile, linkDistance, chargeStrength, requestPaint]);
+  }, [isMobile, linkDistance, chargeStrength, distanceScale, requestPaint]);
 
   // Step 3: Composition helper — recomposes sim data from raw cache
   const recomposeAndBuildSim = useCallback((raw: { nodes: RawGraphPerson[]; edges: SimulationEdge[] } | null) => {
@@ -1111,14 +1158,48 @@ export default function UnifiedNetworkGraph({
     simRef.current?.stop();
     const sim = buildSimulation(nodes, edges);
     if (sim) {
-      sim.alpha(0.3).restart();
+      sim.alpha(0.08).restart();
       simRef.current = sim;
+      quadtreeRef.current = buildQuadtree(nodes);
+      requestPaint();
     }
   }, [
     groups, localGraphMode, expandedBubbles,
     includeGroupIds, excludeGroupIds, includeMode,
     tacticalFilters, ungroupedLabel, buildSimulation,
   ]);
+
+  // Reset all pinned node positions and re-run force layout
+  const resetGraphLayout = useCallback(() => {
+    pinnedPositionsRef.current = {};
+    if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'test') {
+      try {
+        window.localStorage.removeItem(positionsStorageKey);
+      } catch {
+        // Ignore storage errors
+      }
+    }
+    setDistanceScale(1);
+
+    // Clear node coordinates and unpin
+    for (const node of nodesRef.current) {
+      node.fx = null;
+      node.fy = null;
+      node.x = undefined;
+      node.y = undefined;
+      node.vx = 0;
+      node.vy = 0;
+    }
+    nodesRef.current = [];
+    edgesRef.current = [];
+
+    if (rawCacheRef.current) {
+      recomposeAndBuildSim(rawCacheRef.current);
+    } else if (simRef.current) {
+      simRef.current.alpha(0.5).restart();
+    }
+    recenterGraph();
+  }, [positionsStorageKey, recenterGraph, recomposeAndBuildSim]);
 
   // Step 4: Data-fetch effect
   useEffect(() => {
@@ -1238,6 +1319,12 @@ export default function UnifiedNetworkGraph({
       });
     zoomBehaviorRef.current = zoomBehavior;
     select(canvas).call(zoomBehavior);
+    if (transformRef.current === zoomIdentity && rosterOpen) {
+      const initialOffsetX = (sidebarWidth + 12) / 2;
+      const initialTransform = zoomIdentity.translate(initialOffsetX, 0);
+      transformRef.current = initialTransform;
+      select(canvas).call(zoomBehavior.transform, initialTransform);
+    }
 
     const onMove = (event: MouseEvent) => {
       const node = nodeAt(event.clientX, event.clientY);
@@ -1488,6 +1575,27 @@ export default function UnifiedNetworkGraph({
 
   const activeCustomFieldTemplate = customFieldTemplates?.find((cf) => cf.slug === customFieldSlug);
 
+  // Smoothly adjust graph viewport when toggling sidebar
+  const prevRosterOpenRef = useRef<boolean>(rosterOpen);
+  useEffect(() => {
+    if (prevRosterOpenRef.current === rosterOpen) return;
+    prevRosterOpenRef.current = rosterOpen;
+
+    const canvas = canvasRef.current;
+    const zoomBehavior = zoomBehaviorRef.current;
+    if (!canvas || !zoomBehavior) return;
+
+    const shift = (sidebarWidth + 12) / 2;
+    const deltaX = rosterOpen ? shift : -shift;
+    const cur = transformRef.current;
+    const nextTransform = zoomIdentity.translate(cur.x + deltaX, cur.y).scale(cur.k);
+
+    select(canvas)
+      .transition()
+      .duration(350)
+      .call(zoomBehavior.transform, nextTransform);
+  }, [rosterOpen, sidebarWidth]);
+
   return (
     <div className="w-full h-full">
       <div className="relative" ref={containerRef}>
@@ -1533,6 +1641,7 @@ export default function UnifiedNetworkGraph({
           storageKeyPrefix="graph-tactical-sidebar-v2"
           defaultWidth={310}
           minWidth={280}
+          onWidthChange={setSidebarWidth}
           searchBar={
             <input
               type="search"
@@ -2167,6 +2276,52 @@ export default function UnifiedNetworkGraph({
               viewBox="0 0 24 24"
             >
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+          {/* Giảm khoảng cách đối tượng */}
+          <button
+            type="button"
+            onClick={handleDecreaseDistance}
+            disabled={distanceScale <= 0.5}
+            className={`p-3 bg-surface border border-border rounded-lg transition-colors ${
+              distanceScale <= 0.5 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-surface-elevated'
+            }`}
+            aria-label={t('decreaseDistance')}
+            title={`${t('decreaseDistance')} (${Math.round(distanceScale * 100)}%)`}
+          >
+            <svg
+              className="w-5 h-5 text-primary dark:text-white"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              viewBox="0 0 24 24"
+            >
+              <circle cx="3.5" cy="12" r="2" fill="currentColor" />
+              <circle cx="20.5" cy="12" r="2" fill="currentColor" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 9l3 3-3 3M16.5 9l-3 3 3 3" />
+            </svg>
+          </button>
+          {/* Tăng khoảng cách đối tượng */}
+          <button
+            type="button"
+            onClick={handleIncreaseDistance}
+            disabled={distanceScale >= 2.5}
+            className={`p-3 bg-surface border border-border rounded-lg transition-colors ${
+              distanceScale >= 2.5 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-surface-elevated'
+            }`}
+            aria-label={t('increaseDistance')}
+            title={`${t('increaseDistance')} (${Math.round(distanceScale * 100)}%)`}
+          >
+            <svg
+              className="w-5 h-5 text-primary dark:text-white"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              viewBox="0 0 24 24"
+            >
+              <circle cx="3.5" cy="12" r="2" fill="currentColor" />
+              <circle cx="20.5" cy="12" r="2" fill="currentColor" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 9l-3 3 3 3M13.5 9l3 3-3 3" />
             </svg>
           </button>
           {groups && (() => {

@@ -983,6 +983,8 @@
       "filterPlaceholder": "Type to filter by groups...",
       "noGroupsFound": "No groups found matching",
       "recenterGraph": "Re-center graph",
+      "increaseDistance": "Increase node distance",
+      "decreaseDistance": "Decrease node distance",
       "matchMode": {
         "any": "Any",
         "all": "All",

@@ -21,6 +21,7 @@ export interface TacticalSidebarContainerProps {
   storageKeyPrefix?: string;
   defaultWidth?: number;
   minWidth?: number;
+  onWidthChange?: (width: number) => void;
 }
 
 export default function TacticalSidebarContainer({
@@ -41,6 +42,7 @@ export default function TacticalSidebarContainer({
   storageKeyPrefix = 'tactical-sidebar',
   defaultWidth = 360,
   minWidth = 280,
+  onWidthChange,
 }: TacticalSidebarContainerProps) {
   const t = useTranslations('tacticalFilters');
 
@@ -61,6 +63,10 @@ export default function TacticalSidebarContainer({
       // Ignore storage error
     }
   }, [storageKeyPrefix, minWidth]);
+
+  useEffect(() => {
+    onWidthChange?.(width);
+  }, [width, onWidthChange]);
 
   // Active tab: 'roster' (Danh sách) vs 'filters' (Bộ lọc điều tra)
   const [activeTab, setActiveTab] = useState<'roster' | 'filters'>('roster');

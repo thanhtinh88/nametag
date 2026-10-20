@@ -885,6 +885,39 @@ export const updateEndpointSchema = z.object({
 // ============================================
 
 export const eventStatusSchema = z.enum(['PLANNED', 'ONGOING', 'COMPLETED', 'CANCELLED']);
+export const caseStatusSchema = z.enum(['UNRESOLVED', 'INVESTIGATING', 'SOLVED', 'SUSPENDED']);
+
+export const bulkEventActionSchema = z.discriminatedUnion('action', [
+  z.object({
+    action: z.literal('delete'),
+    eventIds: z.array(z.string()).optional(),
+    selectAll: z.boolean().optional(),
+  }),
+  z.object({
+    action: z.literal('setCaseStatus'),
+    eventIds: z.array(z.string()).optional(),
+    selectAll: z.boolean().optional(),
+    caseStatus: caseStatusSchema,
+  }),
+  z.object({
+    action: z.literal('setEventStatus'),
+    eventIds: z.array(z.string()).optional(),
+    selectAll: z.boolean().optional(),
+    status: eventStatusSchema,
+  }),
+  z.object({
+    action: z.literal('addToGroups'),
+    eventIds: z.array(z.string()).optional(),
+    selectAll: z.boolean().optional(),
+    groupIds: z.array(z.string()).min(1),
+  }),
+  z.object({
+    action: z.literal('removeFromGroups'),
+    eventIds: z.array(z.string()).optional(),
+    selectAll: z.boolean().optional(),
+    groupIds: z.array(z.string()).min(1),
+  }),
+]);
 
 export const involvementTypeSchema = z.enum([
   'SUSPECT',

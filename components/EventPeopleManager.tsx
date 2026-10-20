@@ -39,6 +39,7 @@ interface EventPeopleManagerProps {
   availablePeople: Person[];
   nameOrder?: 'WESTERN' | 'EASTERN';
   nameDisplayFormat?: NameDisplayFormat;
+  onMutate?: () => void;
 }
 
 const INVOLVEMENT_BADGE_CLASSES: Record<string, string> = {
@@ -66,6 +67,7 @@ export default function EventPeopleManager({
   availablePeople,
   nameOrder,
   nameDisplayFormat,
+  onMutate,
 }: EventPeopleManagerProps) {
   const t = useTranslations('events.detail');
   const tEvents = useTranslations('events');
@@ -171,7 +173,9 @@ export default function EventPeopleManager({
         notes: '',
       });
       router.refresh();
+      onMutate?.();
       refreshIndex();
+      onMutate?.();
     } catch {
       setError(tEvents('errorSaving'));
     } finally {
@@ -215,6 +219,7 @@ export default function EventPeopleManager({
       setShowEditModal(false);
       setSelectedParticipant(null);
       router.refresh();
+      onMutate?.();
     } catch {
       setError(tEvents('errorSaving'));
     } finally {
@@ -243,6 +248,7 @@ export default function EventPeopleManager({
           })
         );
         router.refresh();
+      onMutate?.();
       }
     } catch {
       toast.error(tEvents('errorSaving'));
@@ -272,7 +278,9 @@ export default function EventPeopleManager({
       setShowDeleteModal(false);
       setSelectedParticipant(null);
       router.refresh();
+      onMutate?.();
       refreshIndex();
+      onMutate?.();
     } catch {
       setError(tEvents('errorSaving'));
     } finally {

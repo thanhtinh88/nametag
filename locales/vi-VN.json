@@ -983,6 +983,8 @@
       "filterPlaceholder": "Nhập để lọc theo nhóm / chuyên án...",
       "noGroupsFound": "Không tìm thấy nhóm phù hợp",
       "recenterGraph": "Căn giữa đồ thị",
+      "increaseDistance": "Tăng khoảng cách đối tượng",
+      "decreaseDistance": "Giảm khoảng cách đối tượng",
       "matchMode": {
         "any": "Bất kỳ (OR)",
         "all": "Tất cả (AND)",
