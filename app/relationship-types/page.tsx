@@ -25,13 +25,16 @@ const CATEGORY_STYLES: Record<string, { bg: string; text: string; border: string
 
 export default async function RelationshipTypesPage({ searchParams }: PageProps) {
   const session = await auth();
-  const t = await getTranslations('relationshipTypes');
 
   if (!session?.user) {
     redirect('/login');
   }
 
-  const params = searchParams ? await searchParams : {};
+  const [t, params] = await Promise.all([
+    getTranslations('relationshipTypes'),
+    searchParams ? searchParams : Promise.resolve({} as { category?: string }),
+  ]);
+
   const selectedCategory = params.category || 'ALL';
 
   // Check if user has any relationship types; if not, seed investigation defaults
@@ -124,7 +127,7 @@ export default async function RelationshipTypesPage({ searchParams }: PageProps)
         currentPath="/relationship-types"
       />
 
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8 animate-page-enter">
         <div className="px-4 py-6 sm:px-0 space-y-6">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">

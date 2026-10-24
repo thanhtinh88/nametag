@@ -16,16 +16,18 @@ export default async function GangsPage({
   searchParams: Promise<{ q?: string }>;
 }) {
   const session = await auth();
-  const t = await getTranslations('gangs');
 
   if (!session?.user) {
     redirect('/login');
   }
 
-  const params = await searchParams;
-  const searchQuery = params.q?.trim() || '';
+  const [t, params, { nameOrder }] = await Promise.all([
+    getTranslations('gangs'),
+    searchParams,
+    getUserDisplayPreferences(session.user.id),
+  ]);
 
-  const { nameOrder } = await getUserDisplayPreferences(session.user.id);
+  const searchQuery = params.q?.trim() || '';
 
   const whereClause: any = {
     userId: session.user.id,
@@ -80,7 +82,7 @@ export default async function GangsPage({
         currentPath="/gangs"
       />
 
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8 animate-page-enter">
         <div className="px-4 py-6 sm:px-0 space-y-6">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">

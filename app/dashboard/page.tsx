@@ -22,8 +22,6 @@ export default async function DashboardPage() {
   }
 
   const userId = session.user.id;
-  const t = await getTranslations('dashboard');
-  const { dateFormat, graphMode } = await getUserDisplayPreferences(userId);
 
   const now = new Date();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
@@ -34,6 +32,8 @@ export default async function DashboardPage() {
 
   // Parallel data fetching for optimal performance — only real, active data
   const [
+    t,
+    { dateFormat, graphMode },
     totalPeople,
     convictedPeople,
     recentPeopleMonth,
@@ -52,6 +52,8 @@ export default async function DashboardPage() {
     allCasesForFilter,
     customFieldTemplates,
   ] = await Promise.all([
+    getTranslations('dashboard'),
+    getUserDisplayPreferences(userId),
     // 1. Total people count
     prisma.person.count({
       where: { userId, deletedAt: null },
@@ -239,7 +241,7 @@ export default async function DashboardPage() {
         currentPath="/dashboard"
       />
 
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8 animate-page-enter">
         <div className="px-4 sm:px-0">
           {/* Command Header */}
           <DashboardHeader

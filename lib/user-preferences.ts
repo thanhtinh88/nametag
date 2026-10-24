@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { prisma } from '@/lib/prisma';
 import type { Theme, DateFormat, NameOrder, NameDisplayFormat } from '@prisma/client';
 
@@ -48,28 +49,28 @@ function toGraphMode(value: string | null | undefined): GraphMode {
  * Reads one row by primary key, so callers should not try to avoid it by
  * selecting a narrower set of columns.
  */
-export async function getUserDisplayPreferences(
-  userId: string
-): Promise<DisplayPreferences> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      theme: true,
-      dateFormat: true,
-      nameOrder: true,
-      nameDisplayFormat: true,
-      graphMode: true,
-      language: true,
-    },
-  });
+export const getUserDisplayPreferences = cache(
+  async (userId: string): Promise<DisplayPreferences> => {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        theme: true,
+        dateFormat: true,
+        nameOrder: true,
+        nameDisplayFormat: true,
+        graphMode: true,
+        language: true,
+      },
+    });
 
-  return {
-    theme: user?.theme ?? DISPLAY_PREFERENCE_DEFAULTS.theme,
-    dateFormat: user?.dateFormat ?? DISPLAY_PREFERENCE_DEFAULTS.dateFormat,
-    nameOrder: user?.nameOrder ?? DISPLAY_PREFERENCE_DEFAULTS.nameOrder,
-    nameDisplayFormat:
-      user?.nameDisplayFormat ?? DISPLAY_PREFERENCE_DEFAULTS.nameDisplayFormat,
-    graphMode: toGraphMode(user?.graphMode),
-    language: user?.language ?? DISPLAY_PREFERENCE_DEFAULTS.language,
-  };
-}
+    return {
+      theme: user?.theme ?? DISPLAY_PREFERENCE_DEFAULTS.theme,
+      dateFormat: user?.dateFormat ?? DISPLAY_PREFERENCE_DEFAULTS.dateFormat,
+      nameOrder: user?.nameOrder ?? DISPLAY_PREFERENCE_DEFAULTS.nameOrder,
+      nameDisplayFormat:
+        user?.nameDisplayFormat ?? DISPLAY_PREFERENCE_DEFAULTS.nameDisplayFormat,
+      graphMode: toGraphMode(user?.graphMode),
+      language: user?.language ?? DISPLAY_PREFERENCE_DEFAULTS.language,
+    };
+  }
+);

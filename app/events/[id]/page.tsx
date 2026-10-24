@@ -13,13 +13,15 @@ export default async function EventDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const session = await auth();
-  const t = await getTranslations('events');
 
   if (!session?.user) {
     redirect('/login');
   }
 
-  const { id } = await params;
+  const [{ id }, t] = await Promise.all([
+    params,
+    getTranslations('events'),
+  ]);
 
   const [event, availablePeople, availableEvents, preferences, immichConnection] = await Promise.all([
     prisma.event.findFirst({
@@ -194,7 +196,7 @@ export default async function EventDetailPage({
         currentPath="/events"
       />
 
-      <main className="max-w-6xl mx-auto py-6 sm:px-6 lg:px-8">
+      <main className="max-w-6xl mx-auto py-6 sm:px-6 lg:px-8 animate-page-enter">
         <div className="px-4 py-4 sm:px-0 space-y-4">
           <div>
             <Link

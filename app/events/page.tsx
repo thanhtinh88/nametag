@@ -37,18 +37,17 @@ export default async function EventsPage({
   }>;
 }) {
   const session = await auth();
-  const t = await getTranslations('events');
-  const tCommon = await getTranslations('common');
 
   if (!session?.user) {
     redirect('/login');
   }
 
-  const { dateFormat, nameOrder, nameDisplayFormat } = await getUserDisplayPreferences(
-    session.user.id
-  );
-
-  const params = await searchParams;
+  const [t, tCommon, { dateFormat, nameOrder, nameDisplayFormat }, params] = await Promise.all([
+    getTranslations('events'),
+    getTranslations('common'),
+    getUserDisplayPreferences(session.user.id),
+    searchParams,
+  ]);
   const currentPage = Math.max(1, Number(params.page) || 1);
   const parsedPageSize = Number(params.pageSize);
   const pageSize = ALLOWED_PAGE_SIZES.includes(parsedPageSize)
@@ -405,7 +404,7 @@ export default async function EventsPage({
         currentPath="/events"
       />
 
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8 animate-page-enter">
         <div className="px-4 py-6 sm:px-0">
           {/* Header Title Bar */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">

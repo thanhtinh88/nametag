@@ -1,4 +1,5 @@
 import NextAuth from 'next-auth';
+import { cache } from 'react';
 import type { Account, Profile, User } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import Google from 'next-auth/providers/google';
@@ -266,7 +267,7 @@ const providers = [
     : []),
 ];
 
-export const { handlers, signIn, signOut, auth } = NextAuth({
+const nextAuthResult = NextAuth({
   // Trust host header in production (required for Docker/proxy deployments)
   trustHost: true,
 
@@ -417,3 +418,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     updateAge: 24 * 60 * 60, // Refresh every 24 hours
   },
 });
+
+export const handlers = nextAuthResult.handlers;
+export const signIn = nextAuthResult.signIn;
+export const signOut = nextAuthResult.signOut;
+export const auth = cache(nextAuthResult.auth);

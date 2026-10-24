@@ -16,14 +16,16 @@ export default async function GroupDetailsPage({
   params: Promise<{ id: string }>;
 }) {
   const session = await auth();
-  const t = await getTranslations('groups');
-  const tCommon = await getTranslations('common');
 
   if (!session?.user) {
     redirect('/login');
   }
 
-  const { id } = await params;
+  const [{ id }, t, tCommon] = await Promise.all([
+    params,
+    getTranslations('groups'),
+    getTranslations('common'),
+  ]);
 
   const [group, allPeople, preferences] = await Promise.all([
     prisma.group.findUnique({
@@ -198,7 +200,7 @@ export default async function GroupDetailsPage({
         currentPath="/groups"
       />
 
-      <main className="max-w-5xl mx-auto py-6 sm:px-6 lg:px-8">
+      <main className="max-w-5xl mx-auto py-6 sm:px-6 lg:px-8 animate-page-enter">
         <div className="px-4 py-6 sm:px-0 space-y-6">
           <div>
             <Link

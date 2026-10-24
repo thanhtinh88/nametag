@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { cookies, headers } from 'next/headers';
 import { prisma } from './prisma';
 import { createModuleLogger } from './logger';
@@ -149,7 +150,7 @@ export async function detectBrowserLocale(): Promise<SupportedLocale> {
 /**
  * Get user's language preference from database
  */
-export async function getUserLanguageFromDB(userId: string): Promise<SupportedLocale | null> {
+export const getUserLanguageFromDB = cache(async (userId: string): Promise<SupportedLocale | null> => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -165,7 +166,7 @@ export async function getUserLanguageFromDB(userId: string): Promise<SupportedLo
     log.error({ err: error instanceof Error ? error : new Error(String(error)) }, 'Error getting user language from DB');
     return null;
   }
-}
+});
 
 /**
  * Get locale for the current user

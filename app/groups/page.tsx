@@ -16,52 +16,54 @@ export default async function GroupsPage({
   searchParams: Promise<{ page?: string }>;
 }) {
   const session = await auth();
-  const t = await getTranslations('groups');
-  const tCommon = await getTranslations('common');
 
   if (!session?.user) {
     redirect('/login');
   }
 
-  // Check if user can create more groups
-  const canCreate = await canCreateResource(session.user.id, 'groups');
+  const [t, tCommon, canCreate, params] = await Promise.all([
+    getTranslations('groups'),
+    getTranslations('common'),
+    canCreateResource(session.user.id, 'groups'),
+    searchParams,
+  ]);
 
-  const params = await searchParams;
   const currentPage = Number(params.page) || 1;
   const skip = (currentPage - 1) * ITEMS_PER_PAGE;
 
-  // Get total count for pagination
-  const totalCount = await prisma.group.count({
-    where: {
-      userId: session.user.id,
-      deletedAt: null,
-    },
-  });
-
-  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
-
-  const groups = await prisma.group.findMany({
-    where: {
-      userId: session.user.id,
-      deletedAt: null,
-    },
-    include: {
-      _count: {
-        select: {
-          people: {
-            where: {
-              person: { deletedAt: null },
+  // Get total count for pagination and groups in parallel
+  const [totalCount, groups] = await Promise.all([
+    prisma.group.count({
+      where: {
+        userId: session.user.id,
+        deletedAt: null,
+      },
+    }),
+    prisma.group.findMany({
+      where: {
+        userId: session.user.id,
+        deletedAt: null,
+      },
+      include: {
+        _count: {
+          select: {
+            people: {
+              where: {
+                person: { deletedAt: null },
+              },
             },
           },
         },
       },
-    },
-    orderBy: {
-      name: 'asc',
-    },
-    skip,
-    take: ITEMS_PER_PAGE,
-  });
+      orderBy: {
+        name: 'asc',
+      },
+      skip,
+      take: ITEMS_PER_PAGE,
+    }),
+  ]);
+
+  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
 
   return (
     <div className="min-h-screen bg-background">
@@ -73,7 +75,7 @@ export default async function GroupsPage({
         currentPath="/groups"
       />
 
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8 animate-page-enter">
         <div className="px-4 py-6 sm:px-0">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
             <h1 className="text-3xl font-bold text-foreground">

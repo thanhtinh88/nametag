@@ -19,7 +19,7 @@ export default async function MapPage() {
         userPhoto={session.user.photo}
         currentPath="/map"
       />
-      <main className="flex-1 flex flex-col">
+      <main className="flex-1 flex flex-col animate-page-enter">
         <MapPageClient />
       </main>
     </div>

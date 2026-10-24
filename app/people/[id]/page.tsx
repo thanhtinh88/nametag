@@ -33,35 +33,19 @@ export default async function PersonDetailsPage({
   params: Promise<{ id: string }>;
 }) {
   const session = await auth();
-  const t = await getTranslations('people');
 
   if (!session?.user) {
     redirect('/login');
   }
 
-  const { id } = await params;
+  const [{ id }, t] = await Promise.all([
+    params,
+    getTranslations('people'),
+  ]);
 
-  // Fetch user's display preference and profile
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: {
-      dateFormat: true,
-      nameOrder: true,
-      nameDisplayFormat: true,
-      language: true,
-      name: true,
-      surname: true,
-      nickname: true,
-      photo: true,
-    },
-  });
-
-  const dateFormat = user?.dateFormat || 'DMY';
-  const nameOrder = user?.nameOrder;
-  const nameDisplayFormat: NameDisplayFormat = (user?.nameDisplayFormat as NameDisplayFormat) || 'FULL';
-
-  // Fetch person, relationships, groups, and connections in parallel
+  // Fetch user profile, person, relationships, groups, and connections in parallel
   const [
+    user,
     person,
     allPeople,
     relationshipTypes,
@@ -70,6 +54,19 @@ export default async function PersonDetailsPage({
     allEvents,
     immichConnection,
   ] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: {
+        dateFormat: true,
+        nameOrder: true,
+        nameDisplayFormat: true,
+        language: true,
+        name: true,
+        surname: true,
+        nickname: true,
+        photo: true,
+      },
+    }),
     prisma.person.findUnique({
       where: {
         id,
@@ -275,6 +272,10 @@ export default async function PersonDetailsPage({
     }),
   ]);
 
+  const dateFormat = user?.dateFormat || 'DMY';
+  const nameOrder = user?.nameOrder;
+  const nameDisplayFormat: NameDisplayFormat = (user?.nameDisplayFormat as NameDisplayFormat) || 'FULL';
+
   if (!person) {
     notFound();
   }
@@ -317,7 +318,7 @@ export default async function PersonDetailsPage({
         currentPath="/people"
       />
 
-      <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+      <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 animate-page-enter">
         <div className="mb-4">
           <BackLink
             fallbackHref="/people"

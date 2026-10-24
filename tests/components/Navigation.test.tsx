@@ -346,4 +346,18 @@ describe('Navigation', () => {
       expect(wrapper).toHaveClass('md:block');
     });
   });
+
+  describe('optimistic tab transitions', () => {
+    it('updates active state immediately on click before navigation completes', async () => {
+      const user = userEvent.setup();
+      renderNav();
+
+      const peopleLinks = screen.getAllByRole('link', { name: enMessages.nav.people });
+      const desktopPeopleLink = peopleLinks[0];
+
+      expect(desktopPeopleLink).not.toHaveAttribute('aria-current', 'page');
+      await user.click(desktopPeopleLink);
+      expect(desktopPeopleLink).toHaveAttribute('aria-current', 'page');
+    });
+  });
 });

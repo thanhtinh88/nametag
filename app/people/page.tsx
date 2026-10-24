@@ -42,20 +42,19 @@ export default async function PeoplePage({
   }>;
 }) {
   const session = await auth();
-  const t = await getTranslations('people');
-  const tCommon = await getTranslations('common');
 
   if (!session?.user) {
     redirect('/login');
   }
 
-  // Check if user can create more people
-  const canCreate = await canCreateResource(session.user.id, 'people');
+  const [t, tCommon, canCreate, { dateFormat, nameOrder, nameDisplayFormat }, params] = await Promise.all([
+    getTranslations('people'),
+    getTranslations('common'),
+    canCreateResource(session.user.id, 'people'),
+    getUserDisplayPreferences(session.user.id),
+    searchParams,
+  ]);
 
-  // Fetch user's date format preference
-  const { dateFormat, nameOrder, nameDisplayFormat } = await getUserDisplayPreferences(session.user.id);
-
-  const params = await searchParams;
   const currentPage = Math.max(1, Number(params.page) || 1);
   const parsedPageSize = Number(params.pageSize);
   const pageSize = ALLOWED_PAGE_SIZES.includes(parsedPageSize) ? parsedPageSize : DEFAULT_PAGE_SIZE;
@@ -196,70 +195,22 @@ export default async function PeoplePage({
     };
   }
 
-  // Get total count for pagination & quick chips counts in parallel
-  const [
-    totalCount,
-    totalAll,
-    countKeyTarget,
-    countSurveillance,
-    countHighRisk,
-    countCriminal,
-    countUnassignedGroup,
-    allGroups,
-    relationshipTypes,
-    customFieldTemplates,
-  ] = await Promise.all([
-    prisma.person.count({ where: peopleWhere }),
-    prisma.person.count({ where: { userId: session.user.id, deletedAt: null } }),
-    prisma.person.count({ where: { userId: session.user.id, deletedAt: null, managementLevel: 'KEY_TARGET' } }),
-    prisma.person.count({ where: { userId: session.user.id, deletedAt: null, managementLevel: 'SURVEILLANCE' } }),
-    prisma.person.count({ where: { userId: session.user.id, deletedAt: null, threatLevel: { in: ['HIGH', 'ARMED_DANGEROUS'] } } }),
-    prisma.person.count({ where: { userId: session.user.id, deletedAt: null, criminalRecords: { some: { deletedAt: null } } } }),
-    prisma.person.count({ where: { userId: session.user.id, deletedAt: null, groups: { none: {} } } }),
-    prisma.group.findMany({
-      where: { userId: session.user.id, deletedAt: null },
-      orderBy: { name: 'asc' },
-      select: { id: true, name: true, color: true },
-    }),
-    prisma.relationshipType.findMany({
-      where: { userId: session.user.id, deletedAt: null },
-      orderBy: { label: 'asc' },
-      select: { id: true, label: true, color: true },
-    }),
-    prisma.customFieldTemplate.findMany({
-      where: { userId: session.user.id, deletedAt: null },
-      orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
-    }),
-  ]);
-
-  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-
-  // Determine whether we can sort directly in database
   const isDbSortable = ['name', 'surname', 'lastContact', 'nickname'].includes(sortBy);
 
-  let people: Array<{
-    id: string;
-    name: string;
-    middleName: string | null;
-    surname: string | null;
-    secondLastName: string | null;
-    nickname: string | null;
-    displayNameOverride?: string | null;
-    photo: string | null;
-    lastContact: Date | null;
-    relationshipToUser: { label: string; color: string | null } | null;
-    groups: Array<{ groupId: string; group: { name: string; color: string | null } }>;
-    relationshipsFrom: Array<{ id: string }>;
-    relationshipsTo: Array<{ id: string }>;
-    managementLevel?: string | null;
-    threatLevel?: string | null;
-    citizenId?: string | null;
-    vehicles?: Array<{ plateNumber: string; brandModel: string | null; color: string | null }>;
-    physicalMarks?: Array<{ type: string; location: string; description: string | null }>;
-    criminalRecordsCount?: number;
-    gangs?: Array<{ id: string; name: string; color: string | null }>;
-    casesCount?: number;
-  }> = [];
+  let prismaOrderBy: Prisma.PersonOrderByWithRelationInput[] = [];
+  if (isDbSortable) {
+    if (sortBy === 'name') {
+      prismaOrderBy = nameOrder === 'EASTERN'
+        ? [{ surname: order }, { name: order }]
+        : [{ name: order }, { surname: order }];
+    } else if (sortBy === 'surname') {
+      prismaOrderBy = [{ surname: order }, { name: order }];
+    } else if (sortBy === 'lastContact') {
+      prismaOrderBy = [{ lastContact: order }, { name: 'asc' }];
+    } else if (sortBy === 'nickname') {
+      prismaOrderBy = [{ nickname: order }, { name: 'asc' }];
+    }
+  }
 
   const personInclude = {
     relationshipToUser: { select: { label: true, color: true } },
@@ -293,28 +244,80 @@ export default async function PeoplePage({
     },
   };
 
-  if (isDbSortable) {
-    let prismaOrderBy: Prisma.PersonOrderByWithRelationInput[] = [];
-    if (sortBy === 'name') {
-      prismaOrderBy = nameOrder === 'EASTERN'
-        ? [{ surname: order }, { name: order }]
-        : [{ name: order }, { surname: order }];
-    } else if (sortBy === 'surname') {
-      prismaOrderBy = [{ surname: order }, { name: order }];
-    } else if (sortBy === 'lastContact') {
-      prismaOrderBy = [{ lastContact: order }, { name: 'asc' }];
-    } else if (sortBy === 'nickname') {
-      prismaOrderBy = [{ nickname: order }, { name: 'asc' }];
-    }
+  // Get total count for pagination, quick chips counts, and records in parallel
+  const [
+    totalCount,
+    totalAll,
+    countKeyTarget,
+    countSurveillance,
+    countHighRisk,
+    countCriminal,
+    countUnassignedGroup,
+    allGroups,
+    relationshipTypes,
+    customFieldTemplates,
+    rawDbPeople,
+  ] = await Promise.all([
+    prisma.person.count({ where: peopleWhere }),
+    prisma.person.count({ where: { userId: session.user.id, deletedAt: null } }),
+    prisma.person.count({ where: { userId: session.user.id, deletedAt: null, managementLevel: 'KEY_TARGET' } }),
+    prisma.person.count({ where: { userId: session.user.id, deletedAt: null, managementLevel: 'SURVEILLANCE' } }),
+    prisma.person.count({ where: { userId: session.user.id, deletedAt: null, threatLevel: { in: ['HIGH', 'ARMED_DANGEROUS'] } } }),
+    prisma.person.count({ where: { userId: session.user.id, deletedAt: null, criminalRecords: { some: { deletedAt: null } } } }),
+    prisma.person.count({ where: { userId: session.user.id, deletedAt: null, groups: { none: {} } } }),
+    prisma.group.findMany({
+      where: { userId: session.user.id, deletedAt: null },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, color: true },
+    }),
+    prisma.relationshipType.findMany({
+      where: { userId: session.user.id, deletedAt: null },
+      orderBy: { label: 'asc' },
+      select: { id: true, label: true, color: true },
+    }),
+    prisma.customFieldTemplate.findMany({
+      where: { userId: session.user.id, deletedAt: null },
+      orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+    }),
+    isDbSortable
+      ? prisma.person.findMany({
+          where: peopleWhere,
+          include: personInclude,
+          orderBy: prismaOrderBy,
+          skip,
+          take: pageSize,
+        })
+      : null,
+  ]);
 
-    const rawPeople = await prisma.person.findMany({
-      where: peopleWhere,
-      include: personInclude,
-      orderBy: prismaOrderBy,
-      skip,
-      take: pageSize,
-    });
-    people = rawPeople.map((p) => ({
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+
+  let people: Array<{
+    id: string;
+    name: string;
+    middleName: string | null;
+    surname: string | null;
+    secondLastName: string | null;
+    nickname: string | null;
+    displayNameOverride?: string | null;
+    photo: string | null;
+    lastContact: Date | null;
+    relationshipToUser: { label: string; color: string | null } | null;
+    groups: Array<{ groupId: string; group: { name: string; color: string | null } }>;
+    relationshipsFrom: Array<{ id: string }>;
+    relationshipsTo: Array<{ id: string }>;
+    managementLevel?: string | null;
+    threatLevel?: string | null;
+    citizenId?: string | null;
+    vehicles?: Array<{ plateNumber: string; brandModel: string | null; color: string | null }>;
+    physicalMarks?: Array<{ type: string; location: string; description: string | null }>;
+    criminalRecordsCount?: number;
+    gangs?: Array<{ id: string; name: string; color: string | null }>;
+    casesCount?: number;
+  }> = [];
+
+  if (isDbSortable && rawDbPeople) {
+    people = rawDbPeople.map((p) => ({
       ...p,
       vehicles: p.vehicles,
       physicalMarks: p.physicalMarks,
@@ -390,7 +393,7 @@ export default async function PeoplePage({
         <ImportSuccessToast />
       </Suspense>
 
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8 animate-page-enter">
         <div className="px-4 py-6 sm:px-0">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
             <h1 className="text-3xl font-bold text-foreground">

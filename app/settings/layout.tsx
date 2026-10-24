@@ -29,7 +29,7 @@ export default async function SettingsLayout({
         currentPath="/settings"
       />
 
-      <main className="max-w-6xl mx-auto py-6 sm:px-6 lg:px-8">
+      <main className="max-w-6xl mx-auto py-6 sm:px-6 lg:px-8 animate-page-enter">
         <div className="px-4 py-6 sm:px-0">
           <h1 className="text-3xl font-bold text-foreground mb-6">
             {t('title')}

@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Suspense } from 'react';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from 'next-intl/server';
 import SessionProvider from "@/components/SessionProvider";
@@ -7,6 +8,7 @@ import { SearchIndexProvider } from "@/components/SearchIndexProvider";
 import LocaleSync from "@/components/LocaleSync";
 import ServiceWorkerRegistration from "@/components/ServiceWorkerRegistration";
 import OfflineNavigationGuard from "@/components/OfflineNavigationGuard";
+import NavigationProgressBar from "@/components/NavigationProgressBar";
 import { Toaster } from "sonner";
 import { auth } from "@/lib/auth";
 import { getUserLocale } from "@/lib/locale";
@@ -81,6 +83,9 @@ export default async function RootLayout({
           <SessionProvider>
             <ThemeProvider initialTheme={initialTheme}>
               <SearchIndexProvider>
+                <Suspense fallback={null}>
+                  <NavigationProgressBar />
+                </Suspense>
                 {children}
               </SearchIndexProvider>
             </ThemeProvider>

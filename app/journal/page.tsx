@@ -14,13 +14,16 @@ export default async function JournalPage({
   searchParams: Promise<{ person?: string; event?: string; q?: string }>;
 }) {
   const session = await auth();
-  const t = await getTranslations('journal');
 
   if (!session?.user) {
     redirect('/login');
   }
 
-  const params = await searchParams;
+  const [t, params] = await Promise.all([
+    getTranslations('journal'),
+    searchParams,
+  ]);
+
   const personFilterParam = params.person;
   const personFilterIds = personFilterParam ? personFilterParam.split(',').filter(Boolean) : [];
   const eventFilterParam = params.event;
@@ -127,7 +130,7 @@ export default async function JournalPage({
         currentPath="/journal"
       />
 
-      <main className="max-w-3xl mx-auto py-6 sm:px-6 lg:px-8">
+      <main className="max-w-3xl mx-auto py-6 sm:px-6 lg:px-8 animate-page-enter">
         <div className="px-4 py-6 sm:px-0">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
             <h1 className="text-3xl font-bold text-foreground">

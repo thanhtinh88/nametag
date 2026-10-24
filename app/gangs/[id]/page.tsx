@@ -15,13 +15,15 @@ export default async function GangDetailsPage({
   params: Promise<{ id: string }>;
 }) {
   const session = await auth();
-  const t = await getTranslations('gangs');
 
   if (!session?.user) {
     redirect('/login');
   }
 
-  const { id } = await params;
+  const [{ id }, t] = await Promise.all([
+    params,
+    getTranslations('gangs'),
+  ]);
 
   const [gang, allPeople, preferences] = await Promise.all([
     prisma.gang.findUnique({
@@ -90,7 +92,7 @@ export default async function GangDetailsPage({
         currentPath="/gangs"
       />
 
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8 animate-page-enter">
         <div className="px-4 py-6 sm:px-0 space-y-6">
           {/* Breadcrumb / Back link */}
           <div className="flex items-center justify-between">

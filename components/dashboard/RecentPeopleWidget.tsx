@@ -57,7 +57,7 @@ export default async function RecentPeopleWidget({
               <Link
                 key={p.id}
                 href={`/people/${p.id}`}
-                className="flex items-center justify-between p-2.5 bg-surface-elevated/60 hover:bg-surface-elevated rounded-lg border border-border/80 transition-colors group"
+                className="flex items-center justify-between p-2.5 bg-surface-elevated/60 hover:bg-surface-elevated active:scale-[0.99] active:opacity-75 rounded-lg border border-border/80 transition-all group"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <PersonAvatar

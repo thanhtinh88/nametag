@@ -94,7 +94,7 @@ export default async function PriorityCasesList({
               <Link
                 key={cs.id}
                 href={`/events/${cs.id}`}
-                className="group block p-3.5 bg-surface-elevated/60 hover:bg-surface-elevated rounded-lg border border-border/80 transition-all hover:border-primary/30"
+                className="group block p-3.5 bg-surface-elevated/60 hover:bg-surface-elevated active:scale-[0.99] active:opacity-75 rounded-lg border border-border/80 transition-all hover:border-primary/30"
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
                   <div className="flex items-center gap-2 flex-wrap">

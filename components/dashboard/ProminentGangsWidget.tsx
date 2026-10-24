@@ -58,7 +58,7 @@ export default async function ProminentGangsWidget({
               <Link
                 key={gang.id}
                 href={`/gangs/${gang.id}`}
-                className="block p-3 bg-surface-elevated/60 hover:bg-surface-elevated rounded-lg border border-border/80 transition-colors"
+                className="block p-3 bg-surface-elevated/60 hover:bg-surface-elevated active:scale-[0.99] active:opacity-75 rounded-lg border border-border/80 transition-all"
               >
                 <div className="flex items-start justify-between gap-2 mb-1.5">
                   <div className="flex items-center gap-2 min-w-0">

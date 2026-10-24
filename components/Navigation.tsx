@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import NavigationSearch from './NavigationSearch';
 import UserMenu from './UserMenu';
@@ -76,8 +77,14 @@ const navItems = [
 export default function Navigation({ userEmail, userName, userNickname, userPhoto, currentPath }: NavigationProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+  const pathname = usePathname();
   const tNav = useTranslations('nav');
   const tCommon = useTranslations('common');
+
+  useEffect(() => {
+    setPendingHref(null);
+  }, [pathname, currentPath]);
 
   const displayName = formatUserDisplayName({ nickname: userNickname, name: userName, email: userEmail });
 
@@ -180,17 +187,34 @@ export default function Navigation({ userEmail, userName, userNickname, userPhot
     };
   }, [mobileMenuOpen]);
 
+  const activePath = pendingHref ?? currentPath ?? pathname ?? '';
   const isActive = (href: string) => {
-    if (!currentPath) return false;
-    return currentPath === href || currentPath.startsWith(`${href}/`);
+    if (!activePath) return false;
+    return activePath === href || activePath.startsWith(`${href}/`);
+  };
+
+  const handleNavClick = (href: string) => {
+    if (activePath !== href) {
+      setPendingHref(href);
+    }
   };
 
   return (
-    <nav className="bg-surface border-b border-border pt-[env(safe-area-inset-top)]">
+    <nav className="relative bg-surface border-b border-border pt-[env(safe-area-inset-top)]">
+      {/* Top/Edge Navigation Loading Progress Bar */}
+      {pendingHref && (
+        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary/20 overflow-hidden z-40 pointer-events-none" aria-hidden="true">
+          <div className="h-full bg-primary w-1/3 rounded-full animate-nav-progress" />
+        </div>
+      )}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Top row: Logo, Search (centered), User menu */}
         <div className="relative z-30 flex items-center justify-between h-16">
-          <Link href="/dashboard" className={`items-center shrink-0 z-10 ${mobileSearchOpen ? 'hidden md:flex' : 'flex'}`}>
+          <Link
+            href="/dashboard"
+            onClick={() => handleNavClick('/dashboard')}
+            className={`items-center shrink-0 z-10 ${mobileSearchOpen ? 'hidden md:flex' : 'flex'}`}
+          >
             <Image
               src="/logo.svg"
               alt="Nametag Logo"
@@ -269,6 +293,7 @@ export default function Navigation({ userEmail, userName, userNickname, userPhot
             <div key={item.href} className="relative">
               <Link
                 href={item.href}
+                onClick={() => handleNavClick(item.href)}
                 aria-current={isActive(item.href) ? 'page' : undefined}
                 className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors ${
                   isActive(item.href)
@@ -341,7 +366,10 @@ export default function Navigation({ userEmail, userName, userNickname, userPhot
                         }`}>
                           <Link
                             href={item.href}
-                            onClick={() => setMobileMenuOpen(false)}
+                            onClick={() => {
+                              handleNavClick(item.href);
+                              setMobileMenuOpen(false);
+                            }}
                             className={`flex-1 flex items-center gap-2 px-4 py-3 text-base font-medium ${
                               isActive(item.href)
                                 ? 'text-primary'
@@ -358,7 +386,10 @@ export default function Navigation({ userEmail, userName, userNickname, userPhot
                           }`} />
                           <Link
                             href={item.createHref}
-                            onClick={() => setMobileMenuOpen(false)}
+                            onClick={() => {
+                              handleNavClick(item.createHref!);
+                              setMobileMenuOpen(false);
+                            }}
                             className={`px-4 py-3 transition-colors ${
                               isActive(item.href)
                                 ? 'text-primary'
@@ -374,7 +405,10 @@ export default function Navigation({ userEmail, userName, userNickname, userPhot
                       ) : (
                         <Link
                           href={item.href}
-                          onClick={() => setMobileMenuOpen(false)}
+                          onClick={() => {
+                            handleNavClick(item.href);
+                            setMobileMenuOpen(false);
+                          }}
                           className={`flex items-center gap-2 px-4 py-3 rounded-lg text-base font-medium border transition-colors ${
                             isActive(item.href)
                               ? 'text-primary bg-primary/10 border-primary'
