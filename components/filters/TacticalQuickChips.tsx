@@ -1,5 +1,6 @@
 'use client';
 
+import React, { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { UnifiedPersonFilterState } from '@/lib/filters/person-filter-types';
 
@@ -15,6 +16,7 @@ export default function TacticalQuickChips({
   className = '',
 }: TacticalQuickChipsProps) {
   const t = useTranslations('tacticalFilters');
+  const [open, setOpen] = useState(false);
 
   const isKeyTarget = filters.managementLevels.includes('KEY_TARGET');
   const isArmed = filters.threatLevels.includes('ARMED_DANGEROUS');
@@ -76,73 +78,115 @@ export default function TacticalQuickChips({
   const chips = [
     {
       id: 'key_target',
+      icon: '🎯',
       label: t('chipKeyTarget'),
       active: isKeyTarget,
       onClick: () => toggleManagementLevel('KEY_TARGET'),
-      activeClass: 'bg-red-500/20 text-red-600 dark:text-red-400 border-red-500/50 ring-1 ring-red-500/30',
+      activeClass: 'bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/40',
     },
     {
       id: 'armed',
+      icon: '🔫',
       label: t('chipArmed'),
       active: isArmed,
       onClick: () => toggleThreatLevel('ARMED_DANGEROUS'),
-      activeClass: 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/50 ring-1 ring-amber-500/30',
+      activeClass: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/40',
     },
     {
       id: 'wanted',
+      icon: '🚨',
       label: t('chipWanted'),
       active: isWanted,
       onClick: () => toggleResidenceStatus('WANTED'),
-      activeClass: 'bg-rose-600/20 text-rose-700 dark:text-rose-300 border-rose-600/50 ring-1 ring-rose-600/30',
+      activeClass: 'bg-rose-600/15 text-rose-700 dark:text-rose-300 border-rose-600/40',
     },
     {
       id: 'conviction',
+      icon: '⚖️',
       label: t('chipConviction'),
       active: isConvicted,
       onClick: () => toggleCriminalFilter('conviction'),
-      activeClass: 'bg-purple-500/20 text-purple-700 dark:text-purple-300 border-purple-500/50 ring-1 ring-purple-500/30',
+      activeClass: 'bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/40',
     },
     {
       id: 'gang',
+      icon: '🕸️',
       label: t('chipGang'),
       active: isGangAffiliate,
       onClick: toggleGang,
-      activeClass: 'bg-slate-700/20 text-slate-800 dark:text-slate-200 border-slate-600/50 ring-1 ring-slate-500/30',
+      activeClass: 'bg-slate-700/15 text-slate-800 dark:text-slate-200 border-slate-600/40',
     },
     {
       id: 'vehicle',
+      icon: '🏍️',
       label: t('chipSuspiciousVehicle'),
       active: isSuspiciousVehicle,
       onClick: toggleSuspiciousVehicle,
-      activeClass: 'bg-blue-500/20 text-blue-700 dark:text-blue-300 border-blue-500/50 ring-1 ring-blue-500/30',
+      activeClass: 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/40',
     },
     {
       id: 'mule',
+      icon: '💳',
       label: t('chipMuleAccount'),
       active: isMuleAccount,
       onClick: toggleMuleAccount,
-      activeClass: 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/50 ring-1 ring-emerald-500/30',
+      activeClass: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/40',
     },
   ];
 
+  const activeCount = chips.filter((c) => c.active).length;
+
   return (
-    <div className={`space-y-1.5 ${className}`}>
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-border">
-        {chips.map((chip) => (
-          <button
-            key={chip.id}
-            type="button"
-            onClick={chip.onClick}
-            className={`inline-flex items-center px-2 py-1 rounded-full text-[11px] font-medium border transition-all shrink-0 cursor-pointer select-none ${
-              chip.active
-                ? chip.activeClass
-                : 'bg-surface hover:bg-surface-elevated text-muted hover:text-foreground border-border/70'
-            }`}
-          >
-            {chip.label}
-          </button>
-        ))}
-      </div>
+    <div className={`relative ${className}`}>
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className={`inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold transition-all border whitespace-nowrap ${
+          open || activeCount > 0
+            ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/40'
+            : 'bg-surface hover:bg-surface-elevated text-foreground border-border'
+        }`}
+        title="Tiêu chí lọc tác chiến nhanh"
+      >
+        <span>⚡</span>
+        <span className="hidden md:inline">Lọc nhanh</span>
+        {activeCount > 0 && (
+          <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-500 text-slate-950">
+            {activeCount}
+          </span>
+        )}
+        <span className="text-[9px] opacity-75">{open ? '▲' : '▼'}</span>
+      </button>
+
+      {open && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="absolute right-0 top-full mt-1.5 w-60 bg-surface border border-border rounded-xl shadow-2xl z-50 p-2 space-y-1 text-xs">
+            <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted border-b border-border/60 mb-1">
+              ⚡ Tiêu chí lọc nhanh
+            </div>
+            {chips.map((chip) => (
+              <button
+                key={chip.id}
+                type="button"
+                onClick={chip.onClick}
+                className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-left text-xs font-medium border transition-all cursor-pointer ${
+                  chip.active
+                    ? chip.activeClass
+                    : 'bg-transparent hover:bg-surface-elevated text-foreground border-transparent'
+                }`}
+              >
+                <span className="truncate">{chip.label}</span>
+                {chip.active && <span className="text-[11px] font-bold shrink-0">✓</span>}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

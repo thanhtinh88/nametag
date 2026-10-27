@@ -150,6 +150,8 @@ model Person {
   criminalRecords    CriminalRecord[]
   gangMemberships    GangMembership[]
   bankAccounts       SuspectBankAccount[]
+  mapMarkers         EventMapMarker[]
+  mapRoutes          EventMapRoute[]
 
   @@index([userId])
   @@index([relationshipToUserId])
@@ -1124,6 +1126,9 @@ model Event {
   journalEntries    JournalEntryEvent[]
   relationshipsFrom EventRelationship[] @relation("EventRelationshipsFrom")
   relationshipsTo   EventRelationship[] @relation("EventRelationshipsTo")
+  mapMarkers        EventMapMarker[]
+  mapRoutes         EventMapRoute[]
+  mapDrawings       EventMapDrawing[]
 
   @@index([userId])
   @@index([userId, startDate])
@@ -1395,6 +1400,99 @@ model SuspectBankAccount {
   @@index([accountNumber])
   @@index([personId, deletedAt])
   @@map("suspect_bank_accounts")
+}
+
+// ============================================
+// CRIME SCENE & EVIDENCE MAP MODELS
+// ============================================
+
+// EventMapMarker - CCTV cameras, BTS towers, physical evidence, witnesses, custom pins
+model EventMapMarker {
+  id              String    @id @default(cuid())
+  eventId         String
+  personId        String?   // Optional linked subject / suspect / witness
+  markerType      String    @default("CAMERA") // "CAMERA" | "BTS" | "CRIME_SCENE" | "PHYSICAL_EVIDENCE" | "WITNESS" | "CUSTOM"
+  label           String
+  description     String?   @db.Text
+  latitude        Decimal   @db.Decimal(10, 8)
+  longitude       Decimal   @db.Decimal(11, 8)
+  occurredAt      DateTime? // Calibrated timestamp for timeline scrubbing
+  color           String?
+  mediaUrl        String?   @db.Text // Thumbnail photo or video URL / data URI
+  mediaType       String?   @default("IMAGE") // "IMAGE" | "VIDEO"
+
+  // Camera-specific fields
+  cameraDirection Int?      // 0-360 degrees heading for FoV cone
+  cameraFovDeg    Int?      @default(60) // Field of view cone angle
+  cameraStatus    String?   @default("CAPTURED") // "CAPTURED" | "CLEAR" | "BLIND_BROKEN"
+  rawTimeNote     String?   // Raw DVR time or clock drift note
+
+  // BTS-specific fields
+  btsCode         String?   // Station name / Cell ID / LAC
+  btsCarrier      String?   // Viettel, Vinaphone, Mobifone, etc.
+  btsRadiusMeters Int?      @default(300) // Coverage radius in meters
+  btsAzimuthDeg   Int?      // Sector azimuth (null = 360 omni)
+  subscriberInfo  String?   // Phone number / IMEI
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  event  Event   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  person Person? @relation(fields: [personId], references: [id], onDelete: SetNull)
+
+  @@index([eventId])
+  @@index([eventId, markerType])
+  @@index([eventId, occurredAt])
+  @@index([personId])
+  @@map("event_map_markers")
+}
+
+// EventMapRoute - Subject movement trajectories and relational links between markers
+model EventMapRoute {
+  id        String   @id @default(cuid())
+  eventId   String
+  personId  String?  // Optional linked subject
+  label     String
+  routeType String   @default("CONFIRMED_PATH") // "CONFIRMED_PATH" | "SUSPECTED_PATH" | "RELATION_LINK"
+  color     String   @default("#ef4444")
+  waypoints Json     // Array<{ lat: number; lng: number; markerId?: string; timestamp?: string; label?: string }>
+  notes     String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  event  Event   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  person Person? @relation(fields: [personId], references: [id], onDelete: SetNull)
+
+  @@index([eventId])
+  @@index([personId])
+  @@map("event_map_routes")
+}
+
+// EventMapDrawing - Tactical map markup: Freehand pencil, Line, Polygon, Rectangle, Circle, Text
+model EventMapDrawing {
+  id           String   @id @default(cuid())
+  eventId      String
+  drawingType  String   @default("POLYGON") // "FREEHAND" | "LINE" | "POLYGON" | "RECTANGLE" | "CIRCLE" | "TEXT"
+  label        String?
+  notes        String?  @db.Text
+  strokeColor  String   @default("#f59e0b")
+  strokeWidth  Int      @default(3)
+  strokeStyle  String   @default("SOLID") // "SOLID" | "DASHED"
+  fillColor    String?  @default("#f59e0b")
+  fillOpacity  Float    @default(0.2)
+  coordinates  Json     // Array<{ lat: number; lng: number }>
+  radiusMeters Float?   // Used when drawingType === "CIRCLE"
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@index([eventId, drawingType])
+  @@map("event_map_drawings")
 }
 
 

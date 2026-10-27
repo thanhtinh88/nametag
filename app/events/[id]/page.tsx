@@ -93,6 +93,13 @@ export default async function EventDetailPage({
           orderBy: { journalEntry: { date: 'desc' } },
           take: 20,
         },
+        _count: {
+          select: {
+            mapMarkers: true,
+            mapRoutes: true,
+            mapDrawings: true,
+          },
+        },
       },
     }),
     prisma.person.findMany({
@@ -184,6 +191,11 @@ export default async function EventDetailPage({
     })),
     relationshipsFrom: event.relationshipsFrom,
     journalEntries: event.journalEntries,
+    mapCounts: {
+      markers: event._count.mapMarkers,
+      routes: event._count.mapRoutes,
+      drawings: event._count.mapDrawings,
+    },
   };
 
   return (
@@ -196,7 +208,7 @@ export default async function EventDetailPage({
         currentPath="/events"
       />
 
-      <main className="max-w-6xl mx-auto py-6 sm:px-6 lg:px-8 animate-page-enter">
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8 animate-page-enter">
         <div className="px-4 py-4 sm:px-0 space-y-4">
           <div>
             <Link

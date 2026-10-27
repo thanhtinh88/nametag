@@ -14,6 +14,7 @@ import EventRelationshipManager from '@/components/EventRelationshipManager';
 import EventDeleteButton from '@/components/EventDeleteButton';
 import ImmichGallerySection from '@/components/ImmichGallerySection';
 import SuspectMatcherModal from '@/components/investigation/SuspectMatcherModal';
+import CrimeSceneMapTab from '@/components/investigation/CrimeSceneMapTab';
 import UnifiedNetworkGraph from '@/components/UnifiedNetworkGraph';
 import { CASE_STATUS_COLORS } from './EventsListClient';
 
@@ -96,6 +97,11 @@ export interface EventDetailsClientProps {
     people: EventParticipant[];
     relationshipsFrom: any[];
     journalEntries: Array<{ journalEntry: JournalEntryItem }>;
+    mapCounts?: {
+      markers: number;
+      routes: number;
+      drawings: number;
+    };
   };
   availablePeople: any[];
   availableEvents: any[];
@@ -119,8 +125,10 @@ export default function EventDetailsClient({
   const router = useRouter();
 
   const [event, setEvent] = useState(initialEvent);
-  // Merged 3 tabs: overview, network (incorporates graph + participants + related cases), timeline
-  const [activeTab, setActiveTab] = useState<'overview' | 'network' | 'timeline'>('network');
+  const [activeTab, setActiveTab] = useState<'overview' | 'map' | 'network' | 'timeline'>('network');
+  const [mapCounts, setMapCounts] = useState(
+    initialEvent.mapCounts ?? { markers: 0, routes: 0, drawings: 0 }
+  );
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [isStatusMenuOpen, setIsStatusMenuOpen] = useState(false);
   const [graphRefreshKey, setGraphRefreshKey] = useState(0);
@@ -345,7 +353,22 @@ export default function EventDetailsClient({
               : 'border-transparent text-muted-foreground hover:text-foreground'
           }`}
         >
-          <span>📑</span> Hồ sơ & Hiện trường
+          <span>📑</span> Hồ sơ
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('map')}
+          className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'map'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <span>🗺️</span> Bản đồ hiện trường
+          <span className="px-1.5 py-0.5 text-xs rounded-full bg-red-500/10 text-red-600 dark:text-red-400 font-bold">
+            {mapCounts.markers + mapCounts.routes}
+          </span>
         </button>
 
         <button
@@ -357,13 +380,12 @@ export default function EventDetailsClient({
               : 'border-transparent text-muted-foreground hover:text-foreground'
           }`}
         >
-          <span>🕒</span> Nhật ký & Tiến trình
+          <span>🕒</span> Nhật ký
           <span className="px-1.5 py-0.5 text-xs rounded-full bg-surface-elevated border border-border text-muted-foreground font-bold">
             {event.journalEntries.length}
           </span>
         </button>
 
-        
         <button
           type="button"
           onClick={() => setActiveTab('network')}
@@ -373,14 +395,27 @@ export default function EventDetailsClient({
               : 'border-transparent text-muted-foreground hover:text-foreground'
           }`}
         >
-          <span>🌐</span> Sơ đồ mạng lưới & Đối tượng
+          <span>🌐</span> Sơ đồ mạng lưới
           <span className="px-1.5 py-0.5 text-xs rounded-full bg-primary/10 text-primary font-bold">
-            {event.people.length} đối tượng · {event.relationshipsFrom.length} vụ án liên đới
+            {event.people.length}
           </span>
         </button>
       </div>
 
       {/* 3. TAB CONTENTS */}      
+
+      {/* TAB: CRIME SCENE & EVIDENCE MAP */}
+      {activeTab === 'map' && (
+        <CrimeSceneMapTab
+          eventId={event.id}
+          eventTitle={event.title}
+          caseCode={event.caseCode}
+          immichAlbumId={event.immichAlbumId}
+          casePeople={event.people}
+          availablePeople={availablePeople}
+          onCountChange={setMapCounts}
+        />
+      )}
 
       {/* TAB 1: OVERVIEW & DOSSIER */}
       {activeTab === 'overview' && (

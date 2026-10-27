@@ -529,6 +529,58 @@ export default function UnifiedNetworkGraph({
     return found?.title || 'Vụ án';
   }, [selectedCaseNode, events, activeCaseId]);
 
+  // Large-Dataset Optimization States (Starred Pinning, Connected-only Filter, Category Pill Tabs, Pagination)
+  const [onlyStarred, setOnlyStarred] = useState(false);
+  const [onlyConnected, setOnlyConnected] = useState(false);
+  const [activeRosterCategory, setActiveRosterCategory] = useState<'ALL' | 'CASES' | 'SUBJECTS'>('ALL');
+  const [visibleLimit, setVisibleLimit] = useState(12);
+  const [starredIds, setStarredIds] = useState<Set<string>>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = window.localStorage.getItem('tactical-starred-ids');
+        if (raw) return new Set(JSON.parse(raw));
+      } catch {
+        // Ignore parse error
+      }
+    }
+    return new Set();
+  });
+
+  const toggleStar = useCallback((id: string) => {
+    setStarredIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      try {
+        window.localStorage.setItem('tactical-starred-ids', JSON.stringify(Array.from(next)));
+      } catch {
+        // Ignore storage error
+      }
+      return next;
+    });
+  }, []);
+
+  const connectedNodeIds = useMemo(() => {
+    const set = new Set<string>();
+    if (!graphData) return set;
+    for (const edge of graphData.edges ?? []) {
+      const sId = typeof edge.source === 'object' ? edge.source.id : edge.source;
+      const tId = typeof edge.target === 'object' ? edge.target.id : edge.target;
+      set.add(sId);
+      set.add(tId);
+    }
+    for (const node of graphData.nodes ?? []) {
+      if (node.caseLinks && node.caseLinks.length > 0) {
+        set.add(node.id);
+        for (const cl of node.caseLinks) {
+          set.add(cl.eventId);
+          set.add(`event-${cl.eventId}`);
+        }
+      }
+    }
+    return set;
+  }, [graphData]);
+
   // Items for the Subject & Case Roster Sidebar
   const rosterItems = useMemo(() => {
     if (!graphData?.nodes) return { cases: [], persons: [], linkedPersons: [], otherPersons: [] };
@@ -550,6 +602,9 @@ export default function UnifiedNetworkGraph({
     for (const node of graphData.nodes) {
       if (node.id.startsWith('user-')) continue;
       if (q && !node.label.toLowerCase().includes(q)) continue;
+      const cleanId = node.id.replace(/^event-/, '');
+      if (onlyStarred && !starredIds.has(node.id) && !starredIds.has(cleanId)) continue;
+      if (onlyConnected && !connectedNodeIds.has(node.id) && !connectedNodeIds.has(cleanId)) continue;
 
       if (node.nodeType === 'event' || node.id.startsWith('event-')) {
         if (
@@ -582,10 +637,19 @@ export default function UnifiedNetworkGraph({
       }
     }
 
-    cases.sort((a, b) => a.label.localeCompare(b.label));
-    persons.sort((a, b) => a.label.localeCompare(b.label));
-    linkedPersons.sort((a, b) => a.label.localeCompare(b.label));
-    otherPersons.sort((a, b) => a.label.localeCompare(b.label));
+    const sortWithStar = (a: RawGraphPerson, b: RawGraphPerson) => {
+      const aClean = a.id.replace(/^event-/, '');
+      const bClean = b.id.replace(/^event-/, '');
+      const aStar = starredIds.has(a.id) || starredIds.has(aClean) ? 1 : 0;
+      const bStar = starredIds.has(b.id) || starredIds.has(bClean) ? 1 : 0;
+      if (aStar !== bStar) return bStar - aStar;
+      return a.label.localeCompare(b.label);
+    };
+
+    cases.sort(sortWithStar);
+    persons.sort(sortWithStar);
+    linkedPersons.sort(sortWithStar);
+    otherPersons.sort(sortWithStar);
 
     return { cases, persons, linkedPersons, otherPersons };
   }, [
@@ -596,6 +660,10 @@ export default function UnifiedNetworkGraph({
     excludeGroupIds,
     includeMode,
     activeCaseId,
+    onlyStarred,
+    onlyConnected,
+    starredIds,
+    connectedNodeIds,
   ]);
 
   const totalRosterCount = useMemo(() => {
@@ -634,7 +702,7 @@ export default function UnifiedNetworkGraph({
       const boxW = Math.max(maxX - minX, 120);
       const boxH = Math.max(maxY - minY, 120);
 
-      const paddingLeft = rosterOpen ? (sidebarWidth + 24) : 80;
+      const paddingLeft = 80;
       const paddingRight = 80;
       const paddingTop = 80;
       const paddingBottom = 80;
@@ -648,8 +716,7 @@ export default function UnifiedNetworkGraph({
       const centerX = (minX + maxX) / 2;
       const centerY = (minY + maxY) / 2;
 
-      const offsetX = rosterOpen ? (sidebarWidth + 12) / 2 : 0;
-      const targetX = rect.width / 2 + offsetX - centerX * k;
+      const targetX = rect.width / 2 - centerX * k;
       const targetY = rect.height / 2 - centerY * k;
 
       select(canvas)
@@ -660,7 +727,7 @@ export default function UnifiedNetworkGraph({
           zoomIdentity.translate(targetX, targetY).scale(k)
         );
     },
-    [rosterOpen, sidebarWidth]
+    []
   );
 
   useEffect(() => {
@@ -692,8 +759,7 @@ export default function UnifiedNetworkGraph({
       if (canvas && zoomBehavior && node && node.x !== undefined && node.y !== undefined) {
         const rect = canvas.getBoundingClientRect();
         const k = Math.max(transformRef.current.k, 1);
-        const offsetX = rosterOpen ? (sidebarWidth + 12) / 2 : 0;
-        const targetX = rect.width / 2 + offsetX - node.x * k;
+        const targetX = rect.width / 2 - node.x * k;
         const targetY = rect.height / 2 - node.y * k;
         select(canvas)
           .transition()
@@ -704,7 +770,7 @@ export default function UnifiedNetworkGraph({
           );
       }
     },
-    [graphData, requestPaint, rosterOpen, sidebarWidth]
+    [graphData, requestPaint]
   );
 
   const toggleInspectPerson = useCallback(
@@ -1319,12 +1385,6 @@ export default function UnifiedNetworkGraph({
       });
     zoomBehaviorRef.current = zoomBehavior;
     select(canvas).call(zoomBehavior);
-    if (transformRef.current === zoomIdentity && rosterOpen) {
-      const initialOffsetX = (sidebarWidth + 12) / 2;
-      const initialTransform = zoomIdentity.translate(initialOffsetX, 0);
-      transformRef.current = initialTransform;
-      select(canvas).call(zoomBehavior.transform, initialTransform);
-    }
 
     const onMove = (event: MouseEvent) => {
       const node = nodeAt(event.clientX, event.clientY);
@@ -1575,85 +1635,126 @@ export default function UnifiedNetworkGraph({
 
   const activeCustomFieldTemplate = customFieldTemplates?.find((cf) => cf.slug === customFieldSlug);
 
-  // Smoothly adjust graph viewport when toggling sidebar
-  const prevRosterOpenRef = useRef<boolean>(rosterOpen);
+  // Repaint graph canvas smoothly whenever its flex pane resizes (e.g. toggling or dragging docked sidebar)
   useEffect(() => {
-    if (prevRosterOpenRef.current === rosterOpen) return;
-    prevRosterOpenRef.current = rosterOpen;
-
     const canvas = canvasRef.current;
-    const zoomBehavior = zoomBehaviorRef.current;
-    if (!canvas || !zoomBehavior) return;
-
-    const shift = (sidebarWidth + 12) / 2;
-    const deltaX = rosterOpen ? shift : -shift;
-    const cur = transformRef.current;
-    const nextTransform = zoomIdentity.translate(cur.x + deltaX, cur.y).scale(cur.k);
-
-    select(canvas)
-      .transition()
-      .duration(350)
-      .call(zoomBehavior.transform, nextTransform);
-  }, [rosterOpen, sidebarWidth]);
+    if (!canvas || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => {
+      requestPaint();
+    });
+    ro.observe(canvas);
+    return () => ro.disconnect();
+  }, [requestPaint]);
 
   return (
-    <div className="w-full h-full">
-      <div className="relative" ref={containerRef}>
-        <canvas
-          ref={canvasRef}
-          className={`w-full bg-surface rounded-lg border border-border ${
-            compact
-              ? 'h-[400px] sm:h-[500px] lg:h-[600px] xl:h-[700px] 2xl:h-[800px]'
-              : 'h-[400px] sm:h-[500px] lg:h-[70vh] lg:min-h-[600px]'
-          }`}
-        />
+    <div
+      className={`w-full border border-border rounded-xl overflow-hidden flex flex-col bg-surface ${
+        compact
+          ? 'h-[450px] sm:h-[550px] lg:h-[650px] xl:h-[750px] 2xl:h-[820px]'
+          : 'h-[500px] sm:h-[600px] lg:h-[78vh] lg:min-h-[650px]'
+      }`}
+    >
+      <TacticalSidebarContainer
+        isOpen={rosterOpen}
+        onOpen={() => setRosterOpen(true)}
+        onClose={() => setRosterOpen(false)}
+        title={t('rosterTitle')}
+        rosterCount={totalRosterCount}
+        activeFilterCount={activeFilterCount}
+        onClearFilters={handleClearFilters}
+        filtersOpen={filtersOpen}
+        onToggleFilters={() => setFiltersOpen((prev) => !prev)}
+        storageKeyPrefix="graph-tactical-sidebar-v2"
+        defaultWidth={280}
+        minWidth={220}
+        onWidthChange={setSidebarWidth}
+        searchBar={
+          <input
+            type="search"
+            value={rosterQuery}
+            onChange={(e) => setRosterQuery(e.target.value)}
+            placeholder={t('rosterSearchPlaceholder')}
+            className="w-full px-2.5 py-1.5 bg-surface border border-border rounded-lg text-xs text-foreground placeholder-muted focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        }
+        quickChips={
+          <TacticalQuickChips filters={tacticalFilters} onChange={setTacticalFilters} />
+        }
+        rosterFilterControls={
+          <div className="flex items-center gap-1 flex-nowrap">
+            {/* Compact Segmented Category Bar */}
+            <div className="inline-flex items-center p-0.5 rounded-lg bg-surface border border-border/70">
+              {[
+                { id: 'ALL' as const, label: 'Tất cả', title: 'Hiện tất cả vụ án & đối tượng', count: totalRosterCount },
+                { id: 'CASES' as const, label: '📁', title: 'Chỉ hiện Vụ án', count: rosterItems.cases.length },
+                {
+                  id: 'SUBJECTS' as const,
+                  label: '👤',
+                  title: 'Chỉ hiện Đối tượng',
+                  count: activeCaseId
+                    ? rosterItems.linkedPersons.length + rosterItems.otherPersons.length
+                    : rosterItems.persons.length,
+                },
+              ].map((tab) => {
+                const active = activeRosterCategory === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    title={tab.title}
+                    onClick={() => {
+                      setActiveRosterCategory(tab.id);
+                      setVisibleLimit(12);
+                    }}
+                    className={`inline-flex items-center gap-1 px-1.5 py-1 rounded-md text-[11px] font-semibold whitespace-nowrap transition-all ${
+                      active
+                        ? 'bg-primary text-white shadow-2xs'
+                        : 'text-muted hover:text-foreground'
+                    }`}
+                  >
+                    <span>{tab.label}</span>
+                    <span
+                      className={`px-1 rounded-full text-[10px] ${
+                        active ? 'bg-white/20 text-white' : 'bg-surface-elevated text-muted'
+                      }`}
+                    >
+                      {tab.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
 
-        {/* Toggle button when Subject & Case Roster Sidebar is collapsed */}
-        {!rosterOpen && (
-          <button
-            type="button"
-            onClick={() => setRosterOpen(true)}
-            className="absolute top-3 left-3 z-10 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-surface/95 backdrop-blur border border-border shadow-md text-xs font-medium text-foreground hover:bg-surface-elevated transition-colors"
-            title={t('rosterTitle')}
-          >
-            <span>📋 {t('rosterToggle')}</span>
-            <span className="px-1.5 py-0.5 rounded-full bg-primary/15 text-primary font-semibold">
-              {totalRosterCount}
-            </span>
-            {activeFilterCount > 0 && (
-              <span className="px-1.5 py-0.5 rounded-full bg-primary text-white font-semibold">
-                ⚙️ {activeFilterCount}
-              </span>
-            )}
-          </button>
-        )}
-
-        {/* Resizable / Dual-Pane Subject & Case Roster Sidebar */}
-        <TacticalSidebarContainer
-          isOpen={rosterOpen}
-          onClose={() => setRosterOpen(false)}
-          title={t('rosterTitle')}
-          rosterCount={totalRosterCount}
-          activeFilterCount={activeFilterCount}
-          onClearFilters={handleClearFilters}
-          filtersOpen={filtersOpen}
-          onToggleFilters={() => setFiltersOpen((prev) => !prev)}
-          storageKeyPrefix="graph-tactical-sidebar-v2"
-          defaultWidth={310}
-          minWidth={280}
-          onWidthChange={setSidebarWidth}
-          searchBar={
-            <input
-              type="search"
-              value={rosterQuery}
-              onChange={(e) => setRosterQuery(e.target.value)}
-              placeholder={t('rosterSearchPlaceholder')}
-              className="w-full px-2.5 py-1.5 bg-surface border border-border rounded-lg text-xs text-foreground placeholder-muted focus:outline-none focus:ring-1 focus:ring-primary"
-            />
-          }
-          quickChips={
-            <TacticalQuickChips filters={tacticalFilters} onChange={setTacticalFilters} />
-          }
+            <button
+              type="button"
+              onClick={() => setOnlyConnected((prev) => !prev)}
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition-all border whitespace-nowrap ${
+                onlyConnected
+                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                  : 'bg-surface hover:bg-surface-elevated text-muted hover:text-foreground border-border/70'
+              }`}
+              title="Chỉ hiện các đối tượng/vụ án đã có liên kết trong mạng lưới (ẩn các nút cô lập)"
+            >
+              <span>🔗</span>
+              <span className="hidden 2xl:inline text-[11px]">Có liên kết</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setOnlyStarred((prev) => !prev)}
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition-all border whitespace-nowrap ${
+                onlyStarred
+                  ? 'bg-amber-500 text-white border-amber-500 shadow-2xs'
+                  : 'bg-surface hover:bg-surface-elevated text-muted hover:text-foreground border-border/70'
+              }`}
+              title="Chỉ hiện các mục đã gắn sao quan trọng"
+            >
+              <span>★</span>
+              {starredIds.size > 0 && (
+                <span className="text-[10px] font-bold">{starredIds.size}</span>
+              )}
+            </button>
+          </div>
+        }
           activeBadges={
             <ActiveTacticalBadges
               filters={tacticalFilters}
@@ -1764,277 +1865,396 @@ export default function UnifiedNetworkGraph({
           rosterContent={
             <div className="divide-y divide-border/60 text-xs">
               {/* Section 1: Cases (Topmost) */}
-              {rosterItems.cases.length > 0 && (
-                <TacticalSectionExpander
-                  title={t('rosterCases')}
-                  icon="📁"
-                  count={rosterItems.cases.length}
-                  isExpanded={casesExpanded}
-                  onToggle={() => setCasesExpanded((prev) => !prev)}
-                  badgeColor="bg-amber-500/15 text-amber-700 dark:text-amber-400"
-                  emptyMessage={t('rosterEmpty')}
-                >
-                  <div className="space-y-1.5">
-                    {rosterItems.cases.map((ev) => {
-                      const eventId = ev.id.replace(/^event-/, '');
-                      const isSelected = activeCaseId === eventId;
-                      return (
-                        <div
-                          key={ev.id}
-                          className={`rounded-xl transition-all p-2 border text-xs ${
-                            isSelected
-                              ? 'bg-primary/10 border-primary ring-1 ring-primary/40'
-                              : 'bg-surface hover:bg-surface-elevated border-border/50'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                handleSelectCase(eventId);
-                                focusNodeInGraph(ev.id);
-                              }}
-                              className="min-w-0 flex-1 text-left flex items-start gap-2 cursor-pointer group"
-                              title={isSelected ? 'Bỏ chọn vụ án' : t('focusInGraph')}
-                            >
-                              <span
-                                className={`mt-1 w-2.5 h-2.5 rounded-full shrink-0 border ${
-                                  isSelected
-                                    ? 'bg-primary border-primary'
-                                    : 'bg-amber-500 border-amber-600/40'
-                                }`}
-                              />
-                              <div className="min-w-0 flex-1">
-                                <div
-                                  className={`font-semibold transition-colors truncate ${
+              {(activeRosterCategory === 'ALL' || activeRosterCategory === 'CASES') &&
+                rosterItems.cases.length > 0 && (
+                  <TacticalSectionExpander
+                    title={t('rosterCases')}
+                    icon="📁"
+                    count={rosterItems.cases.length}
+                    isExpanded={casesExpanded}
+                    onToggle={() => setCasesExpanded((prev) => !prev)}
+                    badgeColor="bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                    emptyMessage={t('rosterEmpty')}
+                  >
+                    <div className="space-y-1.5">
+                      {rosterItems.cases.slice(0, visibleLimit).map((ev) => {
+                        const eventId = ev.id.replace(/^event-/, '');
+                        const isSelected = activeCaseId === eventId;
+                        const isStarred = starredIds.has(eventId) || starredIds.has(ev.id);
+                        return (
+                          <div
+                            key={ev.id}
+                            className={`rounded-xl transition-all p-2 border text-xs ${
+                              isSelected
+                                ? 'bg-primary/10 border-primary ring-1 ring-primary/40'
+                                : 'bg-surface hover:bg-surface-elevated border-border/50'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleSelectCase(eventId);
+                                  focusNodeInGraph(ev.id);
+                                }}
+                                className="min-w-0 flex-1 text-left flex items-start gap-2 cursor-pointer group"
+                                title={isSelected ? 'Bỏ chọn vụ án' : t('focusInGraph')}
+                              >
+                                <span
+                                  className={`mt-1 w-2.5 h-2.5 rounded-full shrink-0 border ${
                                     isSelected
-                                      ? 'text-primary'
-                                      : 'text-foreground group-hover:text-primary'
+                                      ? 'bg-primary border-primary'
+                                      : 'bg-amber-500 border-amber-600/40'
                                   }`}
-                                >
-                                  {ev.label.replace(/^📅\s*/, '')}
-                                </div>
-                                {ev.eventStatus && (
-                                  <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-muted">
-                                    <span className="px-1 py-0.2 rounded bg-surface-elevated border border-border/60">
-                                      {ev.eventStatus}
-                                    </span>
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <div
+                                    className={`font-semibold transition-colors truncate ${
+                                      isSelected
+                                        ? 'text-primary'
+                                        : 'text-foreground group-hover:text-primary'
+                                    }`}
+                                  >
+                                    {ev.label.replace(/^📅\s*/, '')}
                                   </div>
-                                )}
+                                  {ev.eventStatus && (
+                                    <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-muted">
+                                      <span className="px-1 py-0.2 rounded bg-surface-elevated border border-border/60">
+                                        {ev.eventStatus}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </button>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleStar(eventId);
+                                  }}
+                                  className={`p-1 rounded-md text-xs transition-colors ${
+                                    isStarred
+                                      ? 'text-amber-500 hover:bg-amber-500/10'
+                                      : 'text-muted hover:text-amber-500 hover:bg-surface-elevated'
+                                  }`}
+                                  title={isStarred ? 'Bỏ ghim quan trọng' : 'Ghim vụ án quan trọng'}
+                                >
+                                  {isStarred ? '★' : '☆'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSelectCase(eventId)}
+                                  className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors ${
+                                    isSelected
+                                      ? 'bg-primary text-white shadow-sm'
+                                      : 'bg-surface-elevated hover:bg-primary/15 text-muted hover:text-primary border border-border/50'
+                                  }`}
+                                  title={isSelected ? 'Đang lọc vụ án (nhấp để bỏ lọc)' : 'Lọc theo vụ án'}
+                                >
+                                  {isSelected ? '✓ Đang chọn' : 'Chọn'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => router.push(`/events/${eventId}`)}
+                                  className="p-1 rounded-md text-muted hover:text-foreground hover:bg-surface-elevated transition-colors"
+                                  title={t('contextMenu.viewDetails')}
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                  </svg>
+                                </button>
                               </div>
-                            </button>
-                            <div className="flex items-center gap-1 shrink-0">
-                              <button
-                                type="button"
-                                onClick={() => handleSelectCase(eventId)}
-                                className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors ${
-                                  isSelected
-                                    ? 'bg-primary text-white shadow-sm'
-                                    : 'bg-surface-elevated hover:bg-primary/15 text-muted hover:text-primary border border-border/50'
-                                }`}
-                                title={isSelected ? 'Đang lọc vụ án (nhấp để bỏ lọc)' : 'Lọc theo vụ án'}
-                              >
-                                {isSelected ? '✓ Đang chọn' : 'Chọn'}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => router.push(`/events/${eventId}`)}
-                                className="p-1 rounded-md text-muted hover:text-foreground hover:bg-surface-elevated transition-colors"
-                                title={t('contextMenu.viewDetails')}
-                              >
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                </svg>
-                              </button>
                             </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </TacticalSectionExpander>
-              )}
+                        );
+                      })}
+                      {rosterItems.cases.length > visibleLimit && (
+                        <button
+                          type="button"
+                          onClick={() => setVisibleLimit((prev) => prev + 15)}
+                          className="w-full py-1.5 rounded-lg border border-dashed border-border hover:border-primary/50 text-[11px] font-semibold text-primary hover:bg-primary/5 transition-colors"
+                        >
+                          Xem thêm (+{rosterItems.cases.length - visibleLimit} vụ án)
+                        </button>
+                      )}
+                    </div>
+                  </TacticalSectionExpander>
+                )}
 
               {/* Section 2: Persons */}
-              {activeCaseId ? (
-                <TacticalSectionExpander
-                  title={t('rosterPersons')}
-                  icon="👤"
-                  count={rosterItems.linkedPersons.length + rosterItems.otherPersons.length}
-                  isExpanded={subjectsExpanded}
-                  onToggle={() => setSubjectsExpanded((prev) => !prev)}
-                  badgeColor="bg-primary/15 text-primary"
-                  emptyMessage={t('rosterEmpty')}
-                >
-                  <div className="space-y-3">
-                    {/* Nhóm 1: Đối tượng liên quan vụ án */}
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between px-1 py-1 text-[11px] font-semibold text-rose-600 dark:text-rose-400">
-                        <span className="flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-                          <span>{tMap('linkedSubjectsSection')}</span>
-                        </span>
-                        <span className="px-1.5 py-0.2 rounded-full bg-rose-500/15 text-[10px] border border-rose-500/30">
-                          {rosterItems.linkedPersons.length}
-                        </span>
-                      </div>
+              {(activeRosterCategory === 'ALL' || activeRosterCategory === 'SUBJECTS') &&
+                (activeCaseId ? (
+                  <TacticalSectionExpander
+                    title={t('rosterPersons')}
+                    icon="👤"
+                    count={rosterItems.linkedPersons.length + rosterItems.otherPersons.length}
+                    isExpanded={subjectsExpanded}
+                    onToggle={() => setSubjectsExpanded((prev) => !prev)}
+                    badgeColor="bg-primary/15 text-primary"
+                    emptyMessage={t('rosterEmpty')}
+                  >
+                    <div className="space-y-3">
+                      {/* Nhóm 1: Đối tượng liên quan vụ án */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between px-1 py-1 text-[11px] font-semibold text-rose-600 dark:text-rose-400">
+                          <span className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                            <span>{tMap('linkedSubjectsSection')}</span>
+                          </span>
+                          <span className="px-1.5 py-0.2 rounded-full bg-rose-500/15 text-[10px] border border-rose-500/30">
+                            {rosterItems.linkedPersons.length}
+                          </span>
+                        </div>
 
-                      {rosterItems.linkedPersons.length === 0 ? (
-                        <p className="px-2 py-2 text-muted text-[11px] italic">
-                          {t('rosterEmpty')}
-                        </p>
-                      ) : (
-                        rosterItems.linkedPersons.map((person) => {
-                          const caseLink = person.caseLinks?.find((l) => l.eventId === activeCaseId);
-                          let invLabel = caseLink?.role || caseLink?.involvementType;
-                          if (caseLink?.involvementType && invMap[caseLink.involvementType]) {
-                            invLabel = invMap[caseLink.involvementType];
-                          }
-                          return (
-                            <TacticalPersonCard
-                              key={person.id}
-                              id={person.id}
-                              name={person.label}
-                              photoUrl={person.photo ? `/api/photos/${person.id}` : null}
-                              hasPhoto={Boolean(person.photo)}
-                              color={person.colors?.[0] ?? '#3b82f6'}
-                              tacticalData={person}
-                              subtitle={invLabel ? `Vai trò: ${invLabel}` : null}
-                              onFocus={() => focusNodeInGraph(person.id)}
-                              focusTitle={t('focusInGraph')}
-                              detailsHref={`/people/${person.id}`}
-                              detailsTitle={t('contextMenu.viewDetails')}
-                              gangs={gangs}
-                            />
-                          );
-                        })
-                      )}
-                    </div>
-
-                    {/* Nhóm 2: Đối tượng khác trong diện soát xét */}
-                    <div className="pt-2 border-t border-border/50 space-y-1.5">
-                      <div className="flex items-center justify-between px-1 py-1 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-                        <span className="flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full bg-slate-400" />
-                          <span>{tMap('otherSubjectsSection')}</span>
-                        </span>
-                        <span className="px-1.5 py-0.2 rounded-full bg-surface-elevated text-muted text-[10px] border border-border">
-                          {rosterItems.otherPersons.length}
-                        </span>
-                      </div>
-
-                      {rosterItems.otherPersons.length === 0 ? (
-                        <p className="px-2 py-2 text-muted text-[11px] italic">
-                          Không có đối tượng nào khác khớp bộ lọc.
-                        </p>
-                      ) : (
-                        rosterItems.otherPersons.map((person) => {
-                          const isInspected = inspectedPersonId === person.id;
-                          return (
-                            <div
-                              key={person.id}
-                              className={`rounded-xl transition-all ${
-                                isInspected
-                                  ? 'ring-2 ring-primary bg-primary/5 dark:bg-primary/10 shadow-sm'
-                                  : ''
-                              }`}
-                            >
-                              <TacticalPersonCard
-                                id={person.id}
-                                name={person.label}
-                                photoUrl={person.photo ? `/api/photos/${person.id}` : null}
-                                hasPhoto={Boolean(person.photo)}
-                                color={isInspected ? '#2563eb' : (person.colors?.[0] ?? '#64748b')}
-                                tacticalData={person}
-                                onFocus={() => toggleInspectPerson(person.id)}
-                                focusTitle={
-                                  isInspected
-                                    ? 'Đang soát xét trên đồ thị (nhấp để tắt)'
-                                    : 'Soát xét trên đồ thị'
-                                }
-                                detailsHref={`/people/${person.id}`}
-                                detailsTitle={t('contextMenu.viewDetails')}
-                                gangs={gangs}
-                                extraActions={
-                                  <div className="flex flex-col items-end gap-1 shrink-0">
+                        {rosterItems.linkedPersons.length === 0 ? (
+                          <p className="px-2 py-2 text-muted text-[11px] italic">
+                            {t('rosterEmpty')}
+                          </p>
+                        ) : (
+                          <>
+                            {rosterItems.linkedPersons.slice(0, visibleLimit).map((person) => {
+                              const caseLink = person.caseLinks?.find((l) => l.eventId === activeCaseId);
+                              let invLabel = caseLink?.role || caseLink?.involvementType;
+                              if (caseLink?.involvementType && invMap[caseLink.involvementType]) {
+                                invLabel = invMap[caseLink.involvementType];
+                              }
+                              const isStarred = starredIds.has(person.id);
+                              return (
+                                <TacticalPersonCard
+                                  key={person.id}
+                                  id={person.id}
+                                  name={person.label}
+                                  photoUrl={person.photo ? `/api/photos/${person.id}` : null}
+                                  hasPhoto={Boolean(person.photo)}
+                                  color={person.colors?.[0] ?? '#3b82f6'}
+                                  tacticalData={person}
+                                  subtitle={invLabel ? `Vai trò: ${invLabel}` : null}
+                                  onFocus={() => focusNodeInGraph(person.id)}
+                                  focusTitle={t('focusInGraph')}
+                                  detailsHref={`/people/${person.id}`}
+                                  detailsTitle={t('contextMenu.viewDetails')}
+                                  gangs={gangs}
+                                  extraActions={
                                     <button
                                       type="button"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        toggleInspectPerson(person.id);
+                                        toggleStar(person.id);
                                       }}
-                                      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold transition-colors whitespace-nowrap shadow-2xs ${
-                                        isInspected
-                                          ? 'bg-primary text-white shadow-xs'
-                                          : 'bg-surface hover:bg-surface-elevated text-foreground border border-border'
+                                      className={`p-1 rounded text-xs transition-colors ${
+                                        isStarred
+                                          ? 'text-amber-500 hover:bg-amber-500/10'
+                                          : 'text-muted hover:text-amber-500 hover:bg-surface-elevated'
                                       }`}
-                                      title={
-                                        isInspected
-                                          ? 'Đang soát xét trên đồ thị (nhấp để tắt)'
-                                          : 'Bật/tắt làm sáng và hiển thị liên kết của đối tượng này trên đồ thị'
-                                      }
+                                      title={isStarred ? 'Bỏ ghim quan trọng' : 'Ghim đối tượng quan trọng'}
                                     >
-                                      <span>👁️</span>
-                                      <span>{isInspected ? 'Đang xem' : 'Soát xét'}</span>
+                                      {isStarred ? '★' : '☆'}
                                     </button>
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setLinkingTarget({
-                                          personId: person.id,
-                                          personName: person.label,
-                                        });
-                                      }}
-                                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 transition-colors whitespace-nowrap shadow-2xs"
-                                      title={tMap('quickLinkBtn')}
-                                    >
-                                      <span>➕</span>
-                                      <span>Vào vụ án</span>
-                                    </button>
-                                  </div>
-                                }
-                              />
-                            </div>
-                          );
-                        })
+                                  }
+                                />
+                              );
+                            })}
+                            {rosterItems.linkedPersons.length > visibleLimit && (
+                              <button
+                                type="button"
+                                onClick={() => setVisibleLimit((prev) => prev + 15)}
+                                className="w-full py-1.5 rounded-lg border border-dashed border-border hover:border-primary/50 text-[11px] font-semibold text-primary hover:bg-primary/5 transition-colors"
+                              >
+                                Xem thêm (+{rosterItems.linkedPersons.length - visibleLimit} đối tượng)
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+
+                      {/* Nhóm 2: Đối tượng khác trong diện soát xét */}
+                      <div className="pt-2 border-t border-border/50 space-y-1.5">
+                        <div className="flex items-center justify-between px-1 py-1 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                          <span className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-slate-400" />
+                            <span>{tMap('otherSubjectsSection')}</span>
+                          </span>
+                          <span className="px-1.5 py-0.2 rounded-full bg-surface-elevated text-muted text-[10px] border border-border">
+                            {rosterItems.otherPersons.length}
+                          </span>
+                        </div>
+
+                        {rosterItems.otherPersons.length === 0 ? (
+                          <p className="px-2 py-2 text-muted text-[11px] italic">
+                            Không có đối tượng nào khác khớp bộ lọc.
+                          </p>
+                        ) : (
+                          <>
+                            {rosterItems.otherPersons.slice(0, visibleLimit).map((person) => {
+                              const isInspected = inspectedPersonId === person.id;
+                              const isStarred = starredIds.has(person.id);
+                              return (
+                                <div
+                                  key={person.id}
+                                  className={`rounded-xl transition-all ${
+                                    isInspected
+                                      ? 'ring-2 ring-primary bg-primary/5 dark:bg-primary/10 shadow-sm'
+                                      : ''
+                                  }`}
+                                >
+                                  <TacticalPersonCard
+                                    id={person.id}
+                                    name={person.label}
+                                    photoUrl={person.photo ? `/api/photos/${person.id}` : null}
+                                    hasPhoto={Boolean(person.photo)}
+                                    color={isInspected ? '#2563eb' : (person.colors?.[0] ?? '#64748b')}
+                                    tacticalData={person}
+                                    onFocus={() => toggleInspectPerson(person.id)}
+                                    focusTitle={
+                                      isInspected
+                                        ? 'Đang soát xét trên đồ thị (nhấp để tắt)'
+                                        : 'Soát xét trên đồ thị'
+                                    }
+                                    detailsHref={`/people/${person.id}`}
+                                    detailsTitle={t('contextMenu.viewDetails')}
+                                    gangs={gangs}
+                                    extraActions={
+                                      <div className="flex flex-col items-end gap-1 shrink-0">
+                                        <div className="flex items-center gap-1">
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              toggleStar(person.id);
+                                            }}
+                                            className={`p-0.5 rounded text-xs transition-colors ${
+                                              isStarred
+                                                ? 'text-amber-500'
+                                                : 'text-muted hover:text-amber-500'
+                                            }`}
+                                            title={isStarred ? 'Bỏ ghim quan trọng' : 'Ghim đối tượng quan trọng'}
+                                          >
+                                            {isStarred ? '★' : '☆'}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              toggleInspectPerson(person.id);
+                                            }}
+                                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold transition-colors whitespace-nowrap shadow-2xs ${
+                                              isInspected
+                                                ? 'bg-primary text-white shadow-xs'
+                                                : 'bg-surface hover:bg-surface-elevated text-foreground border border-border'
+                                            }`}
+                                            title={
+                                              isInspected
+                                                ? 'Đang soát xét trên đồ thị (nhấp để tắt)'
+                                                : 'Bật/tắt làm sáng và hiển thị liên kết của đối tượng này trên đồ thị'
+                                            }
+                                          >
+                                            <span>👁️</span>
+                                            <span>{isInspected ? 'Đang xem' : 'Soát xét'}</span>
+                                          </button>
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setLinkingTarget({
+                                              personId: person.id,
+                                              personName: person.label,
+                                            });
+                                          }}
+                                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 transition-colors whitespace-nowrap shadow-2xs"
+                                          title={tMap('quickLinkBtn')}
+                                        >
+                                          <span>➕</span>
+                                          <span>Vào vụ án</span>
+                                        </button>
+                                      </div>
+                                    }
+                                  />
+                                </div>
+                              );
+                            })}
+                            {rosterItems.otherPersons.length > visibleLimit && (
+                              <button
+                                type="button"
+                                onClick={() => setVisibleLimit((prev) => prev + 15)}
+                                className="w-full py-1.5 rounded-lg border border-dashed border-border hover:border-primary/50 text-[11px] font-semibold text-primary hover:bg-primary/5 transition-colors"
+                              >
+                                Xem thêm (+{rosterItems.otherPersons.length - visibleLimit} đối tượng)
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </TacticalSectionExpander>
+                ) : (
+                  <TacticalSectionExpander
+                    title={t('rosterPersons')}
+                    icon="👤"
+                    count={rosterItems.persons.length}
+                    isExpanded={subjectsExpanded}
+                    onToggle={() => setSubjectsExpanded((prev) => !prev)}
+                    badgeColor="bg-primary/15 text-primary"
+                    emptyMessage={t('rosterEmpty')}
+                  >
+                    <div className="space-y-1.5">
+                      {rosterItems.persons.slice(0, visibleLimit).map((person) => {
+                        const isStarred = starredIds.has(person.id);
+                        return (
+                          <TacticalPersonCard
+                            key={person.id}
+                            id={person.id}
+                            name={person.label}
+                            photoUrl={person.photo ? `/api/photos/${person.id}` : null}
+                            hasPhoto={Boolean(person.photo)}
+                            color={person.colors?.[0] ?? '#3b82f6'}
+                            tacticalData={person}
+                            onFocus={() => focusNodeInGraph(person.id)}
+                            focusTitle={t('focusInGraph')}
+                            detailsHref={`/people/${person.id}`}
+                            detailsTitle={t('contextMenu.viewDetails')}
+                            gangs={gangs}
+                            extraActions={
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleStar(person.id);
+                                }}
+                                className={`p-1 rounded text-xs transition-colors ${
+                                  isStarred
+                                    ? 'text-amber-500 hover:bg-amber-500/10'
+                                    : 'text-muted hover:text-amber-500 hover:bg-surface-elevated'
+                                }`}
+                                title={isStarred ? 'Bỏ ghim quan trọng' : 'Ghim đối tượng quan trọng'}
+                              >
+                                {isStarred ? '★' : '☆'}
+                              </button>
+                            }
+                          />
+                        );
+                      })}
+                      {rosterItems.persons.length > visibleLimit && (
+                        <button
+                          type="button"
+                          onClick={() => setVisibleLimit((prev) => prev + 15)}
+                          className="w-full py-1.5 rounded-lg border border-dashed border-border hover:border-primary/50 text-[11px] font-semibold text-primary hover:bg-primary/5 transition-colors"
+                        >
+                          Xem thêm (+{rosterItems.persons.length - visibleLimit} đối tượng)
+                        </button>
                       )}
                     </div>
-                  </div>
-                </TacticalSectionExpander>
-              ) : (
-                <TacticalSectionExpander
-                  title={t('rosterPersons')}
-                  icon="👤"
-                  count={rosterItems.persons.length}
-                  isExpanded={subjectsExpanded}
-                  onToggle={() => setSubjectsExpanded((prev) => !prev)}
-                  badgeColor="bg-primary/15 text-primary"
-                  emptyMessage={t('rosterEmpty')}
-                >
-                  <div className="space-y-1.5">
-                    {rosterItems.persons.map((person) => (
-                      <TacticalPersonCard
-                        key={person.id}
-                        id={person.id}
-                        name={person.label}
-                        photoUrl={person.photo ? `/api/photos/${person.id}` : null}
-                        hasPhoto={Boolean(person.photo)}
-                        color={person.colors?.[0] ?? '#3b82f6'}
-                        tacticalData={person}
-                        onFocus={() => focusNodeInGraph(person.id)}
-                        focusTitle={t('focusInGraph')}
-                        detailsHref={`/people/${person.id}`}
-                        detailsTitle={t('contextMenu.viewDetails')}
-                        gangs={gangs}
-                      />
-                    ))}
-                  </div>
-                </TacticalSectionExpander>
-              )}
+                  </TacticalSectionExpander>
+                ))}
             </div>
           }
-        />
+        >
+          <div className="relative w-full h-full" ref={containerRef}>
+            <canvas
+              ref={canvasRef}
+              className="w-full h-full bg-surface block"
+            />
 
         {/* Backdrop to dismiss context menu on click anywhere outside */}
         {contextMenu && (
@@ -2412,7 +2632,8 @@ export default function UnifiedNetworkGraph({
             onLinked={handlePersonLinked}
           />
         )}
-      </div>
+          </div>
+      </TacticalSidebarContainer>
     </div>
   );
 }

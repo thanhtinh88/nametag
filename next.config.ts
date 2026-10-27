@@ -82,7 +82,7 @@ const nextConfig: NextConfig = {
               "img-src 'self' data: blob: https:",
               "worker-src 'self' blob:",
               "child-src 'self' blob:",
-              `connect-src 'self' https://tiles.openfreemap.org${process.env.NODE_ENV === 'development' ? ' ws://localhost:*' : ''}`,
+              `connect-src 'self' https://tiles.openfreemap.org https://server.arcgisonline.com${process.env.NODE_ENV === 'development' ? ' ws://localhost:*' : ''}`,
               "frame-ancestors 'none'",
               "base-uri 'self'",
               "form-action 'self'",

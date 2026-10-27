@@ -50,6 +50,52 @@ function MapPageInner() {
   const [focusRequest, setFocusRequest] = useState<{ id: string; seq: number } | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
+  // Large-Dataset Optimization States (Viewport Sync, Category Pill Tabs, Starred Pinning, Pagination)
+  const [mapBounds, setMapBounds] = useState<{ north: number; south: number; east: number; west: number } | null>(null);
+  const [filterInViewOnly, setFilterInViewOnly] = useState(false);
+  const [onlyStarred, setOnlyStarred] = useState(false);
+  const [activeRosterCategory, setActiveRosterCategory] = useState<'ALL' | 'CASES' | 'SUBJECTS'>('ALL');
+  const [visibleLimit, setVisibleLimit] = useState(12);
+  const [starredIds, setStarredIds] = useState<Set<string>>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = window.localStorage.getItem('tactical-starred-ids');
+        if (raw) return new Set(JSON.parse(raw));
+      } catch {
+        // Ignore parse error
+      }
+    }
+    return new Set();
+  });
+
+  const toggleStar = useCallback((id: string) => {
+    setStarredIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      try {
+        window.localStorage.setItem('tactical-starred-ids', JSON.stringify(Array.from(next)));
+      } catch {
+        // Ignore storage error
+      }
+      return next;
+    });
+  }, []);
+
+  const isCoordInView = useCallback(
+    (lat: number | null | undefined, lng: number | null | undefined) => {
+      if (!filterInViewOnly || !mapBounds) return true;
+      if (lat === null || lat === undefined || lng === null || lng === undefined) return false;
+      return (
+        lat <= mapBounds.north &&
+        lat >= mapBounds.south &&
+        lng <= mapBounds.east &&
+        lng >= mapBounds.west
+      );
+    },
+    [filterInViewOnly, mapBounds]
+  );
+
   const cities = useMemo(() => distinctCities(data?.markers ?? []), [data?.markers]);
   const regions = useMemo(() => distinctRegions(data?.markers ?? []), [data?.markers]);
   const countries = useMemo(() => distinctCountries(data?.markers ?? []), [data?.markers]);
@@ -168,8 +214,18 @@ function MapPageInner() {
     if (needle) {
       list = list.filter((c) => c.title.toLowerCase().includes(needle));
     }
-    return list;
-  }, [data?.cases, filters.activeCasesOnly, filters.query]);
+    if (onlyStarred) {
+      list = list.filter((c) => starredIds.has(c.id));
+    }
+    if (filterInViewOnly && mapBounds) {
+      list = list.filter((c) => c.id === filters.caseId || isCoordInView(c.latitude, c.longitude));
+    }
+    return [...list].sort((a, b) => {
+      const aStar = starredIds.has(a.id) ? 1 : 0;
+      const bStar = starredIds.has(b.id) ? 1 : 0;
+      return bStar - aStar;
+    });
+  }, [data?.cases, filters.activeCasesOnly, filters.query, filters.caseId, onlyStarred, starredIds, filterInViewOnly, mapBounds, isCoordInView]);
 
   const casesWithCoords = useMemo(
     () => filteredCases.filter((c) => c.latitude !== null && c.longitude !== null),
@@ -183,14 +239,17 @@ function MapPageInner() {
 
   const filteredUnmappedSubjects = useMemo<UnmappedSubject[]>(() => {
     if (!data?.unmappedSubjects) return [];
+    if (filterInViewOnly) return [];
     const needle = filters.query.trim().toLowerCase();
-    return data.unmappedSubjects.filter((subj) => {
+    const list = data.unmappedSubjects.filter((subj) => {
+      if (onlyStarred && !starredIds.has(subj.personId)) return false;
       if (needle && !subj.personName.toLowerCase().includes(needle)) {
         return false;
       }
       return matchesPersonTacticalFilters(subj, filters);
     });
-  }, [data, filters]);
+    return [...list].sort((a, b) => (starredIds.has(b.personId) ? 1 : 0) - (starredIds.has(a.personId) ? 1 : 0));
+  }, [data, filters, filterInViewOnly, onlyStarred, starredIds]);
 
   const selectedCase = useMemo(
     () =>
@@ -208,39 +267,54 @@ function MapPageInner() {
       ...filters,
       caseId: undefined,
       onlyWithinRadius: false,
-    }).filter((m) => m.source !== 'event_address');
-  }, [data, filters]);
+    }).filter((m) => {
+      if (m.source === 'event_address') return false;
+      if (onlyStarred && !starredIds.has(m.personId)) return false;
+      if (!isCoordInView(m.latitude, m.longitude)) return false;
+      return true;
+    });
+  }, [data, filters, onlyStarred, starredIds, isCoordInView]);
 
   const allScreenedUnmapped = useMemo<UnmappedSubject[]>(() => {
     if (!data?.unmappedSubjects) return [];
+    if (filterInViewOnly) return [];
     const needle = filters.query.trim().toLowerCase();
     const filtersWithoutCase = { ...filters, caseId: undefined };
     return data.unmappedSubjects.filter((subj) => {
+      if (onlyStarred && !starredIds.has(subj.personId)) return false;
       if (needle && !subj.personName.toLowerCase().includes(needle)) {
         return false;
       }
       return matchesPersonTacticalFilters(subj, filtersWithoutCase);
     });
-  }, [data, filters]);
+  }, [data, filters, filterInViewOnly, onlyStarred, starredIds]);
 
   const standardMappedSubjects = useMemo(
-    () => visibleMarkers.filter((m) => m.source !== 'event_address'),
-    [visibleMarkers]
+    () =>
+      visibleMarkers
+        .filter((m) => {
+          if (m.source === 'event_address') return false;
+          if (onlyStarred && !starredIds.has(m.personId)) return false;
+          if (!isCoordInView(m.latitude, m.longitude)) return false;
+          return true;
+        })
+        .sort((a, b) => (starredIds.has(b.personId) ? 1 : 0) - (starredIds.has(a.personId) ? 1 : 0)),
+    [visibleMarkers, onlyStarred, starredIds, isCoordInView]
   );
 
   const linkedMappedSubjects = useMemo(() => {
     if (!selectedCase) return [];
-    return allScreenedMarkers.filter((m) =>
-      m.caseLinks?.some((cl) => cl.eventId === selectedCase.id)
-    );
-  }, [allScreenedMarkers, selectedCase]);
+    return allScreenedMarkers
+      .filter((m) => m.caseLinks?.some((cl) => cl.eventId === selectedCase.id))
+      .sort((a, b) => (starredIds.has(b.personId) ? 1 : 0) - (starredIds.has(a.personId) ? 1 : 0));
+  }, [allScreenedMarkers, selectedCase, starredIds]);
 
   const linkedUnmappedSubjects = useMemo(() => {
     if (!selectedCase) return [];
-    return allScreenedUnmapped.filter((s) =>
-      s.caseLinks?.some((cl) => cl.eventId === selectedCase.id)
-    );
-  }, [allScreenedUnmapped, selectedCase]);
+    return allScreenedUnmapped
+      .filter((s) => s.caseLinks?.some((cl) => cl.eventId === selectedCase.id))
+      .sort((a, b) => (starredIds.has(b.personId) ? 1 : 0) - (starredIds.has(a.personId) ? 1 : 0));
+  }, [allScreenedUnmapped, selectedCase, starredIds]);
 
   const otherMappedSubjects = useMemo(() => {
     if (!selectedCase) return [];
@@ -267,6 +341,9 @@ function MapPageInner() {
     });
 
     withDist.sort((a, b) => {
+      const aStar = starredIds.has(a.marker.personId) ? 1 : 0;
+      const bStar = starredIds.has(b.marker.personId) ? 1 : 0;
+      if (aStar !== bStar) return bStar - aStar;
       if (a.distanceKm !== null && b.distanceKm !== null) {
         return a.distanceKm - b.distanceKm;
       }
@@ -282,14 +359,14 @@ function MapPageInner() {
     }
 
     return withDist;
-  }, [allScreenedMarkers, selectedCase, filters.onlyWithinRadius, filters.radiusKm]);
+  }, [allScreenedMarkers, selectedCase, filters.onlyWithinRadius, filters.radiusKm, starredIds]);
 
   const otherUnmappedSubjects = useMemo(() => {
     if (!selectedCase) return [];
-    return allScreenedUnmapped.filter(
-      (s) => !s.caseLinks?.some((cl) => cl.eventId === selectedCase.id)
-    );
-  }, [allScreenedUnmapped, selectedCase]);
+    return allScreenedUnmapped
+      .filter((s) => !s.caseLinks?.some((cl) => cl.eventId === selectedCase.id))
+      .sort((a, b) => (starredIds.has(b.personId) ? 1 : 0) - (starredIds.has(a.personId) ? 1 : 0));
+  }, [allScreenedUnmapped, selectedCase, starredIds]);
 
   const rosterSubjectsCount = isCaseFocused
     ? linkedMappedSubjects.length +
@@ -408,6 +485,7 @@ function MapPageInner() {
 
   const renderCaseItem = (c: (typeof filteredCases)[number]) => {
     const isSelected = filters.caseId === c.id;
+    const isStarred = starredIds.has(c.id);
     return (
       <div
         key={c.id}
@@ -464,6 +542,21 @@ function MapPageInner() {
             </div>
           </button>
           <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleStar(c.id);
+              }}
+              className={`p-1 rounded-md text-xs transition-colors ${
+                isStarred
+                  ? 'text-amber-500 hover:bg-amber-500/10'
+                  : 'text-muted hover:text-amber-500 hover:bg-surface-elevated'
+              }`}
+              title={isStarred ? 'Bỏ ghim quan trọng' : 'Ghim vụ án quan trọng lên đầu'}
+            >
+              {isStarred ? '★' : '☆'}
+            </button>
             <button
               type="button"
               onClick={() => {
@@ -527,7 +620,7 @@ function MapPageInner() {
         </div>
       )}
 
-      <div className="flex-1 relative min-h-[60vh]">
+      <div className="flex-1 flex flex-col relative min-h-[65vh] overflow-hidden">
         {data.markers.length === 0 ? (
           <div className="absolute inset-0 flex items-center justify-center p-8">
             <div className="text-center max-w-md">
@@ -538,90 +631,101 @@ function MapPageInner() {
             </div>
           </div>
         ) : (
-          <>
-            <MapView
-              markers={visibleMarkers}
-              focusId={focusId}
-              focusRequest={focusRequest}
-              filtersKey={`${filters.query}|${filters.groupId}|${filters.city}|${filters.region}|${filters.country}|${filters.caseId ?? ''}|${filters.personId ?? ''}|${filters.radiusKm ?? 0}|${filters.onlyWithinRadius ? '1' : ''}|${filters.activeCasesOnly ? '1' : ''}|${filters.showRuledOut === false ? '0' : ''}|${inspectedPersonId ?? ''}`}
-              selectedCase={selectedCase}
-              radiusCenter={radiusCenter}
-              radiusKm={filters.radiusKm ?? 0}
-              inspectedPersonId={inspectedPersonId}
-              onSelectMarker={(marker) => {
-                if (marker.source === 'event_address') {
-                  if (filters.caseId !== marker.personId) {
-                    handleFiltersChange({
-                      ...filters,
-                      caseId: marker.personId,
-                      personId: '',
-                      radiusKm: filters.radiusKm || 1,
-                    });
-                  }
-                } else {
-                  setHighlightedPersonId(marker.personId);
-                  if (selectedCase && !marker.caseLinks?.some((cl) => cl.eventId === selectedCase.id)) {
-                    setInspectedPersonId(marker.personId);
-                  }
-                  setRosterOpen(true);
-                  setSubjectsExpanded(true);
-                  setTimeout(() => {
-                    const el = document.getElementById(`person-card-${marker.personId}`);
-                    el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                  }, 60);
-                }
-              }}
-            />
+          <TacticalSidebarContainer
+            isOpen={rosterOpen}
+            onOpen={() => setRosterOpen(true)}
+            onClose={() => setRosterOpen(false)}
+            title={t('rosterTitle')}
+            rosterCount={rosterTotalCount}
+            activeFilterCount={countActiveTacticalFilters(filters)}
+            onClearFilters={() => handleFiltersChange({ ...DEFAULT_PERSON_FILTER_STATE, query: filters.query })}
+            filtersOpen={filtersOpen}
+            onToggleFilters={() => setFiltersOpen((prev) => !prev)}
+            storageKeyPrefix="map-tactical-sidebar"
+            searchBar={
+              <input
+                type="search"
+                value={filters.query}
+                onChange={(e) => handleFiltersChange({ ...filters, query: e.target.value })}
+                placeholder={t('searchPlaceholder')}
+                className="w-full px-2.5 py-1.5 bg-surface border border-border rounded-lg text-xs text-foreground placeholder-muted focus:outline-none focus:ring-1 focus:ring-primary"
+                aria-label={t('searchPlaceholder')}
+              />
+            }
+            quickChips={
+              <TacticalQuickChips filters={filters} onChange={handleFiltersChange} />
+            }
+            rosterFilterControls={
+              <div className="flex items-center gap-1 flex-nowrap">
+                {/* Compact Segmented Category Bar */}
+                <div className="inline-flex items-center p-0.5 rounded-lg bg-surface border border-border/70">
+                  {[
+                    { id: 'ALL' as const, label: 'Tất cả', title: 'Hiện tất cả vụ án & đối tượng', count: rosterTotalCount },
+                    { id: 'CASES' as const, label: '📁', title: 'Chỉ hiện Vụ án', count: filteredCases.length },
+                    { id: 'SUBJECTS' as const, label: '👤', title: 'Chỉ hiện Đối tượng', count: rosterSubjectsCount },
+                  ].map((tab) => {
+                    const active = activeRosterCategory === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        title={tab.title}
+                        onClick={() => {
+                          setActiveRosterCategory(tab.id);
+                          setVisibleLimit(12);
+                        }}
+                        className={`inline-flex items-center gap-1 px-1.5 py-1 rounded-md text-[11px] font-semibold whitespace-nowrap transition-all ${
+                          active
+                            ? 'bg-primary text-white shadow-2xs'
+                            : 'text-muted hover:text-foreground'
+                        }`}
+                      >
+                        <span>{tab.label}</span>
+                        <span
+                          className={`px-1 rounded-full text-[10px] ${
+                            active ? 'bg-white/20 text-white' : 'bg-surface-elevated text-muted'
+                          }`}
+                        >
+                          {tab.count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
 
-            {/* Toggle button when Subject Roster Sidebar is collapsed */}
-            {!rosterOpen && (
-              <button
-                type="button"
-                onClick={() => setRosterOpen(true)}
-                className="absolute top-3 left-3 z-20 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-surface/95 backdrop-blur border border-border shadow-md text-xs font-medium text-foreground hover:bg-surface-elevated transition-colors"
-              >
-                <span>📋 {t('rosterToggle')}</span>
-                <span className="px-1.5 py-0.5 rounded-full bg-primary/15 text-primary font-semibold">
-                  {visibleMarkers.length}
-                </span>
-                {filteredUnmappedSubjects.length > 0 && (
-                  <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 font-semibold">
-                    +{filteredUnmappedSubjects.length}
-                  </span>
-                )}
-                {hasActiveFilters && (
-                  <span className="px-1.5 py-0.5 rounded-full bg-primary text-white font-semibold">
-                    ⚙️
-                  </span>
-                )}
-              </button>
-            )}
-
-            {/* Resizable / Dual-Pane Subject Roster Sidebar */}
-            <TacticalSidebarContainer
-              isOpen={rosterOpen}
-              onClose={() => setRosterOpen(false)}
-              title={t('rosterTitle')}
-              rosterCount={rosterTotalCount}
-              activeFilterCount={countActiveTacticalFilters(filters)}
-              onClearFilters={() => handleFiltersChange({ ...DEFAULT_PERSON_FILTER_STATE, query: filters.query })}
-              filtersOpen={filtersOpen}
-              onToggleFilters={() => setFiltersOpen((prev) => !prev)}
-              storageKeyPrefix="map-tactical-sidebar"
-              searchBar={
-                <input
-                  type="search"
-                  value={filters.query}
-                  onChange={(e) => handleFiltersChange({ ...filters, query: e.target.value })}
-                  placeholder={t('searchPlaceholder')}
-                  className="w-full px-2.5 py-1.5 bg-surface border border-border rounded-lg text-xs text-foreground placeholder-muted focus:outline-none focus:ring-1 focus:ring-primary"
-                  aria-label={t('searchPlaceholder')}
-                />
-              }
-              quickChips={
-                <TacticalQuickChips filters={filters} onChange={handleFiltersChange} />
-              }
-              activeBadges={
+                {/* Compact Icon Quick Toggles */}
+                <button
+                  type="button"
+                  onClick={() => setFilterInViewOnly((prev) => !prev)}
+                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition-all border whitespace-nowrap ${
+                    filterInViewOnly
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                      : 'bg-surface hover:bg-surface-elevated text-muted hover:text-foreground border-border/70'
+                  }`}
+                  title="Lọc theo vùng zoom: Chỉ hiện các mục nằm trong khung bản đồ đang nhìn"
+                >
+                  <span>📍</span>
+                  <span className="hidden 2xl:inline text-[11px]">Vùng zoom</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOnlyStarred((prev) => !prev)}
+                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition-all border whitespace-nowrap ${
+                    onlyStarred
+                      ? 'bg-amber-500 text-white border-amber-500 shadow-2xs'
+                      : 'bg-surface hover:bg-surface-elevated text-muted hover:text-foreground border-border/70'
+                  }`}
+                  title="Chỉ hiện các mục đã gắn sao quan trọng"
+                >
+                  <span>★</span>
+                  {starredIds.size > 0 && (
+                    <span className="text-[10px] font-bold">{starredIds.size}</span>
+                  )}
+                </button>
+              </div>
+            }
+            activeBadges={
+              <div className="space-y-1.5 empty:hidden">
                 <ActiveTacticalBadges
                   filters={filters}
                   onChange={handleFiltersChange}
@@ -629,7 +733,94 @@ function MapPageInner() {
                   gangs={data.gangs ?? []}
                   groups={data.groups}
                 />
-              }
+
+                {/* Radius controls if selected case has coords */}
+                {isCaseFocused && selectedCase!.latitude !== null && selectedCase!.longitude !== null && (
+                  <div className="px-2.5 py-1.5 rounded-xl bg-surface border border-border/70 flex items-center justify-between gap-3 flex-wrap text-[11px]">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-foreground">
+                        🎯 {t('radiusFilterLabel')}:
+                      </span>
+                      <label className="flex items-center gap-1.5 cursor-pointer text-muted hover:text-foreground">
+                        <input
+                          type="checkbox"
+                          checked={filters.onlyWithinRadius}
+                          onChange={(e) =>
+                            handleFiltersChange({
+                              ...filters,
+                              onlyWithinRadius: e.target.checked,
+                              radiusKm: filters.radiusKm || 1,
+                            })
+                          }
+                          className="rounded border-border text-primary focus:ring-primary w-3.5 h-3.5"
+                        />
+                        <span>{t('withinRadiusOnly')}</span>
+                      </label>
+
+                      <div className="flex items-center gap-1 flex-wrap">
+                        {[
+                          { label: 'Tất cả', km: 0 },
+                          { label: '500m', km: 0.5 },
+                          { label: '1km', km: 1 },
+                          { label: '2km', km: 2 },
+                          { label: '5km', km: 5 },
+                          { label: '10km', km: 10 },
+                          { label: '20km', km: 20 },
+                          { label: '50km', km: 50 },
+                        ].map((chip) => {
+                          const isActive =
+                            chip.km === 0
+                              ? !filters.onlyWithinRadius || filters.radiusKm === 0
+                              : filters.onlyWithinRadius && filters.radiusKm === chip.km;
+                          return (
+                            <button
+                              key={chip.km}
+                              type="button"
+                              onClick={() =>
+                                handleFiltersChange({
+                                  ...filters,
+                                  radiusKm: chip.km,
+                                  onlyWithinRadius: chip.km > 0,
+                                })
+                              }
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition-all ${
+                                isActive
+                                  ? 'bg-primary text-white shadow-sm'
+                                  : 'bg-surface hover:bg-surface-elevated text-muted hover:text-foreground border border-border/50'
+                              }`}
+                            >
+                              {chip.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 min-w-[160px] flex-1 max-w-xs">
+                      <input
+                        type="range"
+                        min="0"
+                        max="50"
+                        step="0.5"
+                        value={filters.radiusKm || 0}
+                        onChange={(e) => {
+                          const km = parseFloat(e.target.value);
+                          handleFiltersChange({
+                            ...filters,
+                            radiusKm: km,
+                            onlyWithinRadius: km > 0,
+                          });
+                        }}
+                        className="w-full h-1.5 bg-border rounded-lg appearance-none cursor-pointer accent-primary"
+                      />
+                      <span className="text-[11px] font-mono text-muted shrink-0 w-12 text-right">
+                        {(filters.radiusKm || 0) > 0 ? `${filters.radiusKm} km` : '0 km'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            }
               filterDrawer={
                 <TacticalFilterDrawer
                   filters={filters}
@@ -646,355 +837,487 @@ function MapPageInner() {
               rosterContent={
                 <div className="divide-y divide-border/60 text-xs">
                   {/* Section 1: Cases (Topmost) */}
-                  {filteredCases.length > 0 && (
-                    <TacticalSectionExpander
-                      title={t('rosterCasesTitle')}
-                      icon="📁"
-                      count={filteredCases.length}
-                      isExpanded={casesExpanded}
-                      onToggle={() => setCasesExpanded((prev) => !prev)}
-                      badgeColor="bg-amber-500/15 text-amber-700 dark:text-amber-400"
-                      emptyMessage={t('noResults')}
-                    >
-                      <div className="space-y-1.5">
-                        {casesWithCoords.map((c) => renderCaseItem(c))}
+                  {(activeRosterCategory === 'ALL' || activeRosterCategory === 'CASES') &&
+                    filteredCases.length > 0 && (
+                      <TacticalSectionExpander
+                        title={t('rosterCasesTitle')}
+                        icon="📁"
+                        count={filteredCases.length}
+                        isExpanded={casesExpanded}
+                        onToggle={() => setCasesExpanded((prev) => !prev)}
+                        badgeColor="bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                        emptyMessage={t('noResults')}
+                      >
+                        <div className="space-y-1.5">
+                          {casesWithCoords.slice(0, visibleLimit).map((c) => renderCaseItem(c))}
+                          {casesWithCoords.length > visibleLimit && (
+                            <button
+                              type="button"
+                              onClick={() => setVisibleLimit((prev) => prev + 15)}
+                              className="w-full py-1.5 rounded-lg border border-dashed border-border hover:border-primary/50 text-[11px] font-semibold text-primary hover:bg-primary/5 transition-colors"
+                            >
+                              Xem thêm (+{casesWithCoords.length - visibleLimit} vụ án)
+                            </button>
+                          )}
 
-                        {casesWithoutCoords.length > 0 && (
-                          <div className="pt-2 pb-1 border-t border-border/50">
-                            <div className="flex items-center gap-1.5 px-1 py-1 text-[11px] font-semibold text-muted">
-                              <span>❓</span>
-                              <span>{t('withoutCoordsSection')}</span>
-                              <span className="px-1.5 py-0.2 rounded-full bg-surface-elevated text-[10px] border border-border">
-                                {casesWithoutCoords.length}
-                              </span>
+                          {casesWithoutCoords.length > 0 && (
+                            <div className="pt-2 pb-1 border-t border-border/50">
+                              <div className="flex items-center gap-1.5 px-1 py-1 text-[11px] font-semibold text-muted">
+                                <span>❓</span>
+                                <span>{t('withoutCoordsSection')}</span>
+                                <span className="px-1.5 py-0.2 rounded-full bg-surface-elevated text-[10px] border border-border">
+                                  {casesWithoutCoords.length}
+                                </span>
+                              </div>
+                              <div className="mt-1 space-y-1.5">
+                                {casesWithoutCoords.slice(0, visibleLimit).map((c) => renderCaseItem(c))}
+                              </div>
                             </div>
-                            <div className="mt-1 space-y-1.5">
-                              {casesWithoutCoords.map((c) => renderCaseItem(c))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </TacticalSectionExpander>
-                  )}
+                          )}
+                        </div>
+                      </TacticalSectionExpander>
+                    )}
 
                   {/* Section 2: Subjects */}
-                  <TacticalSectionExpander
-                    title={t('rosterSubjectsTitle')}
-                    icon="👤"
-                    count={rosterSubjectsCount}
-                    isExpanded={subjectsExpanded}
-                    onToggle={() => setSubjectsExpanded((prev) => !prev)}
-                    badgeColor="bg-primary/15 text-primary"
-                    emptyMessage={t('noResults')}
-                  >
-                    {isCaseFocused ? (
-                      <div className="space-y-3">
-                        {/* Nhóm 1: Đối tượng trong vụ án */}
-                        <div className="space-y-1.5">
-                          <div className="flex items-center justify-between px-1 py-1 text-[11px] font-semibold text-foreground">
-                            <span className="flex items-center gap-1.5">
-                              <span className="w-2 h-2 rounded-full bg-red-500" />
-                              {t('linkedSubjectsSection')}
-                            </span>
-                            <span className="px-1.5 py-0.2 rounded-full bg-red-500/15 text-red-600 dark:text-red-400 text-[10px] font-bold">
-                              {linkedMappedSubjects.length + linkedUnmappedSubjects.length}
-                            </span>
+                  {(activeRosterCategory === 'ALL' || activeRosterCategory === 'SUBJECTS') && (
+                    <TacticalSectionExpander
+                      title={t('rosterSubjectsTitle')}
+                      icon="👤"
+                      count={rosterSubjectsCount}
+                      isExpanded={subjectsExpanded}
+                      onToggle={() => setSubjectsExpanded((prev) => !prev)}
+                      badgeColor="bg-primary/15 text-primary"
+                      emptyMessage={t('noResults')}
+                    >
+                      {isCaseFocused ? (
+                        <div className="space-y-3">
+                          {/* Nhóm 1: Đối tượng trong vụ án */}
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between px-1 py-1 text-[11px] font-semibold text-foreground">
+                              <span className="flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-red-500" />
+                                {t('linkedSubjectsSection')}
+                              </span>
+                              <span className="px-1.5 py-0.2 rounded-full bg-red-500/15 text-red-600 dark:text-red-400 text-[10px] font-bold">
+                                {linkedMappedSubjects.length + linkedUnmappedSubjects.length}
+                              </span>
+                            </div>
+
+                            {linkedMappedSubjects.length === 0 && linkedUnmappedSubjects.length === 0 ? (
+                              <p className="px-2 py-2 text-muted text-[11px] italic bg-surface-elevated/40 rounded-lg border border-dashed border-border/60">
+                                Chưa có đối tượng nào được gắn vào vụ án này. Bạn có thể chọn đối tượng từ danh sách soát xét bên dưới để đưa vào vụ án.
+                              </p>
+                            ) : (
+                              <>
+                                {linkedMappedSubjects.slice(0, visibleLimit).map((marker) => {
+                                  const activeCaseLink = marker.caseLinks?.find((cl) => cl.eventId === selectedCase!.id);
+                                  const isHighlighted = highlightedPersonId === marker.personId;
+                                  const isStarred = starredIds.has(marker.personId);
+                                  return (
+                                    <div
+                                      key={marker.id}
+                                      id={`person-card-${marker.personId}`}
+                                      className={`rounded-xl transition-all ${
+                                        isHighlighted
+                                          ? 'ring-2 ring-primary bg-primary/5 dark:bg-primary/10 shadow-sm'
+                                          : ''
+                                      }`}
+                                    >
+                                      <TacticalPersonCard
+                                        id={marker.personId}
+                                        name={marker.personName}
+                                        hasPhoto={marker.hasPhoto}
+                                        color={marker.groupColor ?? '#3b82f6'}
+                                        tacticalData={marker}
+                                        subtitle={
+                                          activeCaseLink?.role ||
+                                          activeCaseLink?.involvementType ||
+                                          (marker.addressText ?? marker.city)
+                                        }
+                                        onFocus={() => {
+                                          setHighlightedPersonId(marker.personId);
+                                          setFocusRequest((prev) => ({
+                                            id: marker.id,
+                                            seq: (prev?.seq ?? 0) + 1,
+                                          }));
+                                        }}
+                                        focusTitle="Định vị trên bản đồ"
+                                        detailsHref={`/people/${marker.personId}`}
+                                        detailsTitle="Xem hồ sơ"
+                                        gangs={data.gangs ?? []}
+                                        extraActions={
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              toggleStar(marker.personId);
+                                            }}
+                                            className={`p-1 rounded text-xs transition-colors ${
+                                              isStarred
+                                                ? 'text-amber-500 hover:bg-amber-500/10'
+                                                : 'text-muted hover:text-amber-500 hover:bg-surface-elevated'
+                                            }`}
+                                            title={isStarred ? 'Bỏ ghim quan trọng' : 'Ghim đối tượng quan trọng'}
+                                          >
+                                            {isStarred ? '★' : '☆'}
+                                          </button>
+                                        }
+                                      />
+                                    </div>
+                                  );
+                                })}
+
+                                {linkedUnmappedSubjects.length > 0 && (
+                                  <div className="pt-2 border-t border-border/50 space-y-1.5">
+                                    <div className="flex items-center gap-1.5 px-1 py-1 text-[11px] font-semibold text-muted">
+                                      <span>❓</span>
+                                      <span>{t('withoutCoordsSection')}</span>
+                                      <span className="px-1.5 py-0.2 rounded-full bg-surface-elevated text-[10px] border border-border">
+                                        {linkedUnmappedSubjects.length}
+                                      </span>
+                                    </div>
+                                    {linkedUnmappedSubjects.slice(0, visibleLimit).map((subj) => {
+                                      const activeCaseLink = subj.caseLinks?.find((cl) => cl.eventId === selectedCase!.id);
+                                      const isHighlighted = highlightedPersonId === subj.personId;
+                                      const isStarred = starredIds.has(subj.personId);
+                                      return (
+                                        <div
+                                          key={subj.personId}
+                                          id={`person-card-${subj.personId}`}
+                                          className={`rounded-xl transition-all ${
+                                            isHighlighted
+                                              ? 'ring-2 ring-primary bg-primary/5 dark:bg-primary/10 shadow-sm'
+                                              : ''
+                                          }`}
+                                        >
+                                          <TacticalPersonCard
+                                            id={subj.personId}
+                                            name={subj.personName}
+                                            hasPhoto={false}
+                                            color="#f59e0b"
+                                            tacticalData={subj}
+                                            subtitle={
+                                              activeCaseLink?.role ||
+                                              activeCaseLink?.involvementType ||
+                                              t('rosterAddCoordsLink')
+                                            }
+                                            detailsHref={`/people/${subj.personId}`}
+                                            detailsTitle="Xem hồ sơ"
+                                            gangs={data.gangs ?? []}
+                                            extraActions={
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  toggleStar(subj.personId);
+                                                }}
+                                                className={`p-1 rounded text-xs transition-colors ${
+                                                  isStarred
+                                                    ? 'text-amber-500 hover:bg-amber-500/10'
+                                                    : 'text-muted hover:text-amber-500 hover:bg-surface-elevated'
+                                                }`}
+                                                title={isStarred ? 'Bỏ ghim quan trọng' : 'Ghim đối tượng quan trọng'}
+                                              >
+                                                {isStarred ? '★' : '☆'}
+                                              </button>
+                                            }
+                                          />
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </>
+                            )}
                           </div>
 
-                          {linkedMappedSubjects.length === 0 && linkedUnmappedSubjects.length === 0 ? (
-                            <p className="px-2 py-2 text-muted text-[11px] italic bg-surface-elevated/40 rounded-lg border border-dashed border-border/60">
-                              Chưa có đối tượng nào được gắn vào vụ án này. Bạn có thể chọn đối tượng từ danh sách soát xét bên dưới để đưa vào vụ án.
-                            </p>
-                          ) : (
-                            <>
-                              {linkedMappedSubjects.map((marker) => {
-                                const activeCaseLink = marker.caseLinks?.find((cl) => cl.eventId === selectedCase!.id);
-                                const isHighlighted = highlightedPersonId === marker.personId;
-                                return (
-                                  <div
-                                    key={marker.id}
-                                    id={`person-card-${marker.personId}`}
-                                    className={`rounded-xl transition-all ${
-                                      isHighlighted
-                                        ? 'ring-2 ring-primary bg-primary/5 dark:bg-primary/10 shadow-sm'
-                                        : ''
-                                    }`}
-                                  >
-                                    <TacticalPersonCard
-                                      id={marker.personId}
-                                      name={marker.personName}
-                                      hasPhoto={marker.hasPhoto}
-                                      color={marker.groupColor ?? '#3b82f6'}
-                                      tacticalData={marker}
-                                      subtitle={
-                                        activeCaseLink?.role ||
-                                        activeCaseLink?.involvementType ||
-                                        (marker.addressText ?? marker.city)
-                                      }
-                                      onFocus={() => {
-                                        setHighlightedPersonId(marker.personId);
-                                        setFocusRequest((prev) => ({
-                                          id: marker.id,
-                                          seq: (prev?.seq ?? 0) + 1,
-                                        }));
-                                      }}
-                                      focusTitle="Định vị trên bản đồ"
-                                      detailsHref={`/people/${marker.personId}`}
-                                      detailsTitle="Xem hồ sơ"
-                                      gangs={data.gangs ?? []}
-                                    />
-                                  </div>
-                                );
-                              })}
+                          {/* Nhóm 2: Đối tượng khác trong diện soát xét */}
+                          <div className="pt-3 border-t border-border/70 space-y-2">
+                            <div className="flex items-center justify-between px-1 text-[11px] font-semibold text-foreground">
+                              <span className="flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-slate-400" />
+                                {t('otherSubjectsSection')}
+                              </span>
+                              <span className="px-1.5 py-0.2 rounded-full bg-surface-elevated text-muted text-[10px] border border-border">
+                                {otherMappedSubjects.length + otherUnmappedSubjects.length}
+                              </span>
+                            </div>
 
-                              {linkedUnmappedSubjects.length > 0 && (
-                                <div className="pt-2 border-t border-border/50 space-y-1.5">
-                                  <div className="flex items-center gap-1.5 px-1 py-1 text-[11px] font-semibold text-muted">
-                                    <span>❓</span>
-                                    <span>{t('withoutCoordsSection')}</span>
-                                    <span className="px-1.5 py-0.2 rounded-full bg-surface-elevated text-[10px] border border-border">
-                                      {linkedUnmappedSubjects.length}
-                                    </span>
-                                  </div>
-                                  {linkedUnmappedSubjects.map((subj) => {
-                                    const activeCaseLink = subj.caseLinks?.find((cl) => cl.eventId === selectedCase!.id);
-                                    const isHighlighted = highlightedPersonId === subj.personId;
+                            {/* Other mapped subjects */}
+                            <div className="space-y-1.5">
+                              {otherMappedSubjects.length === 0 && otherUnmappedSubjects.length === 0 ? (
+                                <p className="px-2 py-2 text-muted text-[11px] italic">
+                                  Không có đối tượng nào khác khớp bộ lọc.
+                                </p>
+                              ) : (
+                                <>
+                                  {otherMappedSubjects.slice(0, visibleLimit).map(({ marker, distanceKm }) => {
+                                    const distText =
+                                      distanceKm !== null ? `${distanceKm.toFixed(2)} km` : null;
+                                    const isInspected = inspectedPersonId === marker.personId;
+                                    const isStarred = starredIds.has(marker.personId);
                                     return (
                                       <div
-                                        key={subj.personId}
-                                        id={`person-card-${subj.personId}`}
+                                        key={marker.id}
+                                        id={`person-card-${marker.personId}`}
                                         className={`rounded-xl transition-all ${
-                                          isHighlighted
+                                          isInspected || highlightedPersonId === marker.personId
                                             ? 'ring-2 ring-primary bg-primary/5 dark:bg-primary/10 shadow-sm'
                                             : ''
                                         }`}
                                       >
                                         <TacticalPersonCard
-                                          id={subj.personId}
-                                          name={subj.personName}
-                                          hasPhoto={false}
-                                          color="#f59e0b"
-                                          tacticalData={subj}
+                                          id={marker.personId}
+                                          name={marker.personName}
+                                          hasPhoto={marker.hasPhoto}
+                                          color={isInspected ? '#2563eb' : (marker.groupColor ?? '#64748b')}
+                                          tacticalData={marker}
                                           subtitle={
-                                            activeCaseLink?.role ||
-                                            activeCaseLink?.involvementType ||
-                                            t('rosterAddCoordsLink')
+                                            distText
+                                              ? t('distanceKmFromScene', { km: distanceKm!.toFixed(2) })
+                                              : marker.addressText ?? marker.city
                                           }
-                                          detailsHref={`/people/${subj.personId}`}
+                                          onFocus={() => {
+                                            setInspectedPersonId((prev) =>
+                                              prev === marker.personId ? null : marker.personId
+                                            );
+                                          }}
+                                          focusTitle={isInspected ? 'Đang soát xét trên bản đồ (nhấn để tắt)' : 'Soát xét trên bản đồ'}
+                                          detailsHref={`/people/${marker.personId}`}
                                           detailsTitle="Xem hồ sơ"
                                           gangs={data.gangs ?? []}
+                                          extraActions={
+                                            <div className="flex flex-col items-end gap-1 shrink-0">
+                                              <div className="flex items-center gap-1">
+                                                <button
+                                                  type="button"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    toggleStar(marker.personId);
+                                                  }}
+                                                  className={`p-0.5 rounded text-xs transition-colors ${
+                                                    isStarred
+                                                      ? 'text-amber-500'
+                                                      : 'text-muted hover:text-amber-500'
+                                                  }`}
+                                                  title={isStarred ? 'Bỏ ghim quan trọng' : 'Ghim đối tượng quan trọng'}
+                                                >
+                                                  {isStarred ? '★' : '☆'}
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setInspectedPersonId((prev) =>
+                                                      prev === marker.personId ? null : marker.personId
+                                                    );
+                                                  }}
+                                                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold transition-colors whitespace-nowrap shadow-2xs ${
+                                                    isInspected
+                                                      ? 'bg-primary text-white shadow-xs'
+                                                      : 'bg-surface hover:bg-surface-elevated text-foreground border border-border'
+                                                  }`}
+                                                  title={
+                                                    isInspected
+                                                      ? 'Đang soát xét trên bản đồ (nhấn để tắt)'
+                                                      : 'Bật/tắt hiển thị đối tượng này trên bản đồ cùng vụ án'
+                                                  }
+                                                >
+                                                  <span>👁️</span>
+                                                  <span>{isInspected ? 'Đang xem' : 'Soát xét'}</span>
+                                                </button>
+                                              </div>
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  setLinkingTarget({
+                                                    personId: marker.personId,
+                                                    personName: marker.personName,
+                                                    distanceText: distText,
+                                                  });
+                                                }}
+                                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 transition-colors whitespace-nowrap shadow-2xs"
+                                                title={t('quickLinkBtn')}
+                                              >
+                                                <span>➕</span>
+                                                <span>Vào vụ án</span>
+                                              </button>
+                                            </div>
+                                          }
                                         />
                                       </div>
                                     );
                                   })}
-                                </div>
-                              )}
-                            </>
-                          )}
-                        </div>
-
-                        {/* Nhóm 2: Đối tượng khác trong diện soát xét */}
-                        <div className="pt-3 border-t border-border/70 space-y-2">
-                          <div className="flex items-center justify-between px-1 text-[11px] font-semibold text-foreground">
-                            <span className="flex items-center gap-1.5">
-                              <span className="w-2 h-2 rounded-full bg-slate-400" />
-                              {t('otherSubjectsSection')}
-                            </span>
-                            <span className="px-1.5 py-0.2 rounded-full bg-surface-elevated text-muted text-[10px] border border-border">
-                              {otherMappedSubjects.length + otherUnmappedSubjects.length}
-                            </span>
-                          </div>
-
-                          {/* Radius controls if selected case has coords */}
-                          {selectedCase!.latitude !== null && selectedCase!.longitude !== null && (
-                            <div className="p-2 rounded-xl bg-surface-elevated/70 border border-border/60 space-y-2 text-[11px]">
-                              <div className="flex items-center justify-between gap-2">
-                                <label className="text-xs font-medium text-foreground">
-                                  {t('radiusFilterLabel')}
-                                </label>
-                                <label className="flex items-center gap-1.5 cursor-pointer text-muted hover:text-foreground">
-                                  <input
-                                    type="checkbox"
-                                    checked={filters.onlyWithinRadius}
-                                    onChange={(e) =>
-                                      handleFiltersChange({
-                                        ...filters,
-                                        onlyWithinRadius: e.target.checked,
-                                        radiusKm: filters.radiusKm || 1,
-                                      })
-                                    }
-                                    className="rounded border-border text-primary focus:ring-primary w-3.5 h-3.5"
-                                  />
-                                  <span>{t('withinRadiusOnly')}</span>
-                                </label>
-                              </div>
-
-                              {/* Quick Radius Chips */}
-                              <div className="flex items-center gap-1 flex-wrap">
-                                {[
-                                  { label: 'Tất cả', km: 0 },
-                                  { label: '500m', km: 0.5 },
-                                  { label: '1km', km: 1 },
-                                  { label: '2km', km: 2 },
-                                  { label: '5km', km: 5 },
-                                  { label: '10km', km: 10 },
-                                  { label: '20km', km: 20 },
-                                  { label: '50km', km: 50 },
-                                ].map((chip) => {
-                                  const isActive =
-                                    chip.km === 0
-                                      ? !filters.onlyWithinRadius || filters.radiusKm === 0
-                                      : filters.onlyWithinRadius && filters.radiusKm === chip.km;
-                                  return (
+                                  {otherMappedSubjects.length > visibleLimit && (
                                     <button
-                                      key={chip.km}
                                       type="button"
-                                      onClick={() =>
-                                        handleFiltersChange({
-                                          ...filters,
-                                          radiusKm: chip.km,
-                                          onlyWithinRadius: chip.km > 0,
-                                        })
-                                      }
-                                      className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition-all ${
-                                        isActive
-                                          ? 'bg-primary text-white shadow-sm'
-                                          : 'bg-surface hover:bg-surface-elevated text-muted hover:text-foreground border border-border/50'
+                                      onClick={() => setVisibleLimit((prev) => prev + 15)}
+                                      className="w-full py-1.5 rounded-lg border border-dashed border-border hover:border-primary/50 text-[11px] font-semibold text-primary hover:bg-primary/5 transition-colors"
+                                    >
+                                      Xem thêm (+{otherMappedSubjects.length - visibleLimit} đối tượng)
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                            </div>
+
+                            {/* Other unmapped subjects */}
+                            {otherUnmappedSubjects.length > 0 && (
+                              <div className="pt-2 border-t border-border/50 space-y-1.5">
+                                <div className="flex items-center gap-1.5 px-1 py-1 text-[11px] font-semibold text-muted">
+                                  <span>❓</span>
+                                  <span>{t('withoutCoordsSection')}</span>
+                                  <span className="px-1.5 py-0.2 rounded-full bg-surface-elevated text-[10px] border border-border">
+                                    {otherUnmappedSubjects.length}
+                                  </span>
+                                </div>
+                                {otherUnmappedSubjects.slice(0, visibleLimit).map((subj) => {
+                                  const isHighlighted = highlightedPersonId === subj.personId;
+                                  const isStarred = starredIds.has(subj.personId);
+                                  return (
+                                    <div
+                                      key={subj.personId}
+                                      id={`person-card-${subj.personId}`}
+                                      className={`rounded-xl transition-all ${
+                                        isHighlighted
+                                          ? 'ring-2 ring-primary bg-primary/5 dark:bg-primary/10 shadow-sm'
+                                          : ''
                                       }`}
                                     >
-                                      {chip.label}
-                                    </button>
+                                      <TacticalPersonCard
+                                        id={subj.personId}
+                                        name={subj.personName}
+                                        hasPhoto={false}
+                                        color="#94a3b8"
+                                        tacticalData={subj}
+                                        subtitle={t('rosterAddCoordsLink')}
+                                        detailsHref={`/people/${subj.personId}`}
+                                        detailsTitle="Xem hồ sơ"
+                                        gangs={data.gangs ?? []}
+                                        extraActions={
+                                          <div className="flex items-center gap-1">
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                toggleStar(subj.personId);
+                                              }}
+                                              className={`p-0.5 rounded text-xs transition-colors ${
+                                                isStarred
+                                                  ? 'text-amber-500'
+                                                  : 'text-muted hover:text-amber-500'
+                                              }`}
+                                              title={isStarred ? 'Bỏ ghim quan trọng' : 'Ghim đối tượng quan trọng'}
+                                            >
+                                              {isStarred ? '★' : '☆'}
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setLinkingTarget({
+                                                  personId: subj.personId,
+                                                  personName: subj.personName,
+                                                  distanceText: null,
+                                                });
+                                              }}
+                                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 transition-colors whitespace-nowrap shadow-2xs"
+                                              title={t('quickLinkBtn')}
+                                            >
+                                              <span>➕</span>
+                                              <span>Vào vụ án</span>
+                                            </button>
+                                          </div>
+                                        }
+                                      />
+                                    </div>
                                   );
                                 })}
                               </div>
-
-                              {/* Slider */}
-                              <div className="flex items-center gap-2 pt-0.5">
-                                <input
-                                  type="range"
-                                  min="0"
-                                  max="50"
-                                  step="0.5"
-                                  value={filters.radiusKm || 0}
-                                  onChange={(e) => {
-                                    const km = parseFloat(e.target.value);
-                                    handleFiltersChange({
-                                      ...filters,
-                                      radiusKm: km,
-                                      onlyWithinRadius: km > 0,
-                                    });
-                                  }}
-                                  className="w-full h-1.5 bg-border rounded-lg appearance-none cursor-pointer accent-primary"
-                                />
-                                <span className="text-[11px] font-mono text-muted shrink-0 w-12 text-right">
-                                  {(filters.radiusKm || 0) > 0 ? `${filters.radiusKm} km` : '0 km'}
-                                </span>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Other mapped subjects */}
-                          <div className="space-y-1.5">
-                            {otherMappedSubjects.length === 0 && otherUnmappedSubjects.length === 0 ? (
-                              <p className="px-2 py-2 text-muted text-[11px] italic">
-                                Không có đối tượng nào khác khớp bộ lọc.
-                              </p>
-                            ) : (
-                              otherMappedSubjects.map(({ marker, distanceKm }) => {
-                                const distText =
-                                  distanceKm !== null ? `${distanceKm.toFixed(2)} km` : null;
-                                const isInspected = inspectedPersonId === marker.personId;
-                                return (
-                                  <div
-                                    key={marker.id}
-                                    id={`person-card-${marker.personId}`}
-                                    className={`rounded-xl transition-all ${
-                                      isInspected || highlightedPersonId === marker.personId
-                                        ? 'ring-2 ring-primary bg-primary/5 dark:bg-primary/10 shadow-sm'
-                                        : ''
-                                    }`}
-                                  >
-                                    <TacticalPersonCard
-                                      id={marker.personId}
-                                      name={marker.personName}
-                                      hasPhoto={marker.hasPhoto}
-                                      color={isInspected ? '#2563eb' : (marker.groupColor ?? '#64748b')}
-                                      tacticalData={marker}
-                                      subtitle={
-                                        distText
-                                          ? t('distanceKmFromScene', { km: distanceKm!.toFixed(2) })
-                                          : marker.addressText ?? marker.city
-                                      }
-                                      onFocus={() => {
-                                        setInspectedPersonId((prev) =>
-                                          prev === marker.personId ? null : marker.personId
-                                        );
-                                      }}
-                                      focusTitle={isInspected ? 'Đang soát xét trên bản đồ (nhấn để tắt)' : 'Soát xét trên bản đồ'}
-                                      detailsHref={`/people/${marker.personId}`}
-                                      detailsTitle="Xem hồ sơ"
-                                      gangs={data.gangs ?? []}
-                                      extraActions={
-                                        <div className="flex flex-col items-end gap-1 shrink-0">
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setInspectedPersonId((prev) =>
-                                                prev === marker.personId ? null : marker.personId
-                                              );
-                                            }}
-                                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold transition-colors whitespace-nowrap shadow-2xs ${
-                                              isInspected
-                                                ? 'bg-primary text-white shadow-xs'
-                                                : 'bg-surface hover:bg-surface-elevated text-foreground border border-border'
-                                            }`}
-                                            title={
-                                              isInspected
-                                                ? 'Đang soát xét trên bản đồ (nhấn để tắt)'
-                                                : 'Bật/tắt hiển thị đối tượng này trên bản đồ cùng vụ án'
-                                            }
-                                          >
-                                            <span>👁️</span>
-                                            <span>{isInspected ? 'Đang xem' : 'Soát xét'}</span>
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setLinkingTarget({
-                                                personId: marker.personId,
-                                                personName: marker.personName,
-                                                distanceText: distText,
-                                              });
-                                            }}
-                                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 transition-colors whitespace-nowrap shadow-2xs"
-                                            title={t('quickLinkBtn')}
-                                          >
-                                            <span>➕</span>
-                                            <span>Vào vụ án</span>
-                                          </button>
-                                        </div>
-                                      }
-                                    />
-                                  </div>
-                                );
-                              })
                             )}
                           </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {standardMappedSubjects.slice(0, visibleLimit).map((marker) => {
+                            const isHighlighted = highlightedPersonId === marker.personId;
+                            const isStarred = starredIds.has(marker.personId);
+                            return (
+                              <div
+                                key={marker.id}
+                                id={`person-card-${marker.personId}`}
+                                className={`rounded-xl transition-all ${
+                                  isHighlighted
+                                    ? 'ring-2 ring-primary bg-primary/5 dark:bg-primary/10 shadow-sm'
+                                    : ''
+                                }`}
+                              >
+                                <TacticalPersonCard
+                                  id={marker.personId}
+                                  name={marker.personName}
+                                  hasPhoto={marker.hasPhoto}
+                                  color={marker.groupColor ?? '#3b82f6'}
+                                  tacticalData={marker}
+                                  subtitle={marker.addressText ?? marker.city}
+                                  onFocus={() => {
+                                    setHighlightedPersonId(marker.personId);
+                                    setFocusRequest((prev) => ({
+                                      id: marker.id,
+                                      seq: (prev?.seq ?? 0) + 1,
+                                    }));
+                                  }}
+                                  focusTitle="Định vị trên bản đồ"
+                                  detailsHref={`/people/${marker.personId}`}
+                                  detailsTitle="Xem hồ sơ"
+                                  gangs={data.gangs ?? []}
+                                  extraActions={
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleStar(marker.personId);
+                                      }}
+                                      className={`p-1 rounded text-xs transition-colors ${
+                                        isStarred
+                                          ? 'text-amber-500 hover:bg-amber-500/10'
+                                          : 'text-muted hover:text-amber-500 hover:bg-surface-elevated'
+                                      }`}
+                                      title={isStarred ? 'Bỏ ghim quan trọng' : 'Ghim đối tượng quan trọng'}
+                                    >
+                                      {isStarred ? '★' : '☆'}
+                                    </button>
+                                  }
+                                />
+                              </div>
+                            );
+                          })}
+                          {standardMappedSubjects.length > visibleLimit && (
+                            <button
+                              type="button"
+                              onClick={() => setVisibleLimit((prev) => prev + 15)}
+                              className="w-full py-1.5 rounded-lg border border-dashed border-border hover:border-primary/50 text-[11px] font-semibold text-primary hover:bg-primary/5 transition-colors"
+                            >
+                              Xem thêm (+{standardMappedSubjects.length - visibleLimit} đối tượng)
+                            </button>
+                          )}
 
-                          {/* Other unmapped subjects */}
-                          {otherUnmappedSubjects.length > 0 && (
+                          {filteredUnmappedSubjects.length > 0 && (
                             <div className="pt-2 border-t border-border/50 space-y-1.5">
                               <div className="flex items-center gap-1.5 px-1 py-1 text-[11px] font-semibold text-muted">
                                 <span>❓</span>
                                 <span>{t('withoutCoordsSection')}</span>
                                 <span className="px-1.5 py-0.2 rounded-full bg-surface-elevated text-[10px] border border-border">
-                                  {otherUnmappedSubjects.length}
+                                  {filteredUnmappedSubjects.length}
                                 </span>
                               </div>
-                              {otherUnmappedSubjects.map((subj) => {
+                              <p className="px-1.5 text-[11px] text-muted">
+                                {t('rosterUnlocatedHint')}
+                              </p>
+                              {filteredUnmappedSubjects.slice(0, visibleLimit).map((subj) => {
+                                const activeCaseLink = subj.caseLinks?.[0];
                                 const isHighlighted = highlightedPersonId === subj.personId;
+                                const isStarred = starredIds.has(subj.personId);
                                 return (
                                   <div
                                     key={subj.personId}
@@ -1009,9 +1332,9 @@ function MapPageInner() {
                                       id={subj.personId}
                                       name={subj.personName}
                                       hasPhoto={false}
-                                      color="#94a3b8"
+                                      color="#f59e0b"
                                       tacticalData={subj}
-                                      subtitle={t('rosterAddCoordsLink')}
+                                      subtitle={activeCaseLink?.role || activeCaseLink?.eventTitle || t('rosterAddCoordsLink')}
                                       detailsHref={`/people/${subj.personId}`}
                                       detailsTitle="Xem hồ sơ"
                                       gangs={data.gangs ?? []}
@@ -1020,123 +1343,86 @@ function MapPageInner() {
                                           type="button"
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            setLinkingTarget({
-                                              personId: subj.personId,
-                                              personName: subj.personName,
-                                              distanceText: null,
-                                            });
+                                            toggleStar(subj.personId);
                                           }}
-                                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 transition-colors whitespace-nowrap shadow-2xs"
-                                          title={t('quickLinkBtn')}
+                                          className={`p-1 rounded text-xs transition-colors ${
+                                            isStarred
+                                              ? 'text-amber-500 hover:bg-amber-500/10'
+                                              : 'text-muted hover:text-amber-500 hover:bg-surface-elevated'
+                                          }`}
+                                          title={isStarred ? 'Bỏ ghim quan trọng' : 'Ghim đối tượng quan trọng'}
                                         >
-                                          <span>➕</span>
-                                          <span>Vào vụ án</span>
+                                          {isStarred ? '★' : '☆'}
                                         </button>
                                       }
                                     />
                                   </div>
                                 );
                               })}
+                              {filteredUnmappedSubjects.length > visibleLimit && (
+                                <button
+                                  type="button"
+                                  onClick={() => setVisibleLimit((prev) => prev + 15)}
+                                  className="w-full py-1.5 rounded-lg border border-dashed border-border hover:border-primary/50 text-[11px] font-semibold text-primary hover:bg-primary/5 transition-colors"
+                                >
+                                  Xem thêm (+{filteredUnmappedSubjects.length - visibleLimit} đối tượng chưa có GPS)
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-1.5">
-                        {standardMappedSubjects.map((marker) => {
-                          const isHighlighted = highlightedPersonId === marker.personId;
-                          return (
-                            <div
-                              key={marker.id}
-                              id={`person-card-${marker.personId}`}
-                              className={`rounded-xl transition-all ${
-                                isHighlighted
-                                  ? 'ring-2 ring-primary bg-primary/5 dark:bg-primary/10 shadow-sm'
-                                  : ''
-                              }`}
-                            >
-                              <TacticalPersonCard
-                                id={marker.personId}
-                                name={marker.personName}
-                                hasPhoto={marker.hasPhoto}
-                                color={marker.groupColor ?? '#3b82f6'}
-                                tacticalData={marker}
-                                subtitle={marker.addressText ?? marker.city}
-                                onFocus={() => {
-                                  setHighlightedPersonId(marker.personId);
-                                  setFocusRequest((prev) => ({
-                                    id: marker.id,
-                                    seq: (prev?.seq ?? 0) + 1,
-                                  }));
-                                }}
-                                focusTitle="Định vị trên bản đồ"
-                                detailsHref={`/people/${marker.personId}`}
-                                detailsTitle="Xem hồ sơ"
-                                gangs={data.gangs ?? []}
-                              />
-                            </div>
-                          );
-                        })}
-
-                        {filteredUnmappedSubjects.length > 0 && (
-                          <div className="pt-2 border-t border-border/50 space-y-1.5">
-                            <div className="flex items-center gap-1.5 px-1 py-1 text-[11px] font-semibold text-muted">
-                              <span>❓</span>
-                              <span>{t('withoutCoordsSection')}</span>
-                              <span className="px-1.5 py-0.2 rounded-full bg-surface-elevated text-[10px] border border-border">
-                                {filteredUnmappedSubjects.length}
-                              </span>
-                            </div>
-                            <p className="px-1.5 text-[11px] text-muted">
-                              {t('rosterUnlocatedHint')}
-                            </p>
-                            {filteredUnmappedSubjects.map((subj) => {
-                              const activeCaseLink = subj.caseLinks?.[0];
-                              const isHighlighted = highlightedPersonId === subj.personId;
-                              return (
-                                <div
-                                  key={subj.personId}
-                                  id={`person-card-${subj.personId}`}
-                                  className={`rounded-xl transition-all ${
-                                    isHighlighted
-                                      ? 'ring-2 ring-primary bg-primary/5 dark:bg-primary/10 shadow-sm'
-                                      : ''
-                                  }`}
-                                >
-                                  <TacticalPersonCard
-                                    id={subj.personId}
-                                    name={subj.personName}
-                                    hasPhoto={false}
-                                    color="#f59e0b"
-                                    tacticalData={subj}
-                                    subtitle={activeCaseLink?.role || activeCaseLink?.eventTitle || t('rosterAddCoordsLink')}
-                                    detailsHref={`/people/${subj.personId}`}
-                                    detailsTitle="Xem hồ sơ"
-                                    gangs={data.gangs ?? []}
-                                  />
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </TacticalSectionExpander>
+                      )}
+                    </TacticalSectionExpander>
+                  )}
                 </div>
               }
-            />
+            >
+              <MapView
+                markers={visibleMarkers}
+                focusId={focusId}
+                focusRequest={focusRequest}
+                filtersKey={`${filters.query}|${filters.groupId}|${filters.city}|${filters.region}|${filters.country}|${filters.caseId ?? ''}|${filters.personId ?? ''}|${filters.radiusKm ?? 0}|${filters.onlyWithinRadius ? '1' : ''}|${filters.activeCasesOnly ? '1' : ''}|${filters.showRuledOut === false ? '0' : ''}|${inspectedPersonId ?? ''}`}
+                selectedCase={selectedCase}
+                radiusCenter={radiusCenter}
+                radiusKm={filters.radiusKm ?? 0}
+                inspectedPersonId={inspectedPersonId}
+                onBoundsChange={setMapBounds}
+                onSelectMarker={(marker) => {
+                  if (marker.source === 'event_address') {
+                    if (filters.caseId !== marker.personId) {
+                      handleFiltersChange({
+                        ...filters,
+                        caseId: marker.personId,
+                        personId: '',
+                        radiusKm: filters.radiusKm || 1,
+                      });
+                    }
+                  } else {
+                    setHighlightedPersonId(marker.personId);
+                    if (selectedCase && !marker.caseLinks?.some((cl) => cl.eventId === selectedCase.id)) {
+                      setInspectedPersonId(marker.personId);
+                    }
+                    setRosterOpen(true);
+                    setSubjectsExpanded(true);
+                    setTimeout(() => {
+                      const el = document.getElementById(`person-card-${marker.personId}`);
+                      el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }, 60);
+                  }
+                }}
+              />
 
-            {visibleMarkers.length === 0 && (
-              <div className="absolute inset-0 z-10 flex items-center justify-center p-8 pointer-events-none">
-                <p
-                  className="px-4 py-2 rounded-lg bg-surface border border-border text-muted shadow"
-                  role="status"
-                >
-                  {t('noResults')}
-                </p>
-              </div>
-            )}
-          </>
+              {visibleMarkers.length === 0 && (
+                <div className="absolute inset-0 z-10 flex items-center justify-center p-8 pointer-events-none">
+                  <p
+                    className="px-4 py-2 rounded-lg bg-surface border border-border text-muted shadow"
+                    role="status"
+                  >
+                    {t('noResults')}
+                  </p>
+                </div>
+              )}
+            </TacticalSidebarContainer>
         )}
 
         {unlocatedOpen && data.unlocatedPeople.length > 0 && (

@@ -12,6 +12,102 @@ import { haversineDistanceKm } from '@/lib/map/filter-markers';
 const DARK_STYLE = 'https://tiles.openfreemap.org/styles/dark';
 const LIGHT_STYLE = 'https://tiles.openfreemap.org/styles/positron';
 
+export type TacticalMapBaseMode = 'SATELLITE_HYBRID' | 'SATELLITE_PURE' | 'STANDARD';
+
+function buildTacticalSatelliteStyleSpec(includeHybridOverlay: boolean): maplibregl.StyleSpecification {
+  const sources: Record<string, maplibregl.SourceSpecification> = {
+    'esri-satellite': {
+      type: 'raster',
+      tiles: [
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      ],
+      tileSize: 256,
+      maxzoom: 19,
+      attribution: '© Esri, Maxar, Earthstar Geographics',
+    },
+  };
+
+  const layers: maplibregl.LayerSpecification[] = [
+    {
+      id: 'esri-satellite-layer',
+      type: 'raster',
+      source: 'esri-satellite',
+      minzoom: 0,
+      maxzoom: 22,
+    },
+  ];
+
+  if (includeHybridOverlay) {
+    sources['openfreemap-vector'] = {
+      type: 'vector',
+      url: 'https://tiles.openfreemap.org/planet',
+    };
+
+    layers.push(
+      {
+        id: 'hybrid-roads-casing',
+        type: 'line',
+        source: 'openfreemap-vector',
+        'source-layer': 'transportation',
+        paint: {
+          'line-color': 'rgba(15, 23, 42, 0.65)',
+          'line-width': ['interpolate', ['linear'], ['zoom'], 10, 1.5, 15, 4, 18, 8],
+        },
+      },
+      {
+        id: 'hybrid-roads-line',
+        type: 'line',
+        source: 'openfreemap-vector',
+        'source-layer': 'transportation',
+        paint: {
+          'line-color': 'rgba(255, 255, 255, 0.55)',
+          'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.8, 15, 2, 18, 4.5],
+        },
+      },
+      {
+        id: 'hybrid-road-labels',
+        type: 'symbol',
+        source: 'openfreemap-vector',
+        'source-layer': 'transportation_name',
+        layout: {
+          'symbol-placement': 'line',
+          'text-field': ['coalesce', ['get', 'name:vi'], ['get', 'name']],
+          'text-font': ['Noto Sans Regular'],
+          'text-size': 11,
+        },
+        paint: {
+          'text-color': '#f8fafc',
+          'text-halo-color': 'rgba(15, 23, 42, 0.9)',
+          'text-halo-width': 1.5,
+        },
+      },
+      {
+        id: 'hybrid-place-labels',
+        type: 'symbol',
+        source: 'openfreemap-vector',
+        'source-layer': 'place',
+        layout: {
+          'text-field': ['coalesce', ['get', 'name:vi'], ['get', 'name']],
+          'text-font': ['Noto Sans Bold'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 8, 11, 14, 14],
+        },
+        paint: {
+          'text-color': '#fef08a',
+          'text-halo-color': 'rgba(15, 23, 42, 0.92)',
+          'text-halo-width': 1.8,
+        },
+      },
+    );
+  }
+
+  return {
+    version: 8,
+    glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
+    sources,
+    layers,
+  };
+}
+
 const SOURCE_ID = 'people';
 const RADIUS_SOURCE_ID = 'crime-scene-radius';
 const FOCUS_ZOOM = 15;
@@ -143,6 +239,7 @@ interface MapViewProps {
   radiusCenter?: RadiusCenter | null;
   inspectedPersonId?: string | null;
   onSelectMarker?: (marker: MapMarker) => void;
+  onBoundsChange?: (bounds: { north: number; south: number; east: number; west: number }) => void;
 }
 
 interface MarkerProperties {
@@ -250,11 +347,12 @@ export default function MapView({
   radiusCenter = null,
   inspectedPersonId = null,
   onSelectMarker,
+  onBoundsChange,
 }: MapViewProps) {
   const t = useTranslations('map');
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const currentStyleRef = useRef<string | null>(null);
+  const currentStyleKeyRef = useRef<string | null>(null);
   const markersRef = useRef<MapMarker[]>(markers);
   const inspectedPersonIdRef = useRef<string | null>(inspectedPersonId);
   const selectedCaseRef = useRef<MapCase | null>(selectedCase);
@@ -263,6 +361,28 @@ export default function MapView({
   const appliedFiltersKeyRef = useRef<string | null>(null);
   const isDark = useIsDarkTheme();
   const isDarkRef = useRef(isDark);
+  const [baseMode, setBaseMode] = useState<TacticalMapBaseMode>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = window.localStorage.getItem('tactical-map-base-mode');
+      if (saved === 'SATELLITE_HYBRID' || saved === 'SATELLITE_PURE' || saved === 'STANDARD') {
+        return saved;
+      }
+    }
+    return 'SATELLITE_HYBRID';
+  });
+  const baseModeRef = useRef<TacticalMapBaseMode>(baseMode);
+  const onBoundsChangeRef = useRef(onBoundsChange);
+  useEffect(() => {
+    onBoundsChangeRef.current = onBoundsChange;
+  }, [onBoundsChange]);
+  useEffect(() => {
+    baseModeRef.current = baseMode;
+    try {
+      window.localStorage.setItem('tactical-map-base-mode', baseMode);
+    } catch {
+      // Ignore storage error
+    }
+  }, [baseMode]);
   const translationsRef = useRef({
     viewContact: t('viewContact'),
     directions: t('directions'),
@@ -356,9 +476,6 @@ export default function MapView({
           }
         }
 
-        const isDesktop = map.getContainer().clientWidth >= 768;
-        const leftPad = isDesktop ? 380 : 40;
-
         if (coords.length === 1) {
           map.easeTo({
             center: coords[0],
@@ -371,7 +488,7 @@ export default function MapView({
             bounds.extend(pt);
           }
           map.fitBounds(bounds, {
-            padding: { top: 80, bottom: 80, left: leftPad, right: 80 },
+            padding: { top: 80, bottom: 80, left: 80, right: 80 },
             maxZoom: FOCUS_ZOOM,
             duration: CAMERA_ANIMATION_MS,
           });
@@ -404,14 +521,11 @@ export default function MapView({
       coords.push([selectedCase.longitude, selectedCase.latitude]);
     }
 
-    const isDesktop = map.getContainer().clientWidth >= 768;
-    const leftPad = isDesktop ? 390 : 50;
-
     if (coords.length > 1) {
       const bounds = new maplibregl.LngLatBounds(coords[0], coords[0]);
       coords.forEach((pt) => bounds.extend(pt));
       map.fitBounds(bounds, {
-        padding: { top: 90, bottom: 90, left: leftPad, right: 90 },
+        padding: { top: 90, bottom: 90, left: 90, right: 90 },
         maxZoom: 15,
         duration: CAMERA_ANIMATION_MS,
       });
@@ -478,8 +592,17 @@ export default function MapView({
       return;
     }
 
-    const initialStyle = document.documentElement.classList.contains('dark') ? DARK_STYLE : LIGHT_STYLE;
-    currentStyleRef.current = initialStyle;
+    const isDarkNow = document.documentElement.classList.contains('dark');
+    const initialMode = baseModeRef.current;
+    const initialStyle =
+      initialMode === 'SATELLITE_HYBRID'
+        ? buildTacticalSatelliteStyleSpec(true)
+        : initialMode === 'SATELLITE_PURE'
+          ? buildTacticalSatelliteStyleSpec(false)
+          : isDarkNow
+            ? DARK_STYLE
+            : LIGHT_STYLE;
+    currentStyleKeyRef.current = `${initialMode}:${isDarkNow ? 'dark' : 'light'}`;
 
     let map: maplibregl.Map;
     try {
@@ -499,6 +622,19 @@ export default function MapView({
     mapRef.current = map;
 
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+
+    const emitBounds = () => {
+      if (!onBoundsChangeRef.current) return;
+      const b = map.getBounds();
+      onBoundsChangeRef.current({
+        north: b.getNorth(),
+        south: b.getSouth(),
+        east: b.getEast(),
+        west: b.getWest(),
+      });
+    };
+    map.on('load', emitBounds);
+    map.on('moveend', emitBounds);
 
     map.once('idle', () => {
       containerRef.current
@@ -597,7 +733,7 @@ export default function MapView({
       registeredColorRef.current.clear();
       const primary =
         getComputedStyle(document.documentElement).getPropertyValue('--primary').trim() || '#2563EB';
-      const darkTheme = isDarkRef.current;
+      const darkTheme = isDarkRef.current || baseModeRef.current !== 'STANDARD';
 
       ensureIcons();
 
@@ -660,6 +796,7 @@ export default function MapView({
         filter: ['has', 'point_count'],
         layout: {
           'text-field': ['get', 'point_count_abbreviated'],
+          'text-font': ['Noto Sans Regular'],
           'text-size': 12,
         },
         paint: { 'text-color': '#ffffff' },
@@ -770,6 +907,7 @@ export default function MapView({
         filter: ['all', ['!', ['has', 'point_count']], ['>', ['get', 'colocatedCount'], 1]],
         layout: {
           'text-field': ['to-string', ['get', 'colocatedCount']],
+          'text-font': ['Noto Sans Regular'],
           'text-size': 12,
         },
         paint: {
@@ -791,6 +929,7 @@ export default function MapView({
         filter: ['all', ['!', ['has', 'point_count']], ['==', ['get', 'colocatedCount'], 1]],
         layout: {
           'text-field': ['get', 'personName'],
+          'text-font': ['Noto Sans Regular'],
           'text-size': [
             'case',
             ['==', ['get', 'isInspected'], true],
@@ -1004,15 +1143,23 @@ export default function MapView({
     };
   }, []);
 
-  // Switch style on theme change (layers re-added via the style.load handler)
+  // Switch style on theme or baseMode change (layers re-added via the style.load handler)
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    const nextStyle = isDark ? DARK_STYLE : LIGHT_STYLE;
-    if (currentStyleRef.current === nextStyle) return;
-    currentStyleRef.current = nextStyle;
+    const nextKey = `${baseMode}:${isDark ? 'dark' : 'light'}`;
+    if (currentStyleKeyRef.current === nextKey) return;
+    currentStyleKeyRef.current = nextKey;
+    const nextStyle =
+      baseMode === 'SATELLITE_HYBRID'
+        ? buildTacticalSatelliteStyleSpec(true)
+        : baseMode === 'SATELLITE_PURE'
+          ? buildTacticalSatelliteStyleSpec(false)
+          : isDark
+            ? DARK_STYLE
+            : LIGHT_STYLE;
     map.setStyle(nextStyle);
-  }, [isDark]);
+  }, [isDark, baseMode]);
 
   // Push marker updates into the source, and load/register any newly
   // visible photo icons (upgrading their markers from dot to photo once
@@ -1127,6 +1274,45 @@ export default function MapView({
   return (
     <div className="absolute inset-0" aria-label={t('title')} role="application">
       <div ref={containerRef} className="h-full w-full" />
+      {/* Floating Satellite / Base Map Switcher */}
+      <div className="absolute bottom-8 right-3 z-20 flex items-center gap-0.5 rounded-lg border border-slate-700/80 bg-slate-900/90 p-1 shadow-xl backdrop-blur-md">
+        <button
+          type="button"
+          onClick={() => setBaseMode('SATELLITE_HYBRID')}
+          className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
+            baseMode === 'SATELLITE_HYBRID'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+          }`}
+          title="Hiển thị ảnh vệ tinh kèm tên đường & địa danh"
+        >
+          🛰️ Vệ tinh + Đường
+        </button>
+        <button
+          type="button"
+          onClick={() => setBaseMode('SATELLITE_PURE')}
+          className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
+            baseMode === 'SATELLITE_PURE'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+          }`}
+          title="Chỉ hiển thị ảnh vệ tinh gốc"
+        >
+          🛰️ Vệ tinh
+        </button>
+        <button
+          type="button"
+          onClick={() => setBaseMode('STANDARD')}
+          className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
+            baseMode === 'STANDARD'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+          }`}
+          title="Hiển thị bản đồ đường phố tiêu chuẩn"
+        >
+          🗺️ Bản đồ
+        </button>
+      </div>
     </div>
   );
 }
