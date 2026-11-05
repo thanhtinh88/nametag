@@ -1,5 +1,8 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Nametag.Application.Common.Interfaces;
@@ -45,14 +48,46 @@ public class ConfigureJwtBearerOptions : IConfigureNamedOptions<JwtBearerOptions
 
         options.Events = new JwtBearerEvents
         {
+            OnTokenValidated = async context =>
+            {
+                var revocationService = context.HttpContext.RequestServices.GetService<ITokenRevocationService>();
+                if (revocationService == null)
+                {
+                    return;
+                }
+
+                var jti = context.Principal?.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+                var sub = context.Principal?.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
+                    ?? context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+                Guid? userId = Guid.TryParse(sub, out var parsedGuid) ? parsedGuid : null;
+
+                DateTime? issuedAt = null;
+                var iatClaim = context.Principal?.FindFirst(JwtRegisteredClaimNames.Iat)?.Value;
+                if (long.TryParse(iatClaim, out var iatEpoch))
+                {
+                    issuedAt = DateTimeOffset.FromUnixTimeSeconds(iatEpoch).UtcDateTime;
+                }
+
+                var isRevoked = await revocationService.IsRevokedAsync(jti, userId, issuedAt, context.HttpContext.RequestAborted);
+                if (isRevoked)
+                {
+                    context.Fail("Token has been revoked");
+                }
+            },
             OnChallenge = context =>
             {
-                context.HandleResponse();
-                context.Response.StatusCode = 401;
-                context.Response.ContentType = "application/json";
-                return context.Response.WriteAsync(JsonSerializer.Serialize(new { error = "Unauthorized" }));
+                if (!context.Response.HasStarted)
+                {
+                    context.HandleResponse();
+                    context.Response.StatusCode = 401;
+                    context.Response.ContentType = "application/json";
+                    return context.Response.WriteAsync(JsonSerializer.Serialize(new { error = "Unauthorized" }));
+                }
+                return Task.CompletedTask;
             }
         };
     }
 }
+
 

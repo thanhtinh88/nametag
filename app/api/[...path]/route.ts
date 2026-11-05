@@ -3,8 +3,8 @@ import {
   BACKEND_INTERNAL_URL,
   COOKIE_ACCESS_TOKEN,
   COOKIE_REFRESH_TOKEN,
-  ACCESS_TOKEN_MAX_AGE,
 } from '@/lib/backend/constants';
+import { attachAuthCookies } from '@/lib/backend/cookies';
 import { logger } from '@/lib/logger';
 
 async function handleProxy(request: NextRequest): Promise<Response> {
@@ -84,16 +84,7 @@ async function handleProxy(request: NextRequest): Promise<Response> {
           });
 
           // Update cookies in response
-          response.headers.append(
-            'Set-Cookie',
-            `${COOKIE_ACCESS_TOKEN}=${newAccessToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${ACCESS_TOKEN_MAX_AGE}${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`
-          );
-          if (newRefreshToken) {
-            response.headers.append(
-              'Set-Cookie',
-              `${COOKIE_REFRESH_TOKEN}=${newRefreshToken}; Path=/api/auth; HttpOnly; SameSite=Strict; Max-Age=${30 * 24 * 3600}${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`
-            );
-          }
+          attachAuthCookies(response.headers, newAccessToken, newRefreshToken);
 
           return response;
         }

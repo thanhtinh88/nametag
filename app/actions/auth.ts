@@ -1,54 +1,41 @@
 'use server';
 
-import { signOut } from '@/lib/auth';
-import { blacklistToken } from '@/lib/token-blacklist';
-import { logger } from '@/lib/logger';
 import { cookies } from 'next/headers';
-import { getToken } from 'next-auth/jwt';
+import { redirect } from 'next/navigation';
+import {
+  BACKEND_INTERNAL_URL,
+  COOKIE_ACCESS_TOKEN,
+  COOKIE_REFRESH_TOKEN,
+} from '@/lib/backend/constants';
+import { logger } from '@/lib/logger';
 
 export async function handleSignOut() {
+  const cookieStore = await cookies();
+  const accessToken = cookieStore.get(COOKIE_ACCESS_TOKEN)?.value;
+  const refreshToken = cookieStore.get(COOKIE_REFRESH_TOKEN)?.value;
+
   try {
-    // Get the JWT token from cookies
-    const cookieStore = await cookies();
-    const secret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET;
-
-    if (!secret) {
-      logger.error('AUTH_SECRET not configured');
-    } else {
-      try {
-        const cookieHeader = cookieStore
-          .getAll()
-          .map(({ name, value }) => `${name}=${value}`)
-          .join('; ');
-        const token = await getToken({
-          req: { headers: { cookie: cookieHeader } } as unknown as Request,
-          secret,
-        });
-
-        if (token?.jti) {
-          const defaultMaxAgeMs = 30 * 24 * 60 * 60 * 1000;
-          const expiresAtMs = typeof token.exp === 'number'
-            ? token.exp * 1000
-            : Date.now() + defaultMaxAgeMs;
-          const expiresAt = new Date(expiresAtMs);
-
-          // Blacklist the token
-          await blacklistToken(token.jti, expiresAt);
-
-          logger.info({
-            userId: token.id,
-            jti: token.jti,
-          }, 'Token blacklisted on logout');
-        }
-      } catch (decodeError) {
-        logger.error({ err: decodeError as Error }, 'Failed to decode and blacklist token');
-        // Continue with logout even if blacklisting fails
-      }
+    const backendUrl = new URL('/api/auth/logout', BACKEND_INTERNAL_URL).toString();
+    const headers: Record<string, string> = {
+      'content-type': 'application/json',
+    };
+    if (accessToken) {
+      headers['authorization'] = `Bearer ${accessToken}`;
     }
-  } catch (error) {
-    logger.error({ err: error as Error }, 'Error during logout');
-    // Continue with logout even if blacklisting fails
+
+    await fetch(backendUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ refreshToken: refreshToken || '' }),
+    }).catch((err) => {
+      logger.warn({ err }, 'Failed to notify .NET backend on server action logout');
+    });
+  } catch (err) {
+    logger.error({ err }, 'Error during logout');
   }
 
-  await signOut({ redirectTo: '/login' });
+  cookieStore.delete(COOKIE_ACCESS_TOKEN);
+  cookieStore.delete(COOKIE_REFRESH_TOKEN);
+
+  redirect('/login');
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession } from '@/components/SessionProvider';
 import type MiniSearch from 'minisearch';
 import { createSearchIndex, searchIndex as performSearch } from '@/lib/search-index';
 import type { SearchDocument, PersonSearchResult } from '@/lib/search-index';

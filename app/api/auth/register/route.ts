@@ -1,159 +1,53 @@
-import { NextResponse } from 'next/server';
-import * as bcrypt from 'bcryptjs';
-import { prisma } from '@/lib/prisma';
-import { generateToken, hashToken } from '@/lib/token-hash';
-import { sendEmail, emailTemplates } from '@/lib/email';
-import { registerSchema, validateRequest } from '@/lib/validations';
-import { checkRateLimit } from '@/lib/rate-limit-redis';
-import { handleApiError, parseRequestBody, normalizeEmail, withLogging } from '@/lib/api-utils';
+import { NextRequest, NextResponse } from 'next/server';
+import { BACKEND_INTERNAL_URL } from '@/lib/backend/constants';
+import { attachAuthCookies } from '@/lib/backend/cookies';
 import { logger } from '@/lib/logger';
-import { createFreeSubscription } from '@/lib/billing';
-import { createPreloadedRelationshipTypes } from '@/lib/relationship-types';
-import { isFeatureEnabled } from '@/lib/features';
-import { getAppUrl } from '@/lib/env';
-import { validateOrigin } from '@/lib/csrf';
 
-const TOKEN_EXPIRY_HOURS = 24;
-
-export const POST = withLogging(async function POST(request: Request) {
-  if (!validateOrigin(request)) {
-    return NextResponse.json({ error: 'Invalid request origin' }, { status: 403 });
-  }
-
-  // Unkeyed (IP-only) check before the body is parsed. There is no email to
-  // key on yet at this point, but a request that never becomes a
-  // well-formed, schema-valid body would otherwise hit no rate limit at
-  // all, since the email-keyed check below only runs after parsing
-  // succeeds. This restores the bound that existed before email keying was
-  // added.
-  const preParseRateLimitResponse = await checkRateLimit(request, 'register');
-  if (preParseRateLimitResponse) {
-    return preParseRateLimitResponse;
-  }
-
+export async function POST(request: NextRequest) {
   try {
-    // Block password registration when password login is disabled
-    if (!isFeatureEnabled('passwordLogin')) {
+    const body = await request.json();
+    const { email, password, name, surname, nickname } = body || {};
+
+    if (!email || !password || !name) {
       return NextResponse.json(
-        { error: 'Password registration is disabled. Use the configured SSO provider.' },
-        { status: 403 }
-      );
-    }
-
-    const body = await parseRequestBody(request);
-    const validation = validateRequest(registerSchema, body);
-
-    if (!validation.success) {
-      return validation.response;
-    }
-
-    const { password, name, surname, nickname } = validation.data;
-
-    // Normalize email to lowercase to prevent case-sensitivity issues
-    const email = normalizeEmail(validation.data.email);
-
-    // Rate limit by email, in a bucket that does NOT include the client IP.
-    // This is a mail-bombing vector: an attacker who rotates the client IP
-    // still shares a bucket with every other request for the same address.
-    // The IP bound comes from the separate unkeyed check above, which every
-    // request passes through first; this one exists purely to bound the
-    // per-address volume that no IP-scoped limit can.
-    const rateLimitResponse = await checkRateLimit(request, 'registerPerEmail', email);
-    if (rateLimitResponse) {
-      return rateLimitResponse;
-    }
-
-    // Check if registration is disabled
-    if (process.env.DISABLE_REGISTRATION === 'true') {
-      const userCount = await prisma.user.count();
-      if (userCount > 0) {
-        return NextResponse.json(
-          { error: 'Registration is currently disabled' },
-          { status: 403 }
-        );
-      }
-    }
-
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
-    });
-
-    if (existingUser) {
-      return NextResponse.json(
-        { error: 'User already exists' },
+        { error: 'Email, password, and name are required' },
         { status: 400 }
       );
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const backendUrl = new URL('/api/auth/register', BACKEND_INTERNAL_URL).toString();
+    const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || '127.0.0.1';
+    const userAgent = request.headers.get('user-agent') || '';
 
-    // Check if email verification is enabled (SaaS mode only)
-    const requireEmailVerification = isFeatureEnabled('emailVerification');
-
-    // Generate verification token only if verification is required
-    const rawToken = requireEmailVerification ? generateToken() : null;
-    const hashedToken = rawToken ? hashToken(rawToken) : null;
-    const verifyExpires = requireEmailVerification
-      ? new Date(Date.now() + TOKEN_EXPIRY_HOURS * 60 * 60 * 1000)
-      : null;
-
-    // Create user - auto-verify in self-hosted mode
-    const user = await prisma.user.create({
-      data: {
-        email,
-        password: hashedPassword,
-        name,
-        surname: surname || null,
-        nickname: nickname || null,
-        emailVerified: !requireEmailVerification, // Auto-verify in self-hosted mode
-        emailVerifyToken: hashedToken,
-        emailVerifyExpires: verifyExpires,
-        emailVerifySentAt: requireEmailVerification ? new Date() : null,
+    const backendResponse = await fetch(backendUrl, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-forwarded-for': clientIp,
+        'user-agent': userAgent,
       },
+      body: JSON.stringify({ email, password, name, surname, nickname }),
     });
 
-    // Create free subscription for new user
-    await createFreeSubscription(user.id);
+    const data = await backendResponse.json().catch(() => null);
 
-    // Create pre-loaded relationship types for new user
-    await createPreloadedRelationshipTypes(prisma, user.id);
-
-    // Send verification email only in SaaS mode (use raw token in URL)
-    if (requireEmailVerification) {
-      const verificationUrl = `${getAppUrl()}/verify-email?token=${rawToken}`;
-      const { subject, html, text } = await emailTemplates.accountVerification(verificationUrl);
-
-      await sendEmail({
-        to: email,
-        subject,
-        html,
-        text,
-        from: 'accounts',
-      });
+    if (!backendResponse.ok) {
+      return NextResponse.json(
+        { error: data?.error || 'Registration failed' },
+        { status: backendResponse.status }
+      );
     }
 
-    logger.info({
-      email,
-      userId: user.id,
-      emailVerificationRequired: requireEmailVerification,
-    }, 'User registered successfully');
+    const { accessToken, refreshToken, user } = data;
 
-    return NextResponse.json(
-      {
-        message: requireEmailVerification
-          ? 'Account created. Please check your email to verify your account.'
-          : 'Account created successfully. You can now log in.',
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-        },
-      },
-      { status: 201 }
-    );
+    const response = NextResponse.json({ user }, { status: 201 });
+    attachAuthCookies(response.headers, accessToken, refreshToken);
+    return response;
   } catch (error) {
-    return handleApiError(error, 'register');
+    logger.error({ error }, 'Error in register route');
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
   }
-});
+}

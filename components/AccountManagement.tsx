@@ -2,7 +2,7 @@
 
 import { useState, useRef, ChangeEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { signOut } from 'next-auth/react';
+import { signOut } from '@/components/SessionProvider';
 import GroupsSelector from './GroupsSelector';
 import { Button } from './ui/Button';
 import { useTranslations } from 'next-intl';

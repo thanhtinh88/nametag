@@ -48,9 +48,6 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.Language)
             .HasMaxLength(10)
             .HasDefaultValue("en");
-
-        builder.HasIndex(u => new { u.Provider, u.ProviderAccountId })
-            .IsUnique();
     }
 }
 

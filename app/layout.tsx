@@ -10,7 +10,7 @@ import ServiceWorkerRegistration from "@/components/ServiceWorkerRegistration";
 import OfflineNavigationGuard from "@/components/OfflineNavigationGuard";
 import NavigationProgressBar from "@/components/NavigationProgressBar";
 import { Toaster } from "sonner";
-import { auth } from "@/lib/auth";
+import { getSession } from "@/lib/backend/session";
 import { getUserLocale } from "@/lib/locale";
 import { THEME_COLORS } from "@/lib/theme-colors";
 import "./globals.css";
@@ -60,7 +60,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const session = await auth();
+  const session = await getSession();
 
   // Get user's theme preference from database
   let initialTheme = DISPLAY_PREFERENCE_DEFAULTS.theme;
@@ -80,7 +80,7 @@ export default async function RootLayout({
     <html lang={locale} className={initialTheme === 'DARK' ? 'dark' : ''}>
       <body className="antialiased">
         <NextIntlClientProvider messages={messages} locale={locale}>
-          <SessionProvider>
+          <SessionProvider initialSession={session}>
             <ThemeProvider initialTheme={initialTheme}>
               <SearchIndexProvider>
                 <Suspense fallback={null}>

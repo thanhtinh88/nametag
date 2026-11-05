@@ -1,37 +1,18 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { handleApiError, withLogging } from '@/lib/api-utils';
-import { isFeatureEnabled } from '@/lib/features';
+import { BACKEND_INTERNAL_URL } from '@/lib/backend/constants';
+import { logger } from '@/lib/logger';
 
-export const GET = withLogging(async function GET() {
+export async function GET() {
   try {
-    // Password registration is not available when password login is disabled
-    if (!isFeatureEnabled('passwordLogin')) {
-      return NextResponse.json({
-        enabled: false,
-        message: 'Password registration is disabled. Use the configured SSO provider.',
-      });
-    }
-
-    // If registration is not disabled, always allow
-    if (process.env.DISABLE_REGISTRATION !== 'true') {
+    const backendUrl = new URL('/api/auth/registration-status', BACKEND_INTERNAL_URL).toString();
+    const res = await fetch(backendUrl, { cache: 'no-store' });
+    if (!res.ok) {
       return NextResponse.json({ enabled: true });
     }
-
-    // If registration is disabled, check if this would be the first user
-    const userCount = await prisma.user.count();
-
-    if (userCount === 0) {
-      // First user can still register
-      return NextResponse.json({ enabled: true });
-    }
-
-    // Registration is disabled and there are already users
-    return NextResponse.json({
-      enabled: false,
-      message: 'Registration is currently disabled',
-    });
+    const data = await res.json();
+    return NextResponse.json(data);
   } catch (error) {
-    return handleApiError(error, 'registration-status');
+    logger.error({ error }, 'Failed to fetch registration status from backend');
+    return NextResponse.json({ enabled: true });
   }
-});
+}

@@ -7,9 +7,6 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { PasswordStrengthIndicator } from '@/components/PasswordStrengthIndicator';
 import { Button } from '@/components/ui/Button';
-import { GoogleSignInButton } from '@/components/GoogleSignInButton';
-import { OidcSignInButton } from '@/components/OidcSignInButton';
-import { fetchAvailableProviders } from '@/lib/client-features';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -25,11 +22,7 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [validationErrors, setValidationErrors] = useState<Array<{ field: string; message: string }>>([]);
-  const [success, setSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [showGoogleAuth, setShowGoogleAuth] = useState(false);
-  const [showCredentials, setShowCredentials] = useState(true);
-  const [oidcProvider, setOidcProvider] = useState<{ enabled: boolean; name: string } | null>(null);
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
   const [checkingStatus, setCheckingStatus] = useState(true);
 
@@ -39,24 +32,14 @@ export default function RegisterPage() {
       try {
         const response = await fetch('/api/auth/registration-status');
         const data = await response.json();
-        setRegistrationEnabled(data.enabled);
+        setRegistrationEnabled(data.enabled !== false);
       } catch {
-        // If check fails, default to enabled to avoid blocking legitimate users
         setRegistrationEnabled(true);
       } finally {
         setCheckingStatus(false);
       }
     }
     checkRegistrationStatus();
-  }, []);
-
-  // Fetch available providers
-  useEffect(() => {
-    fetchAvailableProviders().then((providers) => {
-      setShowGoogleAuth(providers.google);
-      setShowCredentials(providers.credentials);
-      setOidcProvider(providers.oidc);
-    });
   }, []);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -69,7 +52,7 @@ export default function RegisterPage() {
       return;
     }
 
-    // Client-side password validation (matches backend requirements)
+    // Client-side password validation
     if (password.length < 8) {
       setError(tErrors('password.tooShort', { min: '8' }));
       return;
@@ -105,26 +88,16 @@ export default function RegisterPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        // Check if there are detailed validation errors
         if (data.details && Array.isArray(data.details)) {
           setValidationErrors(data.details);
-          setError(data.error || tErrors('server.internalError'));
-        } else {
-          setError(data.error || tErrors('server.internalError'));
         }
+        setError(data.error || tErrors('server.internalError'));
         return;
       }
 
-      // Check if email verification is required based on the response message
-      const requiresVerification = data.message?.toLowerCase().includes('check your email');
-
-      if (requiresVerification) {
-        // Show email verification screen
-        setSuccess(true);
-      } else {
-        // No verification needed, redirect to login
-        router.push('/login');
-      }
+      // Successful registration sets auth cookies automatically
+      router.push('/dashboard');
+      router.refresh();
     } catch {
       setError(tErrors('server.networkError'));
     } finally {
@@ -132,52 +105,16 @@ export default function RegisterPage() {
     }
   }
 
-  // Show loading state while checking registration status
   if (checkingStatus) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background px-4">
-        <div className="max-w-md w-full space-y-8 text-center">
+        <div className="max-w-md w-full text-center">
           <p className="text-muted">{tCommon('loading')}</p>
         </div>
       </div>
     );
   }
 
-  // Show OIDC-only registration when password login is disabled
-  if (!checkingStatus && !showCredentials) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background px-4">
-        <div className="max-w-md w-full space-y-8 text-center">
-          <div className="flex flex-col items-center">
-            <Image
-              src="/logo.svg"
-              alt="Nametag Logo"
-              width={96}
-              height={96}
-              priority
-            />
-            <h2 className="mt-6 text-center text-3xl font-bold text-foreground">
-              {t('createAccountTitle')}
-            </h2>
-          </div>
-          {oidcProvider?.enabled && (
-            <div className="space-y-4">
-              <p className="text-sm text-muted">{t('passwordLoginDisabled')}</p>
-              <OidcSignInButton name={oidcProvider.name} mode="signup" />
-            </div>
-          )}
-          <Link
-            href="/login"
-            className="inline-block text-primary hover:text-primary-dark"
-          >
-            {t('backToLogin')}
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  // Show disabled message if registration is not enabled
   if (!registrationEnabled) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background px-4">
@@ -186,49 +123,25 @@ export default function RegisterPage() {
             <Image
               src="/logo.svg"
               alt="Nametag Logo"
-              width={96}
-              height={96}
+              width={192}
+              height={192}
               priority
             />
-            <h2 className="mt-6 text-center text-3xl font-bold text-foreground">
-              {t('registrationDisabled')}
+            <h2 className="mt-6 text-3xl font-bold text-foreground">
+              {t('registrationDisabledTitle')}
             </h2>
-          </div>
-          <div role="alert" className="bg-warning/10 border border-warning/30 text-warning px-6 py-4 rounded-lg">
-            <p className="text-sm">{t('registrationDisabledMessage')}</p>
-          </div>
-          <Link
-            href="/login"
-            className="inline-block text-primary hover:text-primary-dark"
-          >
-            {t('backToLogin')}
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  if (success) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background px-4">
-        <div className="max-w-md w-full space-y-8 text-center">
-          <div className="bg-green-50 dark:bg-green-900/20 border border-green-400 dark:border-green-800 rounded-lg p-6">
-            <h2 className="text-2xl font-bold text-green-700 dark:text-green-400 mb-4">
-              {t('checkYourEmail')}
-            </h2>
-            <p className="text-green-600 dark:text-green-300 mb-4">
-              {t('verificationEmailSent', { email: email })}
-            </p>
-            <p className="text-sm text-green-600 dark:text-green-300">
-              {t('verificationEmailInstructions')}
+            <p className="mt-2 text-sm text-muted">
+              {t('registrationDisabledMessage')}
             </p>
           </div>
-          <Link
-            href="/login"
-            className="inline-block text-primary hover:text-primary-dark"
-          >
-            {t('goToLogin')}
-          </Link>
+          <div className="pt-4">
+            <Link
+              href="/login"
+              className="font-medium text-primary hover:text-primary-dark"
+            >
+              {t('returnToLogin')}
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -241,8 +154,8 @@ export default function RegisterPage() {
           <Image
             src="/logo.svg"
             alt="Nametag Logo"
-            width={96}
-            height={96}
+            width={192}
+            height={192}
             priority
           />
           <h2 className="mt-6 text-center text-3xl font-bold text-foreground">
@@ -253,43 +166,21 @@ export default function RegisterPage() {
           </p>
         </div>
 
-        {(showGoogleAuth || oidcProvider?.enabled) && (
-          <div className="mt-8 space-y-3">
-            {oidcProvider?.enabled && (
-              <OidcSignInButton name={oidcProvider.name} mode="signup" />
-            )}
-            {showGoogleAuth && (
-              <GoogleSignInButton mode="signup" />
-            )}
-            <div className="relative my-6">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-background text-muted">
-                  {t('orSignUpWithEmail')}
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+        <form className="mt-8 space-y-6 bg-surface border border-border rounded-lg p-8" onSubmit={handleSubmit}>
           {error && (
-            <div role="alert" className="bg-warning/10 border border-warning/30 text-warning px-4 py-3 rounded">
-              <div className="font-medium">{error}</div>
+            <div className="bg-warning/10 border border-warning/30 text-warning px-4 py-3 rounded-lg">
+              <p>{error}</p>
               {validationErrors.length > 0 && (
-                <ul className="mt-2 ml-4 list-disc space-y-1 text-sm">
+                <ul className="mt-2 list-disc list-inside text-sm">
                   {validationErrors.map((err, index) => (
-                    <li key={index}>
-                      <strong>{err.field}:</strong> {err.message}
-                    </li>
+                    <li key={index}>{err.message}</li>
                   ))}
                 </ul>
               )}
             </div>
           )}
-          <div className="rounded-md shadow-sm space-y-4">
+
+          <div className="rounded-md space-y-4">
             <div>
               <label htmlFor="name" className="sr-only">
                 {tCommon('name')}

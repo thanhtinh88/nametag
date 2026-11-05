@@ -1,5 +1,7 @@
+using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using Nametag.Application.Common.Interfaces;
 using Nametag.Application.DTOs.Auth;
 using Nametag.Application.Services;
@@ -12,11 +14,26 @@ public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
     private readonly ICurrentUserService _currentUserService;
+    private readonly ITokenRevocationService _revocationService;
+    private readonly IConfiguration _configuration;
 
-    public AuthController(IAuthService authService, ICurrentUserService currentUserService)
+    public AuthController(
+        IAuthService authService,
+        ICurrentUserService currentUserService,
+        ITokenRevocationService revocationService,
+        IConfiguration configuration)
     {
         _authService = authService;
         _currentUserService = currentUserService;
+        _revocationService = revocationService;
+        _configuration = configuration;
+    }
+
+    [HttpGet("registration-status")]
+    public IActionResult GetRegistrationStatus()
+    {
+        var disableRegistration = _configuration.GetValue<bool>("Auth:DisableRegistration");
+        return Ok(new { enabled = !disableRegistration });
     }
 
     [HttpPost("login")]
@@ -44,6 +61,12 @@ public class AuthController : ControllerBase
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
+        var disableRegistration = _configuration.GetValue<bool>("Auth:DisableRegistration");
+        if (disableRegistration)
+        {
+            return BadRequest(new { error = "Registration is currently disabled" });
+        }
+
         var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
         var userAgent = Request.Headers.UserAgent.ToString();
 
@@ -77,9 +100,18 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("logout")]
-    public async Task<IActionResult> Logout([FromBody] RefreshTokenRequest request)
+    public async Task<IActionResult> Logout([FromBody] RefreshTokenRequest? request)
     {
-        if (!string.IsNullOrWhiteSpace(request.RefreshToken))
+        // 1. Revoke Access Token JTI if authenticated
+        var jti = User.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+        if (!string.IsNullOrWhiteSpace(jti))
+        {
+            // Access tokens expire in at most 15 minutes
+            await _revocationService.RevokeJtiAsync(jti, TimeSpan.FromMinutes(15));
+        }
+
+        // 2. Revoke Refresh Token if provided
+        if (!string.IsNullOrWhiteSpace(request?.RefreshToken))
         {
             await _authService.RevokeTokenAsync(request.RefreshToken);
         }
@@ -106,4 +138,5 @@ public class AuthController : ControllerBase
         return Ok(user);
     }
 }
+
 

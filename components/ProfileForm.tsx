@@ -2,7 +2,7 @@
 
 import { useState, useRef, FormEvent, ChangeEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession, signOut } from 'next-auth/react';
+import { useSession, signOut } from '@/components/SessionProvider';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { Button } from './ui/Button';

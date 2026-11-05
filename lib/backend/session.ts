@@ -12,11 +12,15 @@ export interface UserSession {
   name: string;
   surname?: string | null;
   nickname?: string | null;
+  photo?: string | null;
+  [key: string]: unknown;
 }
 
 export interface SessionResult {
   user: UserSession;
 }
+
+export type Session = SessionResult;
 
 let jwksRemote: ReturnType<typeof jose.createRemoteJWKSet> | null = null;
 
@@ -61,6 +65,7 @@ export async function getSession(): Promise<SessionResult | null> {
         name: (payload.name as string) || '',
         surname: (payload.surname as string) || null,
         nickname: (payload.nickname as string) || null,
+        photo: (payload.photo as string) || null,
       },
     };
   } catch (error) {
@@ -68,4 +73,7 @@ export async function getSession(): Promise<SessionResult | null> {
     return null;
   }
 }
+
+export const auth = getSession;
+
 

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { Session } from 'next-auth';
+import type { Session } from '@/lib/backend/session';
 import { randomUUID } from 'node:crypto';
 import { auth } from './auth';
 import { logger, createModuleLogger } from './logger';

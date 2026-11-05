@@ -22,10 +22,6 @@ public class User : BaseEntity
     public DateTime? LockedUntil { get; set; }
     public string? Photo { get; set; }
 
-    // OAuth
-    public string? Provider { get; set; }
-    public string? ProviderAccountId { get; set; }
-
     // Refresh Tokens
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
 }

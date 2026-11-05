@@ -47,24 +47,29 @@ public class JwtTokenService : IJwtTokenService
     public (string Token, DateTime ExpiresAt, string Jti) GenerateAccessToken(User user)
     {
         var jti = Guid.NewGuid().ToString("N");
-        var expiresAt = DateTime.UtcNow.AddMinutes(_accessTokenLifetimeMinutes);
+        var now = DateTime.UtcNow;
+        var expiresAt = now.AddMinutes(_accessTokenLifetimeMinutes);
+        var iatEpoch = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new(JwtRegisteredClaimNames.Email, user.Email),
             new(JwtRegisteredClaimNames.Jti, jti),
+            new(JwtRegisteredClaimNames.Iat, iatEpoch.ToString(), ClaimValueTypes.Integer64),
             new("name", user.Name),
         };
 
         if (!string.IsNullOrEmpty(user.Surname)) claims.Add(new("surname", user.Surname));
         if (!string.IsNullOrEmpty(user.Nickname)) claims.Add(new("nickname", user.Nickname));
+        if (!string.IsNullOrEmpty(user.Photo)) claims.Add(new("photo", user.Photo));
 
         var credentials = new SigningCredentials(_signingKey, SecurityAlgorithms.RsaSha256);
 
         var tokenDescriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity(claims),
+            IssuedAt = now,
             Expires = expiresAt,
             Issuer = _issuer,
             Audience = _audience,

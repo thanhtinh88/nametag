@@ -20,6 +20,7 @@ public class AuthService : IAuthService
     private readonly IAppDbContext _db;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IJwtTokenService _jwtTokenService;
+    private readonly int _refreshReuseGraceSeconds;
 
     public const int MaxFailedAttempts = 10;
     public static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(30);
@@ -28,10 +29,20 @@ public class AuthService : IAuthService
         IAppDbContext db,
         IPasswordHasher passwordHasher,
         IJwtTokenService jwtTokenService)
+        : this(db, passwordHasher, jwtTokenService, 30)
+    {
+    }
+
+    public AuthService(
+        IAppDbContext db,
+        IPasswordHasher passwordHasher,
+        IJwtTokenService jwtTokenService,
+        int refreshReuseGraceSeconds)
     {
         _db = db;
         _passwordHasher = passwordHasher;
         _jwtTokenService = jwtTokenService;
+        _refreshReuseGraceSeconds = refreshReuseGraceSeconds;
     }
 
     public async Task<AuthResponse?> LoginAsync(LoginRequest request, string? ipAddress, string? userAgent)
@@ -142,9 +153,51 @@ public class AuthService : IAuthService
         if (token == null)
             return null;
 
-        // Reuse detection: if already revoked and used again -> revoke family
+        // Reuse detection with grace period
         if (token.IsRevoked)
         {
+            // Grace window: if rotated within grace seconds and replacement token exists and is active
+            if (token.RevokedAt.HasValue &&
+                DateTime.UtcNow - token.RevokedAt.Value <= TimeSpan.FromSeconds(_refreshReuseGraceSeconds) &&
+                token.ReplacedById.HasValue)
+            {
+                var replacedToken = await _db.RefreshTokens
+                    .Include(t => t.User)
+                    .FirstOrDefaultAsync(t => t.Id == token.ReplacedById.Value);
+
+                if (replacedToken != null && replacedToken.IsActive)
+                {
+                    // Rotate the replacedToken and issue new token pair
+                    replacedToken.RevokedAt = DateTime.UtcNow;
+
+                    var (newAt, expAt, _) = _jwtTokenService.GenerateAccessToken(replacedToken.User);
+                    var (nextPlainRt, nextRtHash) = _jwtTokenService.GenerateRefreshToken();
+
+                    var nextRefreshToken = new RefreshToken
+                    {
+                        UserId = replacedToken.UserId,
+                        TokenHash = nextRtHash,
+                        FamilyId = replacedToken.FamilyId,
+                        ExpiresAt = DateTime.UtcNow.AddDays(30),
+                        CreatedByIp = ipAddress,
+                        UserAgent = userAgent
+                    };
+
+                    replacedToken.ReplacedById = nextRefreshToken.Id;
+                    _db.RefreshTokens.Add(nextRefreshToken);
+                    await _db.SaveChangesAsync();
+
+                    return new AuthResponse
+                    {
+                        AccessToken = newAt,
+                        RefreshToken = nextPlainRt,
+                        ExpiresIn = (int)(expAt - DateTime.UtcNow).TotalSeconds,
+                        User = MapUser(replacedToken.User)
+                    };
+                }
+            }
+
+            // Outside grace period or invalid replacement token -> Revoke entire token family!
             var compromisedFamily = await _db.RefreshTokens
                 .Where(t => t.FamilyId == token.FamilyId && t.RevokedAt == null)
                 .ToListAsync();
@@ -234,4 +287,5 @@ public class AuthService : IAuthService
         };
     }
 }
+
 
