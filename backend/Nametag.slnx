@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Nametag.Api/Nametag.Api.csproj" />
+    <Project Path="src/Nametag.Application/Nametag.Application.csproj" />
+    <Project Path="src/Nametag.Domain/Nametag.Domain.csproj" />
+    <Project Path="src/Nametag.Infrastructure/Nametag.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Nametag.UnitTests/Nametag.UnitTests.csproj" />
+  </Folder>
+</Solution>

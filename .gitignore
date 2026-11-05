@@ -77,3 +77,21 @@ docs/.astro
 # `git add -A` sweeps 47 MB of videos and screenshots into a commit.
 playwright-report
 test-results
+
+# .NET / C# build artifacts
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+*.userprefs
+.vs/
+.idea/
+.ionide/
+*.rsuser
+[Tt]est[Rr]esult*
+*.nupkg
+*.snupkg

@@ -139,3 +139,24 @@ jobs:
 
       - name: Build application
         run: npm run build
+
+  backend-checks:
+    name: Backend .NET Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore backend/Nametag.slnx
+
+      - name: Build
+        run: dotnet build backend/Nametag.slnx --no-restore
+
+      - name: Test
+        run: dotnet test backend/Nametag.slnx --no-restore
