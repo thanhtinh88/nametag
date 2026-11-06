@@ -10,8 +10,8 @@ public static class DependencyInjection
     {
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IUserService, UserService>();
 
         return services;
     }
 }
-

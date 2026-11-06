@@ -16,6 +16,11 @@ public class User : BaseEntity
     public NameDisplayFormat NameDisplayFormat { get; set; } = NameDisplayFormat.FULL;
     public string? GraphMode { get; set; }
     public bool GeocodingEnabled { get; set; } = true;
+    public int DefaultReminderLeadDays { get; set; } = 0;
+    public bool WeeklyDigestEnabled { get; set; } = false;
+    public int WeeklyDigestWeekday { get; set; } = 1;
+    public DateTime? LastWeeklyDigestSent { get; set; }
+    public bool EmailRemindersEnabled { get; set; } = true;
     public string Language { get; set; } = "en";
     public DateTime? LastLoginAt { get; set; }
     public int FailedLoginAttempts { get; set; } = 0;
@@ -25,4 +30,3 @@ public class User : BaseEntity
     // Refresh Tokens
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
 }
-

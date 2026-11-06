@@ -48,6 +48,23 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.Language)
             .HasMaxLength(10)
             .HasDefaultValue("en");
+
+        builder.Property(u => u.GraphMode)
+            .HasMaxLength(50);
+
+        builder.Property(u => u.GeocodingEnabled)
+            .HasDefaultValue(true);
+
+        builder.Property(u => u.DefaultReminderLeadDays)
+            .HasDefaultValue(0);
+
+        builder.Property(u => u.WeeklyDigestEnabled)
+            .HasDefaultValue(false);
+
+        builder.Property(u => u.WeeklyDigestWeekday)
+            .HasDefaultValue(1);
+
+        builder.Property(u => u.EmailRemindersEnabled)
+            .HasDefaultValue(true);
     }
 }
-
