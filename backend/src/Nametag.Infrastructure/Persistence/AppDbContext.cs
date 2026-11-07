@@ -21,6 +21,13 @@ public class AppDbContext : DbContext, IAppDbContext
 
     public DbSet<User> Users => Set<User>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<Person> People => Set<Person>();
+    public DbSet<PersonEmail> PersonEmails => Set<PersonEmail>();
+    public DbSet<PersonPhone> PersonPhones => Set<PersonPhone>();
+    public DbSet<PersonAddress> PersonAddresses => Set<PersonAddress>();
+    public DbSet<PersonSocialProfile> PersonSocialProfiles => Set<PersonSocialProfile>();
+    public DbSet<PersonCustomField> PersonCustomFields => Set<PersonCustomField>();
+    public DbSet<ImportantDate> ImportantDates => Set<ImportantDate>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

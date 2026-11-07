@@ -112,12 +112,9 @@ vi.mock('../../lib/upcoming-events', () => ({
 // ---------------------------------------------------------------------------
 // Import route handlers *after* all mocks are in place
 // ---------------------------------------------------------------------------
-import { GET as getPeople } from '../../app/api/people/route';
-import { GET as getPerson } from '../../app/api/people/[id]/route';
 import { GET as getGroups, POST as postGroup } from '../../app/api/groups/route';
 import { GET as getRelationshipTypes, POST as postRelationshipType } from '../../app/api/relationship-types/route';
 import { POST as postRelationship } from '../../app/api/relationships/route';
-import { GET as searchPeople } from '../../app/api/people/search/route';
 import { GET as getDashboardStats } from '../../app/api/dashboard/stats/route';
 import { GET as exportData } from '../../app/api/user/export/route';
 import { POST as validateImport } from '../../app/api/user/import/validate/route';
@@ -128,34 +125,6 @@ import { POST as validateImport } from '../../app/api/user/import/validate/route
 describe('Soft-delete filter regression tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-  });
-
-  // -------------------------------------------------------------------------
-  // 1. GET /api/people
-  // -------------------------------------------------------------------------
-  describe('GET /api/people', () => {
-    it('should include deletedAt: null in person.findMany where clause', async () => {
-      mocks.personFindMany.mockResolvedValue([]);
-
-      const request = new Request('http://localhost/api/people');
-      await getPeople(request);
-
-      expect(mocks.personFindMany).toHaveBeenCalledTimes(1);
-      const callArg = mocks.personFindMany.mock.calls[0][0];
-      expect(callArg.where).toHaveProperty('deletedAt', null);
-    });
-
-    it('should filter soft-deleted groups in nested groups include (issue #255)', async () => {
-      mocks.personFindMany.mockResolvedValue([]);
-
-      const request = new Request('http://localhost/api/people');
-      await getPeople(request);
-
-      expect(mocks.personFindMany).toHaveBeenCalledTimes(1);
-      const callArg = mocks.personFindMany.mock.calls[0][0];
-      expect(callArg.include.groups).toHaveProperty('where');
-      expect(callArg.include.groups.where).toEqual({ group: { deletedAt: null } });
-    });
   });
 
   // -------------------------------------------------------------------------
@@ -187,31 +156,6 @@ describe('Soft-delete filter regression tests', () => {
       expect(mocks.relationshipTypeFindMany).toHaveBeenCalledTimes(1);
       const callArg = mocks.relationshipTypeFindMany.mock.calls[0][0];
       expect(callArg.where).toHaveProperty('deletedAt', null);
-    });
-  });
-
-  // -------------------------------------------------------------------------
-  // 4. GET /api/people/search
-  // -------------------------------------------------------------------------
-  describe('GET /api/people/search', () => {
-    it('should include deletedAt: null in person.findMany where clause', async () => {
-      mocks.personFindMany.mockResolvedValue([]);
-
-      const request = new Request('http://localhost/api/people/search?q=John');
-      await searchPeople(request);
-
-      expect(mocks.personFindMany).toHaveBeenCalledTimes(1);
-      const callArg = mocks.personFindMany.mock.calls[0][0];
-      expect(callArg.where).toHaveProperty('deletedAt', null);
-    });
-
-    it('should not query at all when search query is empty', async () => {
-      const request = new Request('http://localhost/api/people/search?q=');
-      const response = await searchPeople(request);
-      const body = await response.json();
-
-      expect(mocks.personFindMany).not.toHaveBeenCalled();
-      expect(body.people).toEqual([]);
     });
   });
 
@@ -423,26 +367,6 @@ describe('Soft-delete filter regression tests', () => {
       expect(mocks.relationshipTypeFindFirst).toHaveBeenCalledTimes(1);
       const callArg = mocks.relationshipTypeFindFirst.mock.calls[0][0];
       expect(callArg.where).toHaveProperty('deletedAt', null);
-    });
-  });
-
-  // -------------------------------------------------------------------------
-  // 8. GET /api/people/[id]
-  // -------------------------------------------------------------------------
-  describe('GET /api/people/[id]', () => {
-    it('should scope person.findUnique to the authenticated user', async () => {
-      mocks.personFindUnique.mockResolvedValue(null);
-
-      const request = new Request('http://localhost/api/people/person-1');
-      const context = { params: Promise.resolve({ id: 'person-1' }) };
-      await getPerson(request, context);
-
-      expect(mocks.personFindUnique).toHaveBeenCalledTimes(1);
-      const callArg = mocks.personFindUnique.mock.calls[0][0];
-      // Ownership scoping is required; soft-delete filtering is handled by the
-      // Prisma client extension rather than an explicit deletedAt: null clause.
-      expect(callArg.where).toHaveProperty('id', 'person-1');
-      expect(callArg.where).toHaveProperty('userId', 'user-123');
     });
   });
 

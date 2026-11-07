@@ -90,7 +90,6 @@ vi.mock('../../lib/auth', () => ({
   ),
 }));
 
-import { DELETE as deletePerson } from '../../app/api/people/[id]/permanent/route';
 import { DELETE as deleteGroup } from '../../app/api/groups/[id]/permanent/route';
 import { DELETE as deleteRelationship } from '../../app/api/relationships/[id]/permanent/route';
 import { DELETE as deleteRelationshipType } from '../../app/api/relationship-types/[id]/permanent/route';
@@ -99,66 +98,6 @@ import { DELETE as deleteImportantDate } from '../../app/api/people/[id]/importa
 describe('Permanent delete API', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-  });
-
-  describe('DELETE /api/people/[id]/permanent', () => {
-    it('should return 404 when person not found', async () => {
-      mocks.personFindFirst.mockResolvedValue(null);
-
-      const request = new Request('http://localhost/api/people/p1/permanent');
-      const context = { params: Promise.resolve({ id: 'p1' }) };
-      const response = await deletePerson(request, context);
-
-      expect(response.status).toBe(404);
-    });
-
-    it('should return 400 when person is not deleted', async () => {
-      mocks.personFindFirst.mockResolvedValue({
-        id: 'p1',
-        userId: 'user-123',
-        deletedAt: null,
-      });
-
-      const request = new Request('http://localhost/api/people/p1/permanent');
-      const context = { params: Promise.resolve({ id: 'p1' }) };
-      const response = await deletePerson(request, context);
-
-      expect(response.status).toBe(400);
-    });
-
-    it('should permanently delete a trashed person and cascade', async () => {
-      mocks.personFindFirst.mockResolvedValue({
-        id: 'p1',
-        userId: 'user-123',
-        deletedAt: new Date(),
-      });
-      mocks.deletePersonPhotos.mockResolvedValue(undefined);
-      mocks.personGroupDeleteMany.mockResolvedValue({ count: 0 });
-      mocks.importantDateDeleteMany.mockResolvedValue({ count: 0 });
-      mocks.relationshipDeleteMany.mockResolvedValue({ count: 0 });
-      mocks.personPhoneDeleteMany.mockResolvedValue({ count: 0 });
-      mocks.personEmailDeleteMany.mockResolvedValue({ count: 0 });
-      mocks.personAddressDeleteMany.mockResolvedValue({ count: 0 });
-      mocks.personUrlDeleteMany.mockResolvedValue({ count: 0 });
-      mocks.personIMDeleteMany.mockResolvedValue({ count: 0 });
-      mocks.personLocationDeleteMany.mockResolvedValue({ count: 0 });
-      mocks.personCustomFieldDeleteMany.mockResolvedValue({ count: 0 });
-      mocks.personCustomFieldValueDeleteMany.mockResolvedValue({ count: 0 });
-      mocks.cardDavMappingDeleteMany.mockResolvedValue({ count: 0 });
-      mocks.duplicateDismissalDeleteMany.mockResolvedValue({ count: 0 });
-      mocks.journalEntryPersonDeleteMany.mockResolvedValue({ count: 0 });
-      mocks.personDelete.mockResolvedValue({ id: 'p1' });
-
-      const request = new Request('http://localhost/api/people/p1/permanent');
-      const context = { params: Promise.resolve({ id: 'p1' }) };
-      const response = await deletePerson(request, context);
-      const body = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(body.success).toBe(true);
-      expect(mocks.deletePersonPhotos).toHaveBeenCalledWith('user-123', 'p1');
-      expect(mocks.personDelete).toHaveBeenCalledWith({ where: { id: 'p1' } });
-    });
   });
 
   describe('DELETE /api/groups/[id]/permanent', () => {

@@ -80,3 +80,17 @@ public enum EventStatus
     CANCELLED
 }
 
+public enum ReminderType
+{
+    ONCE,
+    RECURRING
+}
+
+public enum ReminderIntervalUnit
+{
+    DAYS,
+    WEEKS,
+    MONTHS,
+    YEARS
+}
+

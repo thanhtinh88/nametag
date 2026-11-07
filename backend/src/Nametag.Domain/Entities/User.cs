@@ -29,4 +29,7 @@ public class User : BaseEntity
 
     // Refresh Tokens
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
+
+    // People
+    public ICollection<Person> People { get; set; } = new List<Person>();
 }
