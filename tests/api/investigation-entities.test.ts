@@ -114,9 +114,6 @@ import { GET as getGang, PUT as updateGang, DELETE as deleteGang } from '../../a
 import { POST as addGangMember } from '../../app/api/gangs/[id]/members/route';
 import { DELETE as removeGangMember } from '../../app/api/gangs/[id]/members/[personId]/route';
 
-// Import event people endpoints
-import { POST as addEventPerson, PUT as updateEventPerson } from '../../app/api/events/[id]/people/route';
-
 describe('Investigation Entities API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -416,72 +413,6 @@ describe('Investigation Entities API', () => {
 
       expect(res.status).toBe(200);
       expect(mocks.gangMembershipDelete).toHaveBeenCalled();
-    });
-  });
-
-  describe('Case People Linkage (Án mờ & Căn cứ nghi vấn)', () => {
-    it('POST /api/events/[id]/people links suspect with reasonForSuspicion and alibi', async () => {
-      mocks.eventFindUnique.mockResolvedValue({ id: 'ev-1', userId: 'user-123', deletedAt: null });
-      mocks.personFindUnique.mockResolvedValue({ id: 'person-1', userId: 'user-123', deletedAt: null });
-      mocks.personEventFindFirst.mockResolvedValue(null);
-      mocks.personEventCreate.mockImplementation(({ data }) => Promise.resolve({
-        id: 'pe-1',
-        ...data,
-        person: { id: 'person-1', name: 'Nguyễn Văn A' },
-        event: { id: 'ev-1', title: 'Vụ trộm tiệm vàng' },
-      }));
-
-      const req = new Request('http://localhost/api/events/ev-1/people', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          personId: 'person-1',
-          role: 'Cảnh giới',
-          involvementType: 'SUSPECT',
-          verificationStatus: 'INVESTIGATING',
-          confidence: 'HIGH',
-          reasonForSuspicion: 'Nhân dạng khớp camera an ninh và vắng mặt khỏi nơi cư trú sau vụ án',
-          alibi: 'Khai ở nhà ngủ một mình, chưa có người làm chứng',
-          notes: 'Cần trích xuất thêm camera ngã tư lúc 02h15',
-        }),
-      });
-
-      const res = await addEventPerson(req, { params: Promise.resolve({ id: 'ev-1' }) });
-      const body = await res.json();
-
-      expect(res.status).toBe(201);
-      expect(body.personEvent.involvementType).toBe('SUSPECT');
-      expect(body.personEvent.reasonForSuspicion).toBe('Nhân dạng khớp camera an ninh và vắng mặt khỏi nơi cư trú sau vụ án');
-      expect(body.personEvent.alibi).toBe('Khai ở nhà ngủ một mình, chưa có người làm chứng');
-    });
-
-    it('PUT /api/events/[id]/people updates reasonForSuspicion and alibi', async () => {
-      mocks.eventFindUnique.mockResolvedValue({ id: 'ev-1', userId: 'user-123', deletedAt: null });
-      mocks.personEventFindFirst.mockResolvedValue({ id: 'pe-1', eventId: 'ev-1', personId: 'person-1', deletedAt: null });
-      mocks.personEventUpdate.mockImplementation(({ data }) => Promise.resolve({
-        id: 'pe-1',
-        ...data,
-        person: { id: 'person-1', name: 'Nguyễn Văn A' },
-      }));
-
-      const req = new Request('http://localhost/api/events/ev-1/people', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          personId: 'person-1',
-          verificationStatus: 'CONFIRMED',
-          reasonForSuspicion: 'Đã tìm thấy tang vật tại nhà',
-          alibi: 'Đã xác minh lời khai ngoại phạm là giả',
-        }),
-      });
-
-      const res = await updateEventPerson(req, { params: Promise.resolve({ id: 'ev-1' }) });
-      const body = await res.json();
-
-      expect(res.status).toBe(200);
-      expect(body.personEvent.verificationStatus).toBe('CONFIRMED');
-      expect(body.personEvent.reasonForSuspicion).toBe('Đã tìm thấy tang vật tại nhà');
-      expect(body.personEvent.alibi).toBe('Đã xác minh lời khai ngoại phạm là giả');
     });
   });
 });

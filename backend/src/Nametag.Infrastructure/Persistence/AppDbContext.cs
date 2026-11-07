@@ -32,6 +32,15 @@ public class AppDbContext : DbContext, IAppDbContext
     public DbSet<PersonGroup> PersonGroups => Set<PersonGroup>();
     public DbSet<Relationship> Relationships => Set<Relationship>();
     public DbSet<RelationshipType> RelationshipTypes => Set<RelationshipType>();
+    public DbSet<Event> Events => Set<Event>();
+    public DbSet<EventGroup> EventGroups => Set<EventGroup>();
+    public DbSet<EventPerson> EventPersons => Set<EventPerson>();
+    public DbSet<EventLocation> EventLocations => Set<EventLocation>();
+    public DbSet<EventUrl> EventUrls => Set<EventUrl>();
+    public DbSet<EventCustomField> EventCustomFields => Set<EventCustomField>();
+    public DbSet<JournalEntry> JournalEntries => Set<JournalEntry>();
+    public DbSet<JournalEntryPerson> JournalEntryPeople => Set<JournalEntryPerson>();
+    public DbSet<JournalEntryEvent> JournalEntryEvents => Set<JournalEntryEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

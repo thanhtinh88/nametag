@@ -38,4 +38,10 @@ public class User : BaseEntity
 
     // Relationship Types
     public ICollection<RelationshipType> RelationshipTypes { get; set; } = new List<RelationshipType>();
+
+    // Events
+    public ICollection<Event> Events { get; set; } = new List<Event>();
+
+    // Journal Entries
+    public ICollection<JournalEntry> JournalEntries { get; set; } = new List<JournalEntry>();
 }

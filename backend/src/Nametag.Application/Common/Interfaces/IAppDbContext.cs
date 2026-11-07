@@ -18,6 +18,15 @@ public interface IAppDbContext
     DbSet<PersonGroup> PersonGroups { get; }
     DbSet<Relationship> Relationships { get; }
     DbSet<RelationshipType> RelationshipTypes { get; }
+    DbSet<Event> Events { get; }
+    DbSet<EventGroup> EventGroups { get; }
+    DbSet<EventPerson> EventPersons { get; }
+    DbSet<EventLocation> EventLocations { get; }
+    DbSet<EventUrl> EventUrls { get; }
+    DbSet<EventCustomField> EventCustomFields { get; }
+    DbSet<JournalEntry> JournalEntries { get; }
+    DbSet<JournalEntryPerson> JournalEntryPeople { get; }
+    DbSet<JournalEntryEvent> JournalEntryEvents { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

@@ -57,5 +57,7 @@ public class Person : BaseAuditableEntity, ISoftDeletable
     public ICollection<PersonGroup> Groups { get; set; } = new List<PersonGroup>();
     public ICollection<Relationship> Relationships { get; set; } = new List<Relationship>();
     public ICollection<Relationship> RelatedRelationships { get; set; } = new List<Relationship>();
+    public ICollection<EventPerson> Events { get; set; } = new List<EventPerson>();
+    public ICollection<JournalEntryPerson> JournalEntries { get; set; } = new List<JournalEntryPerson>();
 }
 

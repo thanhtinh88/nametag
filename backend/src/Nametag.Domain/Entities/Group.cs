@@ -12,5 +12,6 @@ public class Group : BaseAuditableEntity, ISoftDeletable
     // Navigation
     public User? User { get; set; }
     public ICollection<PersonGroup> People { get; set; } = new List<PersonGroup>();
+    public ICollection<EventGroup> Events { get; set; } = new List<EventGroup>();
 }
 
