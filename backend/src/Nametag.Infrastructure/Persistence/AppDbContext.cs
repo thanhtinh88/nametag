@@ -28,6 +28,10 @@ public class AppDbContext : DbContext, IAppDbContext
     public DbSet<PersonSocialProfile> PersonSocialProfiles => Set<PersonSocialProfile>();
     public DbSet<PersonCustomField> PersonCustomFields => Set<PersonCustomField>();
     public DbSet<ImportantDate> ImportantDates => Set<ImportantDate>();
+    public DbSet<Group> Groups => Set<Group>();
+    public DbSet<PersonGroup> PersonGroups => Set<PersonGroup>();
+    public DbSet<Relationship> Relationships => Set<Relationship>();
+    public DbSet<RelationshipType> RelationshipTypes => Set<RelationshipType>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

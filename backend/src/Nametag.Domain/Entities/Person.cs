@@ -47,11 +47,15 @@ public class Person : BaseAuditableEntity, ISoftDeletable
 
     // Navigation
     public User? User { get; set; }
+    public RelationshipType? RelationshipToUser { get; set; }
     public ICollection<PersonEmail> Emails { get; set; } = new List<PersonEmail>();
     public ICollection<PersonPhone> PhoneNumbers { get; set; } = new List<PersonPhone>();
     public ICollection<PersonAddress> Addresses { get; set; } = new List<PersonAddress>();
     public ICollection<PersonSocialProfile> SocialProfiles { get; set; } = new List<PersonSocialProfile>();
     public ICollection<PersonCustomField> CustomFields { get; set; } = new List<PersonCustomField>();
     public ICollection<ImportantDate> ImportantDates { get; set; } = new List<ImportantDate>();
+    public ICollection<PersonGroup> Groups { get; set; } = new List<PersonGroup>();
+    public ICollection<Relationship> Relationships { get; set; } = new List<Relationship>();
+    public ICollection<Relationship> RelatedRelationships { get; set; } = new List<Relationship>();
 }
 

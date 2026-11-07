@@ -14,6 +14,10 @@ public interface IAppDbContext
     DbSet<PersonSocialProfile> PersonSocialProfiles { get; }
     DbSet<PersonCustomField> PersonCustomFields { get; }
     DbSet<ImportantDate> ImportantDates { get; }
+    DbSet<Group> Groups { get; }
+    DbSet<PersonGroup> PersonGroups { get; }
+    DbSet<Relationship> Relationships { get; }
+    DbSet<RelationshipType> RelationshipTypes { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

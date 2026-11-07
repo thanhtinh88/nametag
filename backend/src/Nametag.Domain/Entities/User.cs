@@ -32,4 +32,10 @@ public class User : BaseEntity
 
     // People
     public ICollection<Person> People { get; set; } = new List<Person>();
+
+    // Groups
+    public ICollection<Group> Groups { get; set; } = new List<Group>();
+
+    // Relationship Types
+    public ICollection<RelationshipType> RelationshipTypes { get; set; } = new List<RelationshipType>();
 }

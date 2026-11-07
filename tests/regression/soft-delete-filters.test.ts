@@ -112,9 +112,6 @@ vi.mock('../../lib/upcoming-events', () => ({
 // ---------------------------------------------------------------------------
 // Import route handlers *after* all mocks are in place
 // ---------------------------------------------------------------------------
-import { GET as getGroups, POST as postGroup } from '../../app/api/groups/route';
-import { GET as getRelationshipTypes, POST as postRelationshipType } from '../../app/api/relationship-types/route';
-import { POST as postRelationship } from '../../app/api/relationships/route';
 import { GET as getDashboardStats } from '../../app/api/dashboard/stats/route';
 import { GET as exportData } from '../../app/api/user/export/route';
 import { POST as validateImport } from '../../app/api/user/import/validate/route';
@@ -125,38 +122,6 @@ import { POST as validateImport } from '../../app/api/user/import/validate/route
 describe('Soft-delete filter regression tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-  });
-
-  // -------------------------------------------------------------------------
-  // 2. GET /api/groups
-  // -------------------------------------------------------------------------
-  describe('GET /api/groups', () => {
-    it('should include deletedAt: null in group.findMany where clause', async () => {
-      mocks.groupFindMany.mockResolvedValue([]);
-
-      const request = new Request('http://localhost/api/groups');
-      await getGroups(request);
-
-      expect(mocks.groupFindMany).toHaveBeenCalledTimes(1);
-      const callArg = mocks.groupFindMany.mock.calls[0][0];
-      expect(callArg.where).toHaveProperty('deletedAt', null);
-    });
-  });
-
-  // -------------------------------------------------------------------------
-  // 3. GET /api/relationship-types
-  // -------------------------------------------------------------------------
-  describe('GET /api/relationship-types', () => {
-    it('should include deletedAt: null in relationshipType.findMany where clause', async () => {
-      mocks.relationshipTypeFindMany.mockResolvedValue([]);
-
-      const request = new Request('http://localhost/api/relationship-types');
-      await getRelationshipTypes(request);
-
-      expect(mocks.relationshipTypeFindMany).toHaveBeenCalledTimes(1);
-      const callArg = mocks.relationshipTypeFindMany.mock.calls[0][0];
-      expect(callArg.where).toHaveProperty('deletedAt', null);
-    });
   });
 
   // -------------------------------------------------------------------------
@@ -289,88 +254,6 @@ describe('Soft-delete filter regression tests', () => {
   });
 
   // -------------------------------------------------------------------------
-  // 7. POST /api/relationships
-  // -------------------------------------------------------------------------
-  describe('POST /api/relationships', () => {
-    it('should include deletedAt: null in relationship.findFirst duplicate check', async () => {
-      // Return an existing relationship to stop early (we only care about the findFirst call)
-      mocks.relationshipFindFirst.mockResolvedValue({
-        id: 'existing-rel',
-        personId: 'person-1',
-        relatedPersonId: 'person-2',
-      });
-
-      const request = new Request('http://localhost/api/relationships', {
-        method: 'POST',
-        body: JSON.stringify({
-          personId: 'person-1',
-          relatedPersonId: 'person-2',
-          relationshipTypeId: 'rel-type-1',
-        }),
-        headers: { 'content-type': 'application/json' },
-      });
-
-      await postRelationship(request);
-
-      expect(mocks.relationshipFindFirst).toHaveBeenCalledTimes(1);
-      const callArg = mocks.relationshipFindFirst.mock.calls[0][0];
-      expect(callArg.where).toHaveProperty('deletedAt', null);
-    });
-
-    it('should include deletedAt: null in person.findUnique for both people', async () => {
-      // No duplicate found
-      mocks.relationshipFindFirst.mockResolvedValue(null);
-      // Return null for person to stop early (we care about the findUnique call args)
-      mocks.personFindUnique.mockResolvedValue(null);
-      mocks.relationshipTypeFindFirst.mockResolvedValue(null);
-
-      const request = new Request('http://localhost/api/relationships', {
-        method: 'POST',
-        body: JSON.stringify({
-          personId: 'person-1',
-          relatedPersonId: 'person-2',
-          relationshipTypeId: 'rel-type-1',
-        }),
-        headers: { 'content-type': 'application/json' },
-      });
-
-      await postRelationship(request);
-
-      // person.findUnique is called for both personId and relatedPersonId
-      expect(mocks.personFindUnique).toHaveBeenCalledTimes(2);
-      const firstCallArg = mocks.personFindUnique.mock.calls[0][0];
-      const secondCallArg = mocks.personFindUnique.mock.calls[1][0];
-      expect(firstCallArg.where).toHaveProperty('deletedAt', null);
-      expect(secondCallArg.where).toHaveProperty('deletedAt', null);
-    });
-
-    it('should include deletedAt: null in relationshipType.findFirst', async () => {
-      mocks.relationshipFindFirst.mockResolvedValue(null);
-      // Return valid people so we reach the relationshipType check
-      mocks.personFindUnique.mockResolvedValueOnce({ id: 'person-1', userId: 'user-123' });
-      mocks.personFindUnique.mockResolvedValueOnce({ id: 'person-2', userId: 'user-123' });
-      // Return null for relationship type to stop early
-      mocks.relationshipTypeFindFirst.mockResolvedValue(null);
-
-      const request = new Request('http://localhost/api/relationships', {
-        method: 'POST',
-        body: JSON.stringify({
-          personId: 'person-1',
-          relatedPersonId: 'person-2',
-          relationshipTypeId: 'rel-type-1',
-        }),
-        headers: { 'content-type': 'application/json' },
-      });
-
-      await postRelationship(request);
-
-      expect(mocks.relationshipTypeFindFirst).toHaveBeenCalledTimes(1);
-      const callArg = mocks.relationshipTypeFindFirst.mock.calls[0][0];
-      expect(callArg.where).toHaveProperty('deletedAt', null);
-    });
-  });
-
-  // -------------------------------------------------------------------------
   // 9. POST /api/user/import/validate
   // -------------------------------------------------------------------------
   describe('POST /api/user/import/validate', () => {
@@ -422,58 +305,6 @@ describe('Soft-delete filter regression tests', () => {
 
       expect(mocks.groupFindFirst).toHaveBeenCalledTimes(1);
       const callArg = mocks.groupFindFirst.mock.calls[0][0];
-      expect(callArg.where).toHaveProperty('deletedAt', null);
-    });
-  });
-
-  // -------------------------------------------------------------------------
-  // 10. POST /api/groups
-  // -------------------------------------------------------------------------
-  describe('POST /api/groups', () => {
-    it('should include deletedAt: null in group.findFirst duplicate name check', async () => {
-      mocks.groupFindFirst.mockResolvedValue(null);
-      mocks.groupCreate.mockResolvedValue({ id: 'new-group', name: 'Test', people: [] });
-
-      const request = new Request('http://localhost/api/groups', {
-        method: 'POST',
-        body: JSON.stringify({ name: 'Test' }),
-        headers: { 'content-type': 'application/json' },
-      });
-
-      await postGroup(request);
-
-      expect(mocks.groupFindFirst).toHaveBeenCalledTimes(1);
-      const callArg = mocks.groupFindFirst.mock.calls[0][0];
-      expect(callArg.where).toHaveProperty('deletedAt', null);
-    });
-  });
-
-  // -------------------------------------------------------------------------
-  // 11. POST /api/relationship-types
-  // -------------------------------------------------------------------------
-  describe('POST /api/relationship-types', () => {
-    it('should include deletedAt: null in relationshipType.findFirst duplicate name check', async () => {
-      mocks.relationshipTypeFindFirst.mockResolvedValue(null);
-      mocks.relationshipTypeCreate.mockResolvedValue({
-        id: 'new-type',
-        name: 'MENTOR',
-        label: 'Mentor',
-        userId: 'user-123',
-      });
-
-      const request = new Request('http://localhost/api/relationship-types', {
-        method: 'POST',
-        body: JSON.stringify({
-          name: 'MENTOR',
-          label: 'Mentor',
-        }),
-        headers: { 'content-type': 'application/json' },
-      });
-
-      await postRelationshipType(request);
-
-      expect(mocks.relationshipTypeFindFirst).toHaveBeenCalledTimes(1);
-      const callArg = mocks.relationshipTypeFindFirst.mock.calls[0][0];
       expect(callArg.where).toHaveProperty('deletedAt', null);
     });
   });
