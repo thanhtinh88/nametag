@@ -44,4 +44,13 @@ public class User : BaseEntity
 
     // Journal Entries
     public ICollection<JournalEntry> JournalEntries { get; set; } = new List<JournalEntry>();
+
+    // Gangs
+    public ICollection<Gang> Gangs { get; set; } = new List<Gang>();
+
+    // Custom Field Templates
+    public ICollection<CustomFieldTemplate> CustomFieldTemplates { get; set; } = new List<CustomFieldTemplate>();
+
+    // Duplicate Dismissals
+    public ICollection<DuplicateDismissal> DuplicateDismissals { get; set; } = new List<DuplicateDismissal>();
 }

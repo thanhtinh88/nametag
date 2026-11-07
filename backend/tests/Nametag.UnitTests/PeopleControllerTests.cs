@@ -186,5 +186,68 @@ public class PeopleControllerTests
                 new() { Id = Guid.NewGuid(), Name = "Search Match" }
             });
         }
+
+        public Task<List<SuspectVehicleDto>> GetVehiclesAsync(Guid userId, Guid personId, CancellationToken ct = default) =>
+            Task.FromResult(new List<SuspectVehicleDto>());
+        public Task<SuspectVehicleDto> CreateVehicleAsync(Guid userId, Guid personId, CreateSuspectVehicleRequest request, CancellationToken ct = default) =>
+            Task.FromResult(new SuspectVehicleDto { Id = Guid.NewGuid(), PersonId = personId });
+        public Task<SuspectVehicleDto> UpdateVehicleAsync(Guid userId, Guid personId, Guid vehicleId, UpdateSuspectVehicleRequest request, CancellationToken ct = default) =>
+            Task.FromResult(new SuspectVehicleDto { Id = vehicleId, PersonId = personId });
+        public Task DeleteVehicleAsync(Guid userId, Guid personId, Guid vehicleId, CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task<List<PhysicalMarkDto>> GetPhysicalMarksAsync(Guid userId, Guid personId, CancellationToken ct = default) =>
+            Task.FromResult(new List<PhysicalMarkDto>());
+        public Task<PhysicalMarkDto> CreatePhysicalMarkAsync(Guid userId, Guid personId, CreatePhysicalMarkRequest request, CancellationToken ct = default) =>
+            Task.FromResult(new PhysicalMarkDto { Id = Guid.NewGuid(), PersonId = personId });
+        public Task<PhysicalMarkDto> UpdatePhysicalMarkAsync(Guid userId, Guid personId, Guid markId, UpdatePhysicalMarkRequest request, CancellationToken ct = default) =>
+            Task.FromResult(new PhysicalMarkDto { Id = markId, PersonId = personId });
+        public Task DeletePhysicalMarkAsync(Guid userId, Guid personId, Guid markId, CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task<List<CriminalRecordDto>> GetCriminalRecordsAsync(Guid userId, Guid personId, CancellationToken ct = default) =>
+            Task.FromResult(new List<CriminalRecordDto>());
+        public Task<CriminalRecordDto> CreateCriminalRecordAsync(Guid userId, Guid personId, CreateCriminalRecordRequest request, CancellationToken ct = default) =>
+            Task.FromResult(new CriminalRecordDto { Id = Guid.NewGuid(), PersonId = personId });
+        public Task<CriminalRecordDto> UpdateCriminalRecordAsync(Guid userId, Guid personId, Guid recordId, UpdateCriminalRecordRequest request, CancellationToken ct = default) =>
+            Task.FromResult(new CriminalRecordDto { Id = recordId, PersonId = personId });
+        public Task DeleteCriminalRecordAsync(Guid userId, Guid personId, Guid recordId, CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task<List<SuspectBankAccountDto>> GetBankAccountsAsync(Guid userId, Guid personId, CancellationToken ct = default) =>
+            Task.FromResult(new List<SuspectBankAccountDto>());
+        public Task<SuspectBankAccountDto> CreateBankAccountAsync(Guid userId, Guid personId, CreateSuspectBankAccountRequest request, CancellationToken ct = default) =>
+            Task.FromResult(new SuspectBankAccountDto { Id = Guid.NewGuid(), PersonId = personId });
+        public Task<SuspectBankAccountDto> UpdateBankAccountAsync(Guid userId, Guid personId, Guid accountId, UpdateSuspectBankAccountRequest request, CancellationToken ct = default) =>
+            Task.FromResult(new SuspectBankAccountDto { Id = accountId, PersonId = personId });
+        public Task DeleteBankAccountAsync(Guid userId, Guid personId, Guid accountId, CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task<List<ImportantDateDto>> GetImportantDatesAsync(Guid userId, Guid personId, CancellationToken ct = default) =>
+            Task.FromResult(new List<ImportantDateDto>());
+        public Task<ImportantDateDto> CreateImportantDateAsync(Guid userId, Guid personId, CreateImportantDateDto request, CancellationToken ct = default) =>
+            Task.FromResult(new ImportantDateDto { Id = Guid.NewGuid(), PersonId = personId });
+        public Task<ImportantDateDto> UpdateImportantDateAsync(Guid userId, Guid personId, Guid dateId, CreateImportantDateDto request, CancellationToken ct = default) =>
+            Task.FromResult(new ImportantDateDto { Id = dateId, PersonId = personId });
+        public Task DeleteImportantDateAsync(Guid userId, Guid personId, Guid dateId, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<ImportantDateDto> RestoreImportantDateAsync(Guid userId, Guid personId, Guid dateId, CancellationToken ct = default) =>
+            Task.FromResult(new ImportantDateDto { Id = dateId, PersonId = personId });
+        public Task PermanentDeleteImportantDateAsync(Guid userId, Guid personId, Guid dateId, CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task<List<DuplicateGroupDto>> GetAllDuplicatesAsync(Guid userId, CancellationToken ct = default) =>
+            Task.FromResult(new List<DuplicateGroupDto>());
+        public Task<List<DuplicateCandidateDto>> GetPersonDuplicatesAsync(Guid userId, Guid personId, CancellationToken ct = default) =>
+            Task.FromResult(new List<DuplicateCandidateDto>());
+        public Task DismissDuplicateAsync(Guid userId, Guid personAId, Guid personBId, CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task<Guid> MergePeopleAsync(Guid userId, MergePeopleRequest request, CancellationToken ct = default) =>
+            Task.FromResult(request.PrimaryId);
+
+        public Task<List<PersonOrphanDto>> GetPersonOrphansAsync(Guid userId, Guid personId, CancellationToken ct = default) =>
+            Task.FromResult(new List<PersonOrphanDto>());
+        public Task<BulkOrphansResponse> GetBulkOrphansAsync(Guid userId, BulkOrphansRequest request, CancellationToken ct = default) =>
+            Task.FromResult(new BulkOrphansResponse());
+
+        public Task<List<PersonSearchIndexItemDto>> GetSearchIndexAsync(Guid userId, CancellationToken ct = default) =>
+            Task.FromResult(new List<PersonSearchIndexItemDto>());
+
+        public Task<PersonGraphResponse> GetPersonGraphAsync(Guid userId, Guid personId, bool hideUserNode, bool includeSolvedCases, bool includeRuledOut, CancellationToken ct = default) =>
+            Task.FromResult(new PersonGraphResponse());
     }
 }

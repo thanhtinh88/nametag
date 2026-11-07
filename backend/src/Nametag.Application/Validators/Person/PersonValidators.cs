@@ -182,3 +182,277 @@ public class UpdatePersonRequestValidator : AbstractValidator<UpdatePersonReques
     }
 }
 
+// ─── Sub-resource Validators ─────────────────────────────────────────────────
+
+public class CreateSuspectVehicleRequestValidator : AbstractValidator<CreateSuspectVehicleRequest>
+{
+    public CreateSuspectVehicleRequestValidator()
+    {
+        RuleFor(x => x.PlateNumber)
+            .NotEmpty().WithMessage("Plate number is required")
+            .MaximumLength(30).WithMessage("Plate number must be less than 30 characters");
+
+        RuleFor(x => x.VehicleType)
+            .NotEmpty().WithMessage("Vehicle type is required")
+            .MaximumLength(50).WithMessage("Vehicle type must be less than 50 characters");
+
+        RuleFor(x => x.BrandModel)
+            .MaximumLength(100).WithMessage("Brand model must be less than 100 characters")
+            .When(x => !string.IsNullOrEmpty(x.BrandModel));
+
+        RuleFor(x => x.Color)
+            .MaximumLength(50).WithMessage("Color must be less than 50 characters")
+            .When(x => !string.IsNullOrEmpty(x.Color));
+
+        RuleFor(x => x.IdentifyingFeatures)
+            .MaximumLength(500).WithMessage("Identifying features must be less than 500 characters")
+            .When(x => !string.IsNullOrEmpty(x.IdentifyingFeatures));
+
+        RuleFor(x => x.RegisteredOwner)
+            .MaximumLength(100).WithMessage("Registered owner must be less than 100 characters")
+            .When(x => !string.IsNullOrEmpty(x.RegisteredOwner));
+    }
+}
+
+public class UpdateSuspectVehicleRequestValidator : AbstractValidator<UpdateSuspectVehicleRequest>
+{
+    public UpdateSuspectVehicleRequestValidator()
+    {
+        RuleFor(x => x.PlateNumber)
+            .NotEmpty().WithMessage("Plate number cannot be empty")
+            .MaximumLength(30).WithMessage("Plate number must be less than 30 characters")
+            .When(x => x.PlateNumber != null);
+
+        RuleFor(x => x.VehicleType)
+            .NotEmpty().WithMessage("Vehicle type cannot be empty")
+            .MaximumLength(50).WithMessage("Vehicle type must be less than 50 characters")
+            .When(x => x.VehicleType != null);
+
+        RuleFor(x => x.BrandModel)
+            .MaximumLength(100).WithMessage("Brand model must be less than 100 characters")
+            .When(x => !string.IsNullOrEmpty(x.BrandModel));
+
+        RuleFor(x => x.Color)
+            .MaximumLength(50).WithMessage("Color must be less than 50 characters")
+            .When(x => !string.IsNullOrEmpty(x.Color));
+
+        RuleFor(x => x.IdentifyingFeatures)
+            .MaximumLength(500).WithMessage("Identifying features must be less than 500 characters")
+            .When(x => !string.IsNullOrEmpty(x.IdentifyingFeatures));
+
+        RuleFor(x => x.RegisteredOwner)
+            .MaximumLength(100).WithMessage("Registered owner must be less than 100 characters")
+            .When(x => !string.IsNullOrEmpty(x.RegisteredOwner));
+    }
+}
+
+public class CreatePhysicalMarkRequestValidator : AbstractValidator<CreatePhysicalMarkRequest>
+{
+    public CreatePhysicalMarkRequestValidator()
+    {
+        RuleFor(x => x.Type)
+            .NotEmpty().WithMessage("Type is required")
+            .MaximumLength(50).WithMessage("Type must be less than 50 characters");
+
+        RuleFor(x => x.Location)
+            .NotEmpty().WithMessage("Location is required")
+            .MaximumLength(100).WithMessage("Location must be less than 100 characters");
+
+        RuleFor(x => x.Description)
+            .NotEmpty().WithMessage("Description is required")
+            .MaximumLength(2000).WithMessage("Description must be less than 2000 characters");
+
+        RuleFor(x => x.PhotoUrl)
+            .MaximumLength(500).WithMessage("Photo URL must be less than 500 characters")
+            .When(x => !string.IsNullOrEmpty(x.PhotoUrl));
+    }
+}
+
+public class UpdatePhysicalMarkRequestValidator : AbstractValidator<UpdatePhysicalMarkRequest>
+{
+    public UpdatePhysicalMarkRequestValidator()
+    {
+        RuleFor(x => x.Type)
+            .NotEmpty().WithMessage("Type cannot be empty")
+            .MaximumLength(50).WithMessage("Type must be less than 50 characters")
+            .When(x => x.Type != null);
+
+        RuleFor(x => x.Location)
+            .NotEmpty().WithMessage("Location cannot be empty")
+            .MaximumLength(100).WithMessage("Location must be less than 100 characters")
+            .When(x => x.Location != null);
+
+        RuleFor(x => x.Description)
+            .NotEmpty().WithMessage("Description cannot be empty")
+            .MaximumLength(2000).WithMessage("Description must be less than 2000 characters")
+            .When(x => x.Description != null);
+
+        RuleFor(x => x.PhotoUrl)
+            .MaximumLength(500).WithMessage("Photo URL must be less than 500 characters")
+            .When(x => !string.IsNullOrEmpty(x.PhotoUrl));
+    }
+}
+
+public class CreateCriminalRecordRequestValidator : AbstractValidator<CreateCriminalRecordRequest>
+{
+    public CreateCriminalRecordRequestValidator()
+    {
+        RuleFor(x => x.Charge)
+            .NotEmpty().WithMessage("Charge is required")
+            .MaximumLength(200).WithMessage("Charge must be less than 200 characters");
+
+        RuleFor(x => x.RecordType)
+            .MaximumLength(50).WithMessage("Record type must be less than 50 characters")
+            .When(x => !string.IsNullOrEmpty(x.RecordType));
+
+        RuleFor(x => x.SentenceDetail)
+            .MaximumLength(500).WithMessage("Sentence detail must be less than 500 characters")
+            .When(x => !string.IsNullOrEmpty(x.SentenceDetail));
+
+        RuleFor(x => x.AdjudicatedBy)
+            .MaximumLength(200).WithMessage("Adjudicated by must be less than 200 characters")
+            .When(x => !string.IsNullOrEmpty(x.AdjudicatedBy));
+
+        RuleFor(x => x.Notes)
+            .MaximumLength(2000).WithMessage("Notes must be less than 2000 characters")
+            .When(x => !string.IsNullOrEmpty(x.Notes));
+    }
+}
+
+public class UpdateCriminalRecordRequestValidator : AbstractValidator<UpdateCriminalRecordRequest>
+{
+    public UpdateCriminalRecordRequestValidator()
+    {
+        RuleFor(x => x.Charge)
+            .NotEmpty().WithMessage("Charge cannot be empty")
+            .MaximumLength(200).WithMessage("Charge must be less than 200 characters")
+            .When(x => x.Charge != null);
+
+        RuleFor(x => x.RecordType)
+            .MaximumLength(50).WithMessage("Record type must be less than 50 characters")
+            .When(x => !string.IsNullOrEmpty(x.RecordType));
+
+        RuleFor(x => x.SentenceDetail)
+            .MaximumLength(500).WithMessage("Sentence detail must be less than 500 characters")
+            .When(x => !string.IsNullOrEmpty(x.SentenceDetail));
+
+        RuleFor(x => x.AdjudicatedBy)
+            .MaximumLength(200).WithMessage("Adjudicated by must be less than 200 characters")
+            .When(x => !string.IsNullOrEmpty(x.AdjudicatedBy));
+
+        RuleFor(x => x.Notes)
+            .MaximumLength(2000).WithMessage("Notes must be less than 2000 characters")
+            .When(x => !string.IsNullOrEmpty(x.Notes));
+    }
+}
+
+public class CreateSuspectBankAccountRequestValidator : AbstractValidator<CreateSuspectBankAccountRequest>
+{
+    public CreateSuspectBankAccountRequestValidator()
+    {
+        RuleFor(x => x.BankName)
+            .NotEmpty().WithMessage("Bank name is required")
+            .MaximumLength(100).WithMessage("Bank name must be less than 100 characters");
+
+        RuleFor(x => x.AccountNumber)
+            .NotEmpty().WithMessage("Account number is required")
+            .MaximumLength(50).WithMessage("Account number must be less than 50 characters");
+
+        RuleFor(x => x.AccountHolder)
+            .MaximumLength(100).WithMessage("Account holder must be less than 100 characters")
+            .When(x => !string.IsNullOrEmpty(x.AccountHolder));
+
+        RuleFor(x => x.AccountType)
+            .MaximumLength(50).WithMessage("Account type must be less than 50 characters")
+            .When(x => !string.IsNullOrEmpty(x.AccountType));
+
+        RuleFor(x => x.Notes)
+            .MaximumLength(2000).WithMessage("Notes must be less than 2000 characters")
+            .When(x => !string.IsNullOrEmpty(x.Notes));
+    }
+}
+
+public class UpdateSuspectBankAccountRequestValidator : AbstractValidator<UpdateSuspectBankAccountRequest>
+{
+    public UpdateSuspectBankAccountRequestValidator()
+    {
+        RuleFor(x => x.BankName)
+            .NotEmpty().WithMessage("Bank name cannot be empty")
+            .MaximumLength(100).WithMessage("Bank name must be less than 100 characters")
+            .When(x => x.BankName != null);
+
+        RuleFor(x => x.AccountNumber)
+            .NotEmpty().WithMessage("Account number cannot be empty")
+            .MaximumLength(50).WithMessage("Account number must be less than 50 characters")
+            .When(x => x.AccountNumber != null);
+
+        RuleFor(x => x.AccountHolder)
+            .MaximumLength(100).WithMessage("Account holder must be less than 100 characters")
+            .When(x => !string.IsNullOrEmpty(x.AccountHolder));
+
+        RuleFor(x => x.AccountType)
+            .MaximumLength(50).WithMessage("Account type must be less than 50 characters")
+            .When(x => !string.IsNullOrEmpty(x.AccountType));
+
+        RuleFor(x => x.Notes)
+            .MaximumLength(2000).WithMessage("Notes must be less than 2000 characters")
+            .When(x => !string.IsNullOrEmpty(x.Notes));
+    }
+}
+
+public class CreateImportantDateDtoValidator : AbstractValidator<CreateImportantDateDto>
+{
+    public CreateImportantDateDtoValidator()
+    {
+        RuleFor(x => x.Title)
+            .NotEmpty().WithMessage("Title is required when no predefined type is selected")
+            .When(x => string.IsNullOrEmpty(x.Type));
+
+        RuleFor(x => x.Title)
+            .MaximumLength(100).WithMessage("Title must be less than 100 characters");
+
+        RuleFor(x => x.ReminderInterval)
+            .InclusiveBetween(1, 99).WithMessage("Reminder interval must be between 1 and 99")
+            .When(x => x.ReminderInterval.HasValue);
+
+        RuleFor(x => x.ReminderLeadDays)
+            .InclusiveBetween(0, 365).WithMessage("Reminder lead days must be between 0 and 365")
+            .When(x => x.ReminderLeadDays.HasValue);
+    }
+}
+
+public class DismissDuplicateRequestValidator : AbstractValidator<DismissDuplicateRequest>
+{
+    public DismissDuplicateRequestValidator()
+    {
+        RuleFor(x => x.PersonAId).NotEmpty().WithMessage("PersonAId is required");
+        RuleFor(x => x.PersonBId).NotEmpty().WithMessage("PersonBId is required");
+        RuleFor(x => x)
+            .Must(x => x.PersonAId != x.PersonBId)
+            .WithMessage("Cannot dismiss a person with themselves");
+    }
+}
+
+public class MergePeopleRequestValidator : AbstractValidator<MergePeopleRequest>
+{
+    public MergePeopleRequestValidator()
+    {
+        RuleFor(x => x.PrimaryId).NotEmpty().WithMessage("PrimaryId is required");
+        RuleFor(x => x.SecondaryId).NotEmpty().WithMessage("SecondaryId is required");
+        RuleFor(x => x)
+            .Must(x => x.PrimaryId != x.SecondaryId)
+            .WithMessage("Cannot merge a person into themselves");
+    }
+}
+
+public class BulkOrphansRequestValidator : AbstractValidator<BulkOrphansRequest>
+{
+    public BulkOrphansRequestValidator()
+    {
+        RuleFor(x => x)
+            .Must(x => x.SelectAll || (x.PersonIds != null && x.PersonIds.Count > 0))
+            .WithMessage("Either selectAll must be true or personIds must not be empty");
+    }
+}
+
+

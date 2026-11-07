@@ -27,6 +27,15 @@ public interface IAppDbContext
     DbSet<JournalEntry> JournalEntries { get; }
     DbSet<JournalEntryPerson> JournalEntryPeople { get; }
     DbSet<JournalEntryEvent> JournalEntryEvents { get; }
+    DbSet<Gang> Gangs { get; }
+    DbSet<GangMembership> GangMemberships { get; }
+    DbSet<CustomFieldTemplate> CustomFieldTemplates { get; }
+    DbSet<PersonCustomFieldValue> PersonCustomFieldValues { get; }
+    DbSet<SuspectVehicle> SuspectVehicles { get; }
+    DbSet<PhysicalMark> PhysicalMarks { get; }
+    DbSet<CriminalRecord> CriminalRecords { get; }
+    DbSet<SuspectBankAccount> SuspectBankAccounts { get; }
+    DbSet<DuplicateDismissal> DuplicateDismissals { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

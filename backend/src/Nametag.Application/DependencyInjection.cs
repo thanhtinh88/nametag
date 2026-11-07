@@ -16,6 +16,8 @@ public static class DependencyInjection
         services.AddScoped<IRelationshipService, RelationshipService>();
         services.AddScoped<IEventService, EventService>();
         services.AddScoped<IJournalService, JournalService>();
+        services.AddScoped<IGangService, GangService>();
+        services.AddScoped<ICustomFieldTemplateService, CustomFieldTemplateService>();
 
         return services;
     }

@@ -41,6 +41,15 @@ public class AppDbContext : DbContext, IAppDbContext
     public DbSet<JournalEntry> JournalEntries => Set<JournalEntry>();
     public DbSet<JournalEntryPerson> JournalEntryPeople => Set<JournalEntryPerson>();
     public DbSet<JournalEntryEvent> JournalEntryEvents => Set<JournalEntryEvent>();
+    public DbSet<Gang> Gangs => Set<Gang>();
+    public DbSet<GangMembership> GangMemberships => Set<GangMembership>();
+    public DbSet<CustomFieldTemplate> CustomFieldTemplates => Set<CustomFieldTemplate>();
+    public DbSet<PersonCustomFieldValue> PersonCustomFieldValues => Set<PersonCustomFieldValue>();
+    public DbSet<SuspectVehicle> SuspectVehicles => Set<SuspectVehicle>();
+    public DbSet<PhysicalMark> PhysicalMarks => Set<PhysicalMark>();
+    public DbSet<CriminalRecord> CriminalRecords => Set<CriminalRecord>();
+    public DbSet<SuspectBankAccount> SuspectBankAccounts => Set<SuspectBankAccount>();
+    public DbSet<DuplicateDismissal> DuplicateDismissals => Set<DuplicateDismissal>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

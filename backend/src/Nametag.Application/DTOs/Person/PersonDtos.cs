@@ -346,3 +346,292 @@ public class DeletePersonRequest
     public bool DeleteFromCardDav { get; set; } = false;
 }
 
+// ─── Sub-resource: Suspect Vehicles ──────────────────────────────────────────
+
+public class SuspectVehicleDto
+{
+    public Guid Id { get; set; }
+    public Guid PersonId { get; set; }
+    public string PlateNumber { get; set; } = string.Empty;
+    public string VehicleType { get; set; } = string.Empty;
+    public string? BrandModel { get; set; }
+    public string? Color { get; set; }
+    public string? IdentifyingFeatures { get; set; }
+    public string? RegisteredOwner { get; set; }
+    public bool IsSuspicious { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
+public class CreateSuspectVehicleRequest
+{
+    public string PlateNumber { get; set; } = string.Empty;
+    public string VehicleType { get; set; } = string.Empty;
+    public string? BrandModel { get; set; }
+    public string? Color { get; set; }
+    public string? IdentifyingFeatures { get; set; }
+    public string? RegisteredOwner { get; set; }
+    public bool? IsSuspicious { get; set; }
+}
+
+public class UpdateSuspectVehicleRequest
+{
+    public string? PlateNumber { get; set; }
+    public string? VehicleType { get; set; }
+    public string? BrandModel { get; set; }
+    public string? Color { get; set; }
+    public string? IdentifyingFeatures { get; set; }
+    public string? RegisteredOwner { get; set; }
+    public bool? IsSuspicious { get; set; }
+}
+
+// ─── Sub-resource: Physical Marks ─────────────────────────────────────────────
+
+public class PhysicalMarkDto
+{
+    public Guid Id { get; set; }
+    public Guid PersonId { get; set; }
+    public string Type { get; set; } = string.Empty;
+    public string Location { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string? PhotoUrl { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
+public class CreatePhysicalMarkRequest
+{
+    public string Type { get; set; } = string.Empty;
+    public string Location { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string? PhotoUrl { get; set; }
+}
+
+public class UpdatePhysicalMarkRequest
+{
+    public string? Type { get; set; }
+    public string? Location { get; set; }
+    public string? Description { get; set; }
+    public string? PhotoUrl { get; set; }
+}
+
+// ─── Sub-resource: Criminal Records ───────────────────────────────────────────
+
+public class CriminalRecordDto
+{
+    public Guid Id { get; set; }
+    public Guid PersonId { get; set; }
+    public string Charge { get; set; } = string.Empty;
+    public string RecordType { get; set; } = "CONVICTION";
+    public string? SentenceDetail { get; set; }
+    public string? AdjudicatedBy { get; set; }
+    public DateTime? IncidentDate { get; set; }
+    public DateTime? VerdictDate { get; set; }
+    public bool IsPardoned { get; set; }
+    public string? Notes { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
+public class CreateCriminalRecordRequest
+{
+    public string Charge { get; set; } = string.Empty;
+    public string? RecordType { get; set; } = "CONVICTION";
+    public string? SentenceDetail { get; set; }
+    public string? AdjudicatedBy { get; set; }
+    public DateTime? IncidentDate { get; set; }
+    public DateTime? VerdictDate { get; set; }
+    public bool? IsPardoned { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class UpdateCriminalRecordRequest
+{
+    public string? Charge { get; set; }
+    public string? RecordType { get; set; }
+    public string? SentenceDetail { get; set; }
+    public string? AdjudicatedBy { get; set; }
+    public DateTime? IncidentDate { get; set; }
+    public DateTime? VerdictDate { get; set; }
+    public bool? IsPardoned { get; set; }
+    public string? Notes { get; set; }
+}
+
+// ─── Sub-resource: Bank Accounts ──────────────────────────────────────────────
+
+public class SuspectBankAccountDto
+{
+    public Guid Id { get; set; }
+    public Guid PersonId { get; set; }
+    public string BankName { get; set; } = string.Empty;
+    public string AccountNumber { get; set; } = string.Empty;
+    public string? AccountHolder { get; set; }
+    public string AccountType { get; set; } = "OWNER";
+    public bool IsPrimary { get; set; }
+    public string? Notes { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
+public class CreateSuspectBankAccountRequest
+{
+    public string BankName { get; set; } = string.Empty;
+    public string AccountNumber { get; set; } = string.Empty;
+    public string? AccountHolder { get; set; }
+    public string? AccountType { get; set; } = "OWNER";
+    public bool? IsPrimary { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class UpdateSuspectBankAccountRequest
+{
+    public string? BankName { get; set; }
+    public string? AccountNumber { get; set; }
+    public string? AccountHolder { get; set; }
+    public string? AccountType { get; set; }
+    public bool? IsPrimary { get; set; }
+    public string? Notes { get; set; }
+}
+
+// ─── Investigation: Duplicates ────────────────────────────────────────────────
+
+public class DismissDuplicateRequest
+{
+    public Guid PersonAId { get; set; }
+    public Guid PersonBId { get; set; }
+}
+
+public class DuplicateCandidateDto
+{
+    public Guid PersonId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Surname { get; set; }
+    public double Similarity { get; set; }
+}
+
+public class DuplicatePersonItemDto
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Surname { get; set; }
+}
+
+public class DuplicateGroupDto
+{
+    public List<DuplicatePersonItemDto> People { get; set; } = new();
+    public double Similarity { get; set; }
+}
+
+// ─── Investigation: Merge ─────────────────────────────────────────────────────
+
+public class MergeOverridesDto
+{
+    public string? Name { get; set; }
+    public string? Surname { get; set; }
+    public string? MiddleName { get; set; }
+    public string? SecondLastName { get; set; }
+    public string? Nickname { get; set; }
+    public string? DisplayNameOverride { get; set; }
+    public string? Prefix { get; set; }
+    public string? Suffix { get; set; }
+    public string? Organization { get; set; }
+    public string? JobTitle { get; set; }
+    public string? Gender { get; set; }
+    public string? Photo { get; set; }
+    public string? Notes { get; set; }
+    public DateTime? Anniversary { get; set; }
+    public DateTime? LastContact { get; set; }
+    public Guid? RelationshipToUserId { get; set; }
+}
+
+public class MergePeopleRequest
+{
+    public Guid PrimaryId { get; set; }
+    public Guid SecondaryId { get; set; }
+    public MergeOverridesDto? FieldOverrides { get; set; }
+}
+
+// ─── Investigation: Orphans ───────────────────────────────────────────────────
+
+public class PersonOrphanDto
+{
+    public Guid Id { get; set; }
+    public string FullName { get; set; } = string.Empty;
+}
+
+public class BulkOrphansRequest
+{
+    public List<Guid>? PersonIds { get; set; }
+    public bool SelectAll { get; set; } = false;
+}
+
+public class BulkOrphansResponse
+{
+    public List<PersonOrphanDto> Orphans { get; set; } = new();
+    public bool HasCardDavSync { get; set; } = false;
+}
+
+// ─── Investigation: Search Index ──────────────────────────────────────────────
+
+public class PersonSearchIndexItemDto
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Surname { get; set; }
+    public string? MiddleName { get; set; }
+    public string? SecondLastName { get; set; }
+    public string? Nickname { get; set; }
+    public string? DisplayNameOverride { get; set; }
+    public string? Organization { get; set; }
+    public string? JobTitle { get; set; }
+    public string? Notes { get; set; }
+    public string? Photo { get; set; }
+    public string? CitizenId { get; set; }
+    public string? ModusOperandi { get; set; }
+    public string Vehicles { get; set; } = string.Empty;
+    public string PhysicalMarks { get; set; } = string.Empty;
+    public string CriminalRecords { get; set; } = string.Empty;
+    public string Gangs { get; set; } = string.Empty;
+    public string BankAccounts { get; set; } = string.Empty;
+    public string Phones { get; set; } = string.Empty;
+    public string Emails { get; set; } = string.Empty;
+    public string Addresses { get; set; } = string.Empty;
+    public string Urls { get; set; } = string.Empty;
+    public string ImHandles { get; set; } = string.Empty;
+    public string Groups { get; set; } = string.Empty;
+    public string CustomFields { get; set; } = string.Empty;
+}
+
+// ─── Investigation: Graph ─────────────────────────────────────────────────────
+
+public class GraphNodeDto
+{
+    public string Id { get; set; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
+    public List<Guid> Groups { get; set; } = new();
+    public List<string> Colors { get; set; } = new();
+    public bool IsCenter { get; set; }
+    public string? Photo { get; set; }
+    public string? NodeType { get; set; }
+    public string? EventStatus { get; set; }
+}
+
+public class GraphEdgeDto
+{
+    public string Source { get; set; } = string.Empty;
+    public string Target { get; set; } = string.Empty;
+    public string Type { get; set; } = string.Empty;
+    public string Color { get; set; } = string.Empty;
+    public string? LineStyle { get; set; }
+    public string? VerificationStatus { get; set; }
+    public string? InvolvementType { get; set; }
+    public string SourceLabel { get; set; } = string.Empty;
+    public string TargetLabel { get; set; } = string.Empty;
+}
+
+public class PersonGraphResponse
+{
+    public List<GraphNodeDto> Nodes { get; set; } = new();
+    public List<GraphEdgeDto> Edges { get; set; } = new();
+}
+
