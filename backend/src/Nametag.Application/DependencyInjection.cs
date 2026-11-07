@@ -18,6 +18,11 @@ public static class DependencyInjection
         services.AddScoped<IJournalService, JournalService>();
         services.AddScoped<IGangService, GangService>();
         services.AddScoped<ICustomFieldTemplateService, CustomFieldTemplateService>();
+        services.AddScoped<IEvidenceMapService, EvidenceMapService>();
+        services.AddScoped<IDashboardService, DashboardService>();
+        services.AddScoped<IMapService, MapService>();
+        services.AddScoped<IDeletedService, DeletedService>();
+        services.AddScoped<IUserExportImportService, UserExportImportService>();
 
         return services;
     }

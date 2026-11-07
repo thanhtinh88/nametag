@@ -32,5 +32,8 @@ public class Event : BaseAuditableEntity, ISoftDeletable
     public ICollection<EventUrl> Urls { get; set; } = new List<EventUrl>();
     public ICollection<EventCustomField> CustomFields { get; set; } = new List<EventCustomField>();
     public ICollection<JournalEntryEvent> JournalEntries { get; set; } = new List<JournalEntryEvent>();
+    public ICollection<EventMapMarker> Markers { get; set; } = new List<EventMapMarker>();
+    public ICollection<EventMapRoute> Routes { get; set; } = new List<EventMapRoute>();
+    public ICollection<EventMapDrawing> Drawings { get; set; } = new List<EventMapDrawing>();
 }
 

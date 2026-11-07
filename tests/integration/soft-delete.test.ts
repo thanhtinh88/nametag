@@ -207,7 +207,6 @@ vi.mock('../../lib/logger', () => ({
 }));
 
 // Import routes after mocking
-import { GET as listDeleted } from '../../app/api/deleted/route';
 import { GET as purgeDeleted } from '../../app/api/cron/purge-deleted/route';
 
 describe('Soft Delete Integration', () => {
@@ -218,47 +217,6 @@ describe('Soft Delete Integration', () => {
     // Setup cronJobLog mocks
     mocks.cronJobLogCreate.mockResolvedValue({ id: 'cron-1' });
     mocks.cronJobLogUpdate.mockResolvedValue({ id: 'cron-1' });
-  });
-
-  describe('List Deleted Items', () => {
-    it('should return deleted people', async () => {
-      const deletedPeople = [
-        { id: 'person-1', name: 'John', surname: 'Doe', deletedAt: new Date() },
-        { id: 'person-2', name: 'Jane', surname: 'Smith', deletedAt: new Date() },
-      ];
-
-      mocks.personFindMany.mockResolvedValue(deletedPeople);
-
-      const request = new Request('http://localhost/api/deleted?type=people');
-      const response = await listDeleted(request);
-      const body = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(body.deleted).toHaveLength(2);
-      expect(body.retentionDays).toBe(30);
-    });
-
-    it('should return deleted groups', async () => {
-      mocks.groupFindMany.mockResolvedValue([
-        { id: 'group-1', name: 'Friends', deletedAt: new Date() },
-      ]);
-
-      const request = new Request('http://localhost/api/deleted?type=groups');
-      const response = await listDeleted(request);
-      const body = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(body.deleted).toHaveLength(1);
-    });
-
-    it('should return error for invalid type', async () => {
-      const request = new Request('http://localhost/api/deleted?type=invalid');
-      const response = await listDeleted(request);
-      const body = await response.json();
-
-      expect(response.status).toBe(400);
-      expect(body.error).toContain('Invalid type');
-    });
   });
 
   describe('Purge Deleted Records', () => {

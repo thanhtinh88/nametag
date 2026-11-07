@@ -51,6 +51,7 @@ public class Person : BaseAuditableEntity, ISoftDeletable
     public ICollection<PersonEmail> Emails { get; set; } = new List<PersonEmail>();
     public ICollection<PersonPhone> PhoneNumbers { get; set; } = new List<PersonPhone>();
     public ICollection<PersonAddress> Addresses { get; set; } = new List<PersonAddress>();
+    public ICollection<PersonLocation> Locations { get; set; } = new List<PersonLocation>();
     public ICollection<PersonSocialProfile> SocialProfiles { get; set; } = new List<PersonSocialProfile>();
     public ICollection<PersonCustomField> CustomFields { get; set; } = new List<PersonCustomField>();
     public ICollection<ImportantDate> ImportantDates { get; set; } = new List<ImportantDate>();

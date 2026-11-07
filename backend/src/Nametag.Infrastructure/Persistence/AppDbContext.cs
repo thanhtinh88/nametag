@@ -50,6 +50,10 @@ public class AppDbContext : DbContext, IAppDbContext
     public DbSet<CriminalRecord> CriminalRecords => Set<CriminalRecord>();
     public DbSet<SuspectBankAccount> SuspectBankAccounts => Set<SuspectBankAccount>();
     public DbSet<DuplicateDismissal> DuplicateDismissals => Set<DuplicateDismissal>();
+    public DbSet<EventMapMarker> EventMapMarkers => Set<EventMapMarker>();
+    public DbSet<EventMapRoute> EventMapRoutes => Set<EventMapRoute>();
+    public DbSet<EventMapDrawing> EventMapDrawings => Set<EventMapDrawing>();
+    public DbSet<PersonLocation> PersonLocations => Set<PersonLocation>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

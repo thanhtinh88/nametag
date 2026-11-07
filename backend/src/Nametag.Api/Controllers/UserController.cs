@@ -13,11 +13,16 @@ namespace Nametag.Api.Controllers;
 public class UserController : ControllerBase
 {
     private readonly IUserService _userService;
+    private readonly IUserExportImportService _exportImportService;
     private readonly ICurrentUserService _currentUserService;
 
-    public UserController(IUserService userService, ICurrentUserService currentUserService)
+    public UserController(
+        IUserService userService,
+        IUserExportImportService exportImportService,
+        ICurrentUserService currentUserService)
     {
         _userService = userService;
+        _exportImportService = exportImportService;
         _currentUserService = currentUserService;
     }
 
@@ -129,6 +134,27 @@ public class UserController : ControllerBase
     {
         await _userService.DeleteAccountAsync(GetUserId(), request);
         return Ok(new { message = "Account deleted successfully", success = true });
+    }
+
+    [HttpGet("export")]
+    public async Task<IActionResult> Export([FromQuery] string? groupIds)
+    {
+        var result = await _exportImportService.ExportUserDataAsync(GetUserId(), groupIds);
+        return Ok(result);
+    }
+
+    [HttpPost("import/validate")]
+    public async Task<IActionResult> ValidateImport([FromBody] ImportDataRequest request)
+    {
+        var result = await _exportImportService.ValidateImportDataAsync(GetUserId(), request);
+        return Ok(result);
+    }
+
+    [HttpPost("import")]
+    public async Task<IActionResult> Import([FromBody] ImportDataRequest request)
+    {
+        var result = await _exportImportService.ImportUserDataAsync(GetUserId(), request);
+        return Ok(result);
     }
 }
 

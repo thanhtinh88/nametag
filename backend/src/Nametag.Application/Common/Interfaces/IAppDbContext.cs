@@ -36,6 +36,10 @@ public interface IAppDbContext
     DbSet<CriminalRecord> CriminalRecords { get; }
     DbSet<SuspectBankAccount> SuspectBankAccounts { get; }
     DbSet<DuplicateDismissal> DuplicateDismissals { get; }
+    DbSet<EventMapMarker> EventMapMarkers { get; }
+    DbSet<EventMapRoute> EventMapRoutes { get; }
+    DbSet<EventMapDrawing> EventMapDrawings { get; }
+    DbSet<PersonLocation> PersonLocations { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

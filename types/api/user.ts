@@ -156,3 +156,66 @@ export interface DeleteAccountResponse {
   success: boolean;
 }
 
+export interface UserExportData {
+  version: string;
+  exportDate: string;
+  user: {
+    email?: string | null;
+    name?: string | null;
+    theme?: string | null;
+    dateFormat?: string | null;
+    accountCreated?: string | null;
+  };
+  groups: Array<{
+    id: string;
+    name: string;
+    description?: string | null;
+    color?: string | null;
+  }>;
+  people: Array<Record<string, unknown>>;
+  relationshipTypes: Array<{
+    id: string;
+    name: string;
+    label: string;
+    color?: string | null;
+    inverseId?: string | null;
+  }>;
+  journalEntries: Array<{
+    id: string;
+    title: string;
+    date: string;
+    body?: string | null;
+    people: string[];
+    peopleIds: string[];
+  }>;
+  customFieldTemplates: Array<{
+    name: string;
+    slug: string;
+    type: string;
+    options: string[];
+    order: number;
+  }>;
+  notificationEndpoints?: unknown[];
+  pushSubscriptions?: unknown[];
+}
+
+export interface ImportValidateResponse {
+  valid: boolean;
+  newPeopleCount: number;
+  newGroupsCount: number;
+  journalEntries: number;
+  currentPeople?: number;
+  currentGroups?: number;
+}
+
+export interface ImportResponse {
+  success: boolean;
+  imported: {
+    groups: number;
+    people: number;
+    relationshipTypes: number;
+    journalEntries: number;
+    customFieldTemplates: number;
+  };
+}
+
