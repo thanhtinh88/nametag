@@ -27,8 +27,11 @@ public class GlobalExceptionHandler : IExceptionHandler
             BadHttpRequestException badHttpEx => (StatusCodes.Status400BadRequest, badHttpEx.Message),
             NotFoundException notFoundEx => (StatusCodes.Status404NotFound, notFoundEx.Message),
             ForbiddenException forbiddenEx => (StatusCodes.Status403Forbidden, forbiddenEx.Message),
+            PayloadTooLargeException payloadEx => (StatusCodes.Status413PayloadTooLarge, payloadEx.Message),
             UnauthorizedException unauthEx => (StatusCodes.Status401Unauthorized, unauthEx.Message),
             UnauthorizedAccessException unauthAccessEx => (StatusCodes.Status401Unauthorized, unauthAccessEx.Message),
+            ImmichNotConfiguredException notConfEx => (StatusCodes.Status409Conflict, notConfEx.Message),
+            ImmichException immichEx => (immichEx.StatusCode, immichEx.Message),
             ConflictException conflictEx => (StatusCodes.Status409Conflict, conflictEx.Message),
             InvalidOperationException invOpEx when invOpEx.Message == "ACCOUNT_LOCKED" => (
                 StatusCodes.Status423Locked,

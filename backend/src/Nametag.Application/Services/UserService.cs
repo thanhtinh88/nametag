@@ -12,15 +12,18 @@ public class UserService : IUserService
     private readonly IAppDbContext _context;
     private readonly IPasswordHasher _passwordHasher;
     private readonly ITokenRevocationService _revocationService;
+    private readonly IPhotoStorageService _photoStorageService;
 
     public UserService(
         IAppDbContext context,
         IPasswordHasher passwordHasher,
-        ITokenRevocationService revocationService)
+        ITokenRevocationService revocationService,
+        IPhotoStorageService photoStorageService)
     {
         _context = context;
         _passwordHasher = passwordHasher;
         _revocationService = revocationService;
+        _photoStorageService = photoStorageService;
     }
 
     public async Task<UserProfileDto> GetProfileAsync(Guid userId)
@@ -250,6 +253,27 @@ public class UserService : IUserService
 
         // Revoke user token immediately
         await _revocationService.RevokeUserTokensAsync(userId);
+    }
+
+    public async Task<string> UploadPhotoAsync(Guid userId, Stream stream, CancellationToken cancellationToken = default)
+    {
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
+            ?? throw new NotFoundException("User not found");
+
+        var filename = await _photoStorageService.SaveUserPhotoAsync(userId, stream, cancellationToken);
+        user.Photo = filename;
+        await _context.SaveChangesAsync(cancellationToken);
+        return filename;
+    }
+
+    public async Task DeletePhotoAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
+            ?? throw new NotFoundException("User not found");
+
+        await _photoStorageService.DeleteUserPhotoAsync(userId, cancellationToken);
+        user.Photo = null;
+        await _context.SaveChangesAsync(cancellationToken);
     }
 
     private static UserProfileDto MapToDto(User user)

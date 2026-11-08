@@ -40,6 +40,9 @@ public interface IAppDbContext
     DbSet<EventMapRoute> EventMapRoutes { get; }
     DbSet<EventMapDrawing> EventMapDrawings { get; }
     DbSet<PersonLocation> PersonLocations { get; }
+    DbSet<ImmichConnection> ImmichConnections { get; }
+    DbSet<CronJobLog> CronJobLogs { get; }
+    DbSet<GeocodeCache> GeocodeCaches { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

@@ -24,6 +24,7 @@ public class EventsControllerTests
         _controller = new EventsController(
             _fakeEventService,
             _fakeCurrentUserService,
+            null!,
             new CreateEventRequestValidator(),
             new UpdateEventRequestValidator(),
             new AddEventPersonRequestValidator(),

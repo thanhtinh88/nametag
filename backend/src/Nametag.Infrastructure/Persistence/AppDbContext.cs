@@ -54,6 +54,9 @@ public class AppDbContext : DbContext, IAppDbContext
     public DbSet<EventMapRoute> EventMapRoutes => Set<EventMapRoute>();
     public DbSet<EventMapDrawing> EventMapDrawings => Set<EventMapDrawing>();
     public DbSet<PersonLocation> PersonLocations => Set<PersonLocation>();
+    public DbSet<ImmichConnection> ImmichConnections => Set<ImmichConnection>();
+    public DbSet<CronJobLog> CronJobLogs => Set<CronJobLog>();
+    public DbSet<GeocodeCache> GeocodeCaches => Set<GeocodeCache>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

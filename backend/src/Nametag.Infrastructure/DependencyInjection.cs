@@ -24,8 +24,11 @@ public static class DependencyInjection
 
         services.AddSingleton<IPasswordHasher, BCryptPasswordHasher>();
         services.AddSingleton<IJwtTokenService, JwtTokenService>();
+        services.AddSingleton<ISecretEncryptionService, SecretEncryptionService>();
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
+        services.AddScoped<IPhotoStorageService, PhotoStorageService>();
+        services.AddScoped<Application.Services.IGeocodeQueueService, Services.GeocodeQueueService>();
 
         // Redis configuration for Token Revocation
         var redisConnectionString = configuration.GetConnectionString("Redis")
@@ -52,6 +55,12 @@ public static class DependencyInjection
         else
         {
             services.AddSingleton<ITokenRevocationService, NoopTokenRevocationService>();
+        }
+
+        if (configuration.GetValue<bool>("ENABLE_BACKGROUND_CRON", false))
+        {
+            services.AddHostedService<BackgroundServices.PurgeDeletedBackgroundService>();
+            services.AddHostedService<BackgroundServices.GeocodeBackgroundService>();
         }
 
         return services;

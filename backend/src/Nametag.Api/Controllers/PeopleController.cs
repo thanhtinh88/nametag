@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nametag.Application.Common.Exceptions;
 using Nametag.Application.Common.Interfaces;
 using Nametag.Application.DTOs.Person;
+using Nametag.Application.DTOs.Immich;
 using Nametag.Application.Services;
 
 namespace Nametag.Api.Controllers;
@@ -15,11 +16,17 @@ public class PeopleController : ControllerBase
 {
     private readonly IPersonService _personService;
     private readonly ICurrentUserService _currentUserService;
+    private readonly IImmichService _immichService;
 
     public PeopleController(IPersonService personService, ICurrentUserService currentUserService)
+    public PeopleController(
+        IPersonService personService,
+        ICurrentUserService currentUserService,
+        IImmichService immichService)
     {
         _personService = personService;
         _currentUserService = currentUserService;
+        _immichService = immichService;
     }
 
     private Guid GetUserId()
@@ -112,6 +119,47 @@ public class PeopleController : ControllerBase
         return Ok(new { success = true });
     }
 
+    [HttpPost("{id:guid}/photo")]
+    [RequestSizeLimit(50 * 1024 * 1024)]
+    public async Task<IActionResult> UploadPhoto(Guid id, CancellationToken cancellationToken)
+    {
+        if (!Request.HasFormContentType)
+            throw new BadRequestException("Invalid form data");
+
+        var form = await Request.ReadFormAsync(cancellationToken);
+        var file = form.Files["photo"];
+        if (file == null || file.Length == 0)
+            throw new BadRequestException("No photo file provided");
+
+        if (file.Length > 50 * 1024 * 1024)
+            throw new BadRequestException("Photo exceeds maximum size of 50MB");
+
+        using var stream = file.OpenReadStream();
+        var filename = await _personService.UploadPersonPhotoAsync(GetUserId(), id, stream, cancellationToken);
+        return Ok(new { photo = filename });
+    }
+
+    [HttpDelete("{id:guid}/photo")]
+    public async Task<IActionResult> DeletePhoto(Guid id, CancellationToken cancellationToken)
+    {
+        await _personService.DeletePersonPhotoAsync(GetUserId(), id, cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    [HttpPut("{id:guid}/immich")]
+    public async Task<IActionResult> LinkImmich(Guid id, [FromBody] PersonImmichLinkRequest request, CancellationToken ct)
+    {
+        var result = await _immichService.LinkPersonImmichAsync(GetUserId(), id, request, ct);
+        return Ok(result);
+    }
+
+    [HttpPost("{id:guid}/immich")]
+    public async Task<IActionResult> SetPhotoFromImmich(Guid id, [FromBody] ImmichSetPhotoRequest request, CancellationToken ct)
+    {
+        var (photo, photoUrl) = await _immichService.SetPersonPhotoFromImmichAsync(GetUserId(), id, request.AssetId, ct);
+        return Ok(new { success = true, photo, photoUrl });
+    }
+
     [HttpGet("search")]
     public async Task<IActionResult> SearchPeople([FromQuery] string? q)
     {
@@ -177,6 +225,26 @@ public class PeopleController : ControllerBase
     {
         await _personService.DeletePhysicalMarkAsync(GetUserId(), id, markId);
         return Ok(new { success = true });
+    }
+
+    [HttpPost("{id:guid}/physical-marks/photo")]
+    [RequestSizeLimit(50 * 1024 * 1024)]
+    public async Task<IActionResult> UploadPhysicalMarkPhoto(Guid id, CancellationToken cancellationToken)
+    {
+        if (!Request.HasFormContentType)
+            throw new BadRequestException("Invalid form data");
+
+        var form = await Request.ReadFormAsync(cancellationToken);
+        var file = form.Files["photo"];
+        if (file == null || file.Length == 0)
+            throw new BadRequestException("No photo file provided");
+
+        if (file.Length > 50 * 1024 * 1024)
+            throw new BadRequestException("Photo exceeds maximum size of 50MB");
+
+        using var stream = file.OpenReadStream();
+        var (photoUrl, filename) = await _personService.UploadPhysicalMarkPhotoAsync(GetUserId(), id, stream, cancellationToken);
+        return Ok(new { photoUrl, filename });
     }
 
     // ─── Sub-resource: Criminal Records ───────────────────────────────────────────

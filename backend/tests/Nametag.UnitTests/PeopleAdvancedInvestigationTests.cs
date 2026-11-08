@@ -20,6 +20,7 @@ public class PeopleAdvancedInvestigationTests
         _fakeService = new FakePersonInvestigationService();
         _fakeCurrentUserService = new FakeCurrentUserService { UserId = _userId };
         _controller = new PeopleController(_fakeService, _fakeCurrentUserService);
+        _controller = new PeopleController(_fakeService, _fakeCurrentUserService, null!);
     }
 
     [Fact]
@@ -245,5 +246,11 @@ public class PeopleAdvancedInvestigationTests
                 Nodes = new List<GraphNodeDto> { new() { Id = personId.ToString(), Label = "Alice", IsCenter = true } },
                 Edges = new List<GraphEdgeDto>()
             });
+
+        public Task<string> UploadPersonPhotoAsync(Guid userId, Guid personId, Stream stream, CancellationToken ct = default) =>
+            Task.FromResult("photo.jpg");
+        public Task DeletePersonPhotoAsync(Guid userId, Guid personId, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<(string photoUrl, string filename)> UploadPhysicalMarkPhotoAsync(Guid userId, Guid personId, Stream stream, CancellationToken ct = default) =>
+            Task.FromResult(("/api/photos/marks/mark.jpg", "mark.jpg"));
     }
 }

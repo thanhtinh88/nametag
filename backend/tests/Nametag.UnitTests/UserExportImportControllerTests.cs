@@ -23,6 +23,8 @@ public class FakeUserService : IUserService
     public Task<int> UpdateReminderLeadDaysAsync(Guid userId, int days) => Task.FromResult(days);
     public Task<(bool enabled, int weekday)> UpdateWeeklyDigestAsync(Guid userId, bool enabled, int weekday) => Task.FromResult((enabled, weekday));
     public Task DeleteAccountAsync(Guid userId, DeleteAccountRequest request) => Task.CompletedTask;
+    public Task<string> UploadPhotoAsync(Guid userId, Stream stream, CancellationToken cancellationToken = default) => Task.FromResult("avatar.jpg");
+    public Task DeletePhotoAsync(Guid userId, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 public class FakeUserExportImportService : IUserExportImportService

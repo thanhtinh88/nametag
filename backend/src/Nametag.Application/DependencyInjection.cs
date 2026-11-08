@@ -23,6 +23,8 @@ public static class DependencyInjection
         services.AddScoped<IMapService, MapService>();
         services.AddScoped<IDeletedService, DeletedService>();
         services.AddScoped<IUserExportImportService, UserExportImportService>();
+        services.AddScoped<IImmichService, ImmichService>();
+        services.AddScoped<IPurgeDeletedService, PurgeDeletedService>();
 
         return services;
     }

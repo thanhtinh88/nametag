@@ -18,5 +18,7 @@ public interface IUserService
     Task<int> UpdateReminderLeadDaysAsync(Guid userId, int days);
     Task<(bool enabled, int weekday)> UpdateWeeklyDigestAsync(Guid userId, bool enabled, int weekday);
     Task DeleteAccountAsync(Guid userId, DeleteAccountRequest request);
+    Task<string> UploadPhotoAsync(Guid userId, Stream stream, CancellationToken cancellationToken = default);
+    Task DeletePhotoAsync(Guid userId, CancellationToken cancellationToken = default);
 }
 

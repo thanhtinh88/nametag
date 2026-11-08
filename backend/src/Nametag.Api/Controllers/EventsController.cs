@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Nametag.Application.Common.Exceptions;
 using Nametag.Application.Common.Interfaces;
 using Nametag.Application.DTOs.Event;
+using Nametag.Application.DTOs.Immich;
 using Nametag.Application.Services;
 
 namespace Nametag.Api.Controllers;
@@ -15,6 +16,7 @@ public class EventsController : ControllerBase
 {
     private readonly IEventService _eventService;
     private readonly ICurrentUserService _currentUserService;
+    private readonly IImmichService _immichService;
     private readonly IValidator<CreateEventRequest> _createValidator;
     private readonly IValidator<UpdateEventRequest> _updateValidator;
     private readonly IValidator<AddEventPersonRequest> _addPersonValidator;
@@ -24,6 +26,7 @@ public class EventsController : ControllerBase
     public EventsController(
         IEventService eventService,
         ICurrentUserService currentUserService,
+        IImmichService immichService,
         IValidator<CreateEventRequest> createValidator,
         IValidator<UpdateEventRequest> updateValidator,
         IValidator<AddEventPersonRequest> addPersonValidator,
@@ -32,6 +35,7 @@ public class EventsController : ControllerBase
     {
         _eventService = eventService;
         _currentUserService = currentUserService;
+        _immichService = immichService;
         _createValidator = createValidator;
         _updateValidator = updateValidator;
         _addPersonValidator = addPersonValidator;
@@ -87,6 +91,13 @@ public class EventsController : ControllerBase
 
         var ev = await _eventService.UpdateEventAsync(GetUserId(), id, request);
         return Ok(new { @event = ev });
+    }
+
+    [HttpPut("{id:guid}/immich")]
+    public async Task<IActionResult> LinkImmich(Guid id, [FromBody] EventImmichLinkRequest request, CancellationToken ct)
+    {
+        var result = await _immichService.LinkEventImmichAsync(GetUserId(), id, request, ct);
+        return Ok(result);
     }
 
     [HttpDelete("{id:guid}")]

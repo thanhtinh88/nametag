@@ -76,5 +76,10 @@ public interface IPersonService
 
     // Advanced: Graph
     Task<PersonGraphResponse> GetPersonGraphAsync(Guid userId, Guid personId, bool hideUserNode, bool includeSolvedCases, bool includeRuledOut, CancellationToken ct = default);
+
+    // Photos
+    Task<string> UploadPersonPhotoAsync(Guid userId, Guid personId, Stream stream, CancellationToken ct = default);
+    Task DeletePersonPhotoAsync(Guid userId, Guid personId, CancellationToken ct = default);
+    Task<(string photoUrl, string filename)> UploadPhysicalMarkPhotoAsync(Guid userId, Guid personId, Stream stream, CancellationToken ct = default);
 }
 

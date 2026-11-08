@@ -11,10 +11,12 @@ namespace Nametag.Application.Services;
 public class PersonService : IPersonService
 {
     private readonly IAppDbContext _db;
+    private readonly IPhotoStorageService _photoStorageService;
 
-    public PersonService(IAppDbContext db)
+    public PersonService(IAppDbContext db, IPhotoStorageService photoStorageService)
     {
         _db = db;
+        _photoStorageService = photoStorageService;
     }
 
     public async Task<PersonListResponse> GetPeopleAsync(
@@ -2175,6 +2177,37 @@ public class PersonService : IPersonService
         {
             throw new NotFoundException("Person not found");
         }
+    }
+
+    public async Task<string> UploadPersonPhotoAsync(Guid userId, Guid personId, Stream stream, CancellationToken ct = default)
+    {
+        var person = await _db.People.FirstOrDefaultAsync(p => p.Id == personId && p.UserId == userId && p.DeletedAt == null, ct)
+            ?? throw new NotFoundException("Person not found");
+
+        var filename = await _photoStorageService.SavePersonPhotoAsync(userId, personId, stream, ct);
+        person.Photo = filename;
+        await _db.SaveChangesAsync(ct);
+        return filename;
+    }
+
+    public async Task DeletePersonPhotoAsync(Guid userId, Guid personId, CancellationToken ct = default)
+    {
+        var person = await _db.People.FirstOrDefaultAsync(p => p.Id == personId && p.UserId == userId && p.DeletedAt == null, ct)
+            ?? throw new NotFoundException("Person not found");
+
+        await _photoStorageService.DeletePersonPhotoAsync(userId, personId, ct);
+        person.Photo = null;
+        await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task<(string photoUrl, string filename)> UploadPhysicalMarkPhotoAsync(Guid userId, Guid personId, Stream stream, CancellationToken ct = default)
+    {
+        var person = await _db.People.FirstOrDefaultAsync(p => p.Id == personId && p.UserId == userId && p.DeletedAt == null, ct)
+            ?? throw new NotFoundException("Person not found");
+
+        var filename = await _photoStorageService.SaveMarkPhotoAsync(userId, personId, stream, ct);
+        var photoUrl = $"/api/photos/marks/{filename}";
+        return (photoUrl, filename);
     }
 }
 

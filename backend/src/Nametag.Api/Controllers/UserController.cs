@@ -129,6 +129,33 @@ public class UserController : ControllerBase
         return Ok(new { user = new { id = userId, weeklyDigestEnabled = enabled, weeklyDigestWeekday = weekday } });
     }
 
+    [HttpPost("photo")]
+    [RequestSizeLimit(50 * 1024 * 1024)]
+    public async Task<IActionResult> UploadPhoto(CancellationToken cancellationToken)
+    {
+        if (!Request.HasFormContentType)
+            throw new BadRequestException("Invalid form data");
+
+        var form = await Request.ReadFormAsync(cancellationToken);
+        var file = form.Files["photo"];
+        if (file == null || file.Length == 0)
+            throw new BadRequestException("No photo file provided");
+
+        if (file.Length > 50 * 1024 * 1024)
+            throw new BadRequestException("Photo exceeds maximum size of 50MB");
+
+        using var stream = file.OpenReadStream();
+        var filename = await _userService.UploadPhotoAsync(GetUserId(), stream, cancellationToken);
+        return Ok(new { photo = filename });
+    }
+
+    [HttpDelete("photo")]
+    public async Task<IActionResult> DeletePhoto(CancellationToken cancellationToken)
+    {
+        await _userService.DeletePhotoAsync(GetUserId(), cancellationToken);
+        return Ok(new { success = true });
+    }
+
     [HttpDelete("delete")]
     public async Task<IActionResult> DeleteAccount([FromBody] DeleteAccountRequest request)
     {

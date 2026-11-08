@@ -53,4 +53,7 @@ public class User : BaseEntity
 
     // Duplicate Dismissals
     public ICollection<DuplicateDismissal> DuplicateDismissals { get; set; } = new List<DuplicateDismissal>();
+
+    // Immich Connection
+    public ImmichConnection? ImmichConnection { get; set; }
 }
