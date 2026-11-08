@@ -1,10 +1,12 @@
 import { auth } from '@/lib/auth';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
-import { prisma } from '@/lib/prisma';
+import { apiServer } from '@/lib/backend/api-client';
 import Navigation from '@/components/Navigation';
 import EventForm from '@/components/event-form/EventForm';
 import { getTranslations } from 'next-intl/server';
+import type { EventDto } from '@/types/api/event';
+import type { Group } from '@/types/api/group';
 
 export default async function EditEventPage({
   params,
@@ -20,51 +22,34 @@ export default async function EditEventPage({
 
   const { id } = await params;
 
-  const [event, groups] = await Promise.all([
-    prisma.event.findFirst({
-      where: {
-        id,
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      include: {
-        groups: true,
-        addresses: true,
-        urls: true,
-        customFields: true,
-      },
-    }),
-    prisma.group.findMany({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      orderBy: {
-        name: 'asc',
-      },
-    }),
+  const [eventRes, groupsRes] = await Promise.all([
+    apiServer.get<{ event: EventDto }>(`/api/events/${id}`).catch(() => null),
+    apiServer.get<{ groups: Group[] }>('/api/groups').catch(() => ({ groups: [] })),
   ]);
 
+  const event = eventRes?.event;
   if (!event) {
     notFound();
   }
 
+  const groups = groupsRes?.groups || [];
+
   const serializedEvent = {
     id: event.id,
     title: event.title,
-    category: event.category,
+    category: event.category ?? null,
     status: event.status,
-    startDate: event.startDate ? event.startDate.toISOString() : null,
-    endDate: event.endDate ? event.endDate.toISOString() : null,
+    startDate: event.startDate ? new Date(event.startDate).toISOString() : null,
+    endDate: event.endDate ? new Date(event.endDate).toISOString() : null,
     hasTime: event.hasTime,
-    description: event.description,
-    caseCode: event.caseCode,
-    crimeType: event.crimeType,
-    caseStatus: event.caseStatus,
-    incidentTimeNotes: event.incidentTimeNotes,
-    damageAssessment: event.damageAssessment,
-    groups: event.groups.map((g) => ({ groupId: g.groupId })),
-    addresses: event.addresses.map((address) => ({
+    description: event.description ?? null,
+    caseCode: event.caseCode ?? null,
+    crimeType: event.crimeType ?? null,
+    caseStatus: event.caseStatus ?? null,
+    incidentTimeNotes: event.incidentTimeNotes ?? null,
+    damageAssessment: event.damageAssessment ?? null,
+    groups: (event.groups || []).map((g) => ({ groupId: g.groupId })),
+    addresses: (event.addresses || []).map((address) => ({
       id: address.id,
       type: address.type,
       streetLine1: address.streetLine1,
@@ -73,15 +58,15 @@ export default async function EditEventPage({
       region: address.region,
       postalCode: address.postalCode,
       country: address.country,
-      latitude: address.latitude === null ? null : Number(address.latitude),
-      longitude: address.longitude === null ? null : Number(address.longitude),
+      latitude: address.latitude === null || address.latitude === undefined ? null : Number(address.latitude),
+      longitude: address.longitude === null || address.longitude === undefined ? null : Number(address.longitude),
     })),
-    urls: event.urls.map((u) => ({
+    urls: (event.urls || []).map((u) => ({
       id: u.id,
       type: u.type,
       url: u.url,
     })),
-    customFields: event.customFields.map((cf) => ({
+    customFields: (event.customFields || []).map((cf) => ({
       id: cf.id,
       key: cf.key,
       value: cf.value,
@@ -116,7 +101,7 @@ export default async function EditEventPage({
           <div className="bg-surface shadow rounded-lg p-6">
             <EventForm
               event={serializedEvent}
-              groups={groups}
+              groups={(groups || []).map((g) => ({ id: g.id, name: g.name, color: g.color ?? null }))}
               mode="edit"
             />
           </div>
@@ -125,4 +110,3 @@ export default async function EditEventPage({
     </div>
   );
 }
-

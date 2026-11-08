@@ -1,6 +1,6 @@
 import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
-import { prisma } from '@/lib/prisma';
+import { apiServer } from '@/lib/backend/api-client';
 import ImmichSettings from './ImmichSettings';
 
 export default async function ImmichSettingsPage() {
@@ -10,35 +10,19 @@ export default async function ImmichSettingsPage() {
     redirect('/login');
   }
 
-  // Fetch existing Immich connection without exposing encrypted apiKey
-  const connection = await prisma.immichConnection.findUnique({
-    where: {
-      userId: session.user.id,
-    },
-    omit: {
-      apiKey: true,
-    },
-  });
-
-  const [linkedPeopleCount, linkedEventsCount] = await Promise.all([
-    prisma.person.count({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-        OR: [
-          { immichPersonId: { not: null } },
-          { immichAlbumId: { not: null } },
-        ],
-      },
-    }),
-    prisma.event.count({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-        immichAlbumId: { not: null },
-      },
-    }),
+  const [connRes, peopleRes, eventsRes] = await Promise.all([
+    apiServer.get<{ connection: any }>('/api/immich/connection').catch(() => null),
+    apiServer.get<{ people: any[] }>('/api/people').catch(() => ({ people: [] })),
+    apiServer.get<{ events: any[] }>('/api/events').catch(() => ({ events: [] })),
   ]);
+
+  const connection = connRes?.connection || null;
+  const linkedPeopleCount = (peopleRes?.people || []).filter(
+    (p: any) => p.immichPersonId || p.immichAlbumId
+  ).length;
+  const linkedEventsCount = (eventsRes?.events || []).filter(
+    (e: any) => e.immichAlbumId
+  ).length;
 
   return (
     <ImmichSettings
@@ -50,7 +34,9 @@ export default async function ImmichSettingsPage() {
               publicUrl: connection.publicUrl,
               enabled: connection.enabled,
               lastError: connection.lastError,
-              lastCheckedAt: connection.lastCheckedAt?.toISOString() ?? null,
+              lastCheckedAt: connection.lastCheckedAt
+                ? new Date(connection.lastCheckedAt).toISOString()
+                : null,
               hasApiKey: true,
             }
           : null
@@ -60,4 +46,3 @@ export default async function ImmichSettingsPage() {
     />
   );
 }
-

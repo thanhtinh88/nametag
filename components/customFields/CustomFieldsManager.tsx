@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { CustomFieldType } from '@prisma/client';
+import { CustomFieldType } from '@/types/api/custom-field-template';
 import CustomFieldTemplateRow from './CustomFieldTemplateRow';
 import CustomFieldTemplateForm from './CustomFieldTemplateForm';
 import DeleteCustomFieldDialog from './DeleteCustomFieldDialog';

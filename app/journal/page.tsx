@@ -1,12 +1,13 @@
 import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
-import { prisma } from '@/lib/prisma';
+import { apiServer } from '@/lib/backend/api-client';
 import { getTranslations } from 'next-intl/server';
 import Navigation from '@/components/Navigation';
 import JournalTimeline from '@/components/JournalTimeline';
 import JournalFilters from '@/components/JournalFilters';
 import { Button } from '@/components/ui/Button';
 import { getUserDisplayPreferences } from '@/lib/user-preferences';
+import type { JournalEntry } from '@/types/api/journal';
 
 export default async function JournalPage({
   searchParams,
@@ -30,94 +31,42 @@ export default async function JournalPage({
   const eventFilterIds = eventFilterParam ? eventFilterParam.split(',').filter(Boolean) : [];
   const searchQuery = params.q;
 
-  const [preferences, people, events, entries] = await Promise.all([
+  const queryParams = new URLSearchParams();
+  if (personFilterIds[0]) queryParams.set('personId', personFilterIds[0]);
+  if (eventFilterIds[0]) queryParams.set('eventId', eventFilterIds[0]);
+  if (searchQuery) queryParams.set('search', searchQuery);
+
+  const [preferences, peopleRes, eventsRes, journalRes] = await Promise.all([
     getUserDisplayPreferences(session.user.id),
-    prisma.person.findMany({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        name: true,
-        surname: true,
-        nickname: true,
-        displayNameOverride: true,
-      },
-      orderBy: { name: 'asc' },
-    }),
-    prisma.event.findMany({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        title: true,
-      },
-      orderBy: { title: 'asc' },
-    }),
-    prisma.journalEntry.findMany({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-        AND: [
-          ...personFilterIds.map((pid) => ({
-            people: { some: { personId: pid } },
-          })),
-          ...eventFilterIds.map((eid) => ({
-            events: { some: { eventId: eid } },
-          })),
-        ],
-        ...(searchQuery
-          ? {
-              OR: [
-                { title: { contains: searchQuery, mode: 'insensitive' } },
-                { body: { contains: searchQuery, mode: 'insensitive' } },
-              ],
-            }
-          : {}),
-      },
-      include: {
-        people: {
-          where: { person: { deletedAt: null } },
-          include: {
-            person: {
-              select: {
-                id: true,
-                name: true,
-                surname: true,
-                nickname: true,
-                displayNameOverride: true,
-              },
-            },
-          },
-        },
-        events: {
-          where: { event: { deletedAt: null } },
-          include: {
-            event: {
-              select: {
-                id: true,
-                title: true,
-                status: true,
-              },
-            },
-          },
-        },
-      },
-      orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
-    }),
+    apiServer.get<{ people: any[] }>('/api/people').catch(() => ({ people: [] })),
+    apiServer.get<{ events: any[] }>('/api/events').catch(() => ({ events: [] })),
+    apiServer.get<{ entries: JournalEntry[] }>(`/api/journal?${queryParams.toString()}`).catch(() => ({ entries: [] })),
   ]);
+
+  const people = peopleRes?.people || [];
+  const events = eventsRes?.events || [];
+  let entries = journalRes?.entries || [];
+
+  // Filter if multiple person or event IDs
+  if (personFilterIds.length > 1) {
+    entries = entries.filter((e) =>
+      personFilterIds.every((pid) => (e.people || []).some((p) => p.personId === pid))
+    );
+  }
+  if (eventFilterIds.length > 1) {
+    entries = entries.filter((e) =>
+      eventFilterIds.every((eid) => (e.events || []).some((ev) => ev.eventId === eid))
+    );
+  }
 
   const { nameOrder, nameDisplayFormat, language: locale } = preferences;
 
-  // Serialize Date objects to ISO strings for client components
+  // Serialize Date strings if needed
   const serializedEntries = entries.map((entry) => ({
     ...entry,
-    date: entry.date.toISOString(),
-    createdAt: entry.createdAt.toISOString(),
-    updatedAt: entry.updatedAt.toISOString(),
+    date: typeof entry.date === 'string' ? entry.date : new Date(entry.date).toISOString(),
+    createdAt: typeof entry.createdAt === 'string' ? entry.createdAt : new Date(entry.createdAt).toISOString(),
+    updatedAt: typeof entry.updatedAt === 'string' ? entry.updatedAt : new Date(entry.updatedAt).toISOString(),
   }));
 
   return (
@@ -152,7 +101,7 @@ export default async function JournalPage({
           />
 
           <JournalTimeline
-            entries={serializedEntries}
+            entries={serializedEntries as any}
             nameOrder={nameOrder}
             nameDisplayFormat={nameDisplayFormat}
             locale={locale}

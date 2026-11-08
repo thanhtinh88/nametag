@@ -13,7 +13,7 @@ import PersonAvatar from './PersonPhoto';
 import { formatCanonicalName, type NameDisplayFormat } from '@/lib/nameUtils';
 import { formatDate, parseCalendarDate, type DateFormat } from '@/lib/date-format';
 import CustomFieldFilter from './customFields/CustomFieldFilter';
-import type { CustomFieldTemplate } from '@prisma/client';
+import type { CustomFieldTemplate } from '@/types/api/custom-field-template';
 
 interface PersonRow {
   id: string;

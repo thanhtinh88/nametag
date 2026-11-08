@@ -1,10 +1,11 @@
 import { auth } from '@/lib/auth';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
-import { prisma } from '@/lib/prisma';
+import { apiServer } from '@/lib/backend/api-client';
 import RelationshipTypeForm from '@/components/RelationshipTypeForm';
 import Navigation from '@/components/Navigation';
 import { getTranslations } from 'next-intl/server';
+import type { RelationshipType } from '@/types/api/relationship';
 
 export default async function EditRelationshipTypePage({
   params,
@@ -20,43 +21,41 @@ export default async function EditRelationshipTypePage({
 
   const { id } = await params;
 
-  const [relationshipType, availableTypes] = await Promise.all([
-    prisma.relationshipType.findFirst({
-      where: {
-        id,
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      include: {
-        inverse: {
-          select: {
-            id: true,
-            name: true,
-            label: true,
-          },
-        },
-      },
-    }),
-    prisma.relationshipType.findMany({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-        NOT: { id }, // Exclude current type from inverse options
-      },
-      select: {
-        id: true,
-        name: true,
-        label: true,
-        color: true,
-        inverseId: true,
-      },
-      orderBy: { name: 'asc' },
-    }),
+  const [typeRes, allTypesRes] = await Promise.all([
+    apiServer.get<{ relationshipType: RelationshipType }>(`/api/relationship-types/${id}`).catch(() => null),
+    apiServer.get<{ relationshipTypes: RelationshipType[] }>('/api/relationship-types').catch(() => ({ relationshipTypes: [] })),
   ]);
 
+  const relationshipType = typeRes?.relationshipType;
   if (!relationshipType) {
     notFound();
   }
+
+  const serializedType = {
+    id: relationshipType.id,
+    name: relationshipType.name,
+    label: relationshipType.label,
+    category: relationshipType.category ?? null,
+    directionType: relationshipType.directionType ?? null,
+    lineStyle: relationshipType.lineStyle ?? null,
+    color: relationshipType.color ?? null,
+    inverseId: relationshipType.inverseId ?? null,
+    inverse: relationshipType.inverse ? {
+      id: relationshipType.inverse.id,
+      name: relationshipType.inverse.name,
+      label: relationshipType.inverse.label,
+    } : null,
+  };
+
+  const availableTypes = (allTypesRes?.relationshipTypes || [])
+    .filter((t) => t.id !== id)
+    .map((t) => ({
+      id: t.id,
+      name: t.name,
+      label: t.label,
+      color: t.color ?? null,
+      inverseId: t.inverseId ?? null,
+    }));
 
   return (
     <div className="min-h-screen bg-background">
@@ -84,7 +83,7 @@ export default async function EditRelationshipTypePage({
               {t('editType')}
             </h1>
             <RelationshipTypeForm
-              relationshipType={relationshipType}
+              relationshipType={serializedType}
               availableTypes={availableTypes}
               mode="edit"
             />

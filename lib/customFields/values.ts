@@ -1,4 +1,4 @@
-import type { CustomFieldType } from '@prisma/client';
+import type { CustomFieldType } from '@/types/api/custom-field-template';
 
 export type ValidationErrorCode = 'NOT_A_NUMBER' | 'NOT_BOOLEAN' | 'NOT_IN_OPTIONS';
 

@@ -67,7 +67,7 @@ export default function DeleteGangButton({ gangId, gangName }: DeleteGangButtonP
         >
           <div className="space-y-3">
             <p className="text-sm text-foreground">
-              {t('confirmMessage')} <strong className="font-bold text-red-500">"{gangName}"</strong>?
+              {t('confirmMessage')} <strong className="font-bold text-red-500">&ldquo;{gangName}&rdquo;</strong>?
             </p>
             <p className="text-xs text-muted">
               {t('explanation')}

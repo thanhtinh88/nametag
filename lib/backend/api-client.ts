@@ -1,5 +1,10 @@
 import { cookies } from 'next/headers';
-import { BACKEND_INTERNAL_URL, COOKIE_ACCESS_TOKEN } from './constants';
+import { notFound, redirect } from 'next/navigation';
+import {
+  BACKEND_INTERNAL_URL,
+  COOKIE_ACCESS_TOKEN,
+  COOKIE_REFRESH_TOKEN,
+} from './constants';
 
 export class ApiError extends Error {
   constructor(
@@ -12,35 +17,69 @@ export class ApiError extends Error {
   }
 }
 
+export interface ApiServerOptions extends RequestInit {
+  autoNotFound?: boolean;
+  autoRedirect?: boolean;
+}
+
 /**
- * Server-side API client for Server Components and Server Actions.
+ * Server-side API client for React Server Components and Server Actions.
  * Automatically injects the Authorization: Bearer token from the incoming request cookies.
+ * Handles 401 by redirecting to /login and 404 by triggering notFound().
  */
 export async function apiServer<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: ApiServerOptions = {}
 ): Promise<T> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(COOKIE_ACCESS_TOKEN)?.value;
+  const { autoNotFound = true, autoRedirect = true, ...fetchOptions } = options;
+
+  let token: string | undefined;
+  let refreshToken: string | undefined;
+
+  try {
+    const cookieStore = await cookies();
+    token = cookieStore.get(COOKIE_ACCESS_TOKEN)?.value;
+    refreshToken = cookieStore.get(COOKIE_REFRESH_TOKEN)?.value;
+  } catch {
+    // cookies() might fail outside request context
+  }
+
+  if (!token && !refreshToken && autoRedirect) {
+    redirect('/login');
+  }
 
   const url = `${BACKEND_INTERNAL_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
 
-  const headers = new Headers(options.headers || {});
+  const headers = new Headers(fetchOptions.headers || {});
   headers.set('Accept', 'application/json');
 
   if (token && !headers.has('Authorization')) {
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  if (options.body && !headers.has('Content-Type') && typeof options.body === 'string') {
+  if (fetchOptions.body && !headers.has('Content-Type') && typeof fetchOptions.body === 'string') {
     headers.set('Content-Type', 'application/json');
   }
 
   const response = await fetch(url, {
-    ...options,
+    ...fetchOptions,
     headers,
-    cache: options.cache || 'no-store',
+    cache: fetchOptions.cache || 'no-store',
   });
+
+  if (response.status === 401) {
+    if (autoRedirect) {
+      redirect('/login');
+    }
+    throw new ApiError(401, 'Unauthorized');
+  }
+
+  if (response.status === 404) {
+    if (autoNotFound) {
+      notFound();
+    }
+    throw new ApiError(404, 'Resource not found');
+  }
 
   if (!response.ok) {
     let errorMessage = `API request failed with status ${response.status}`;
@@ -63,3 +102,48 @@ export async function apiServer<T>(
   return response.json() as Promise<T>;
 }
 
+apiServer.get = <T>(endpoint: string, options: ApiServerOptions = {}): Promise<T> => {
+  return apiServer<T>(endpoint, { ...options, method: 'GET' });
+};
+
+apiServer.post = <T>(
+  endpoint: string,
+  body?: unknown,
+  options: ApiServerOptions = {}
+): Promise<T> => {
+  return apiServer<T>(endpoint, {
+    ...options,
+    method: 'POST',
+    body: body !== undefined ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
+  });
+};
+
+apiServer.put = <T>(
+  endpoint: string,
+  body?: unknown,
+  options: ApiServerOptions = {}
+): Promise<T> => {
+  return apiServer<T>(endpoint, {
+    ...options,
+    method: 'PUT',
+    body: body !== undefined ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
+  });
+};
+
+apiServer.patch = <T>(
+  endpoint: string,
+  body?: unknown,
+  options: ApiServerOptions = {}
+): Promise<T> => {
+  return apiServer<T>(endpoint, {
+    ...options,
+    method: 'PATCH',
+    body: body !== undefined ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
+  });
+};
+
+apiServer.delete = <T>(endpoint: string, options: ApiServerOptions = {}): Promise<T> => {
+  return apiServer<T>(endpoint, { ...options, method: 'DELETE' });
+};
+
+export default apiServer;

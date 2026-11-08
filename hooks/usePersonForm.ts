@@ -1,7 +1,7 @@
 'use client';
 
 import { useReducer, useCallback, useState, useMemo } from 'react';
-import type { CustomFieldValueInput } from '@/lib/customFields/persistence';
+import type { CustomFieldValueInput } from '@/types/api/custom-field-template';
 
 type ReminderIntervalUnit = 'DAYS' | 'WEEKS' | 'MONTHS' | 'YEARS';
 

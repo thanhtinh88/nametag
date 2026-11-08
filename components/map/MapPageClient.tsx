@@ -225,7 +225,7 @@ function MapPageInner() {
       const bStar = starredIds.has(b.id) ? 1 : 0;
       return bStar - aStar;
     });
-  }, [data?.cases, filters.activeCasesOnly, filters.query, filters.caseId, onlyStarred, starredIds, filterInViewOnly, mapBounds, isCoordInView]);
+  }, [data, filters.activeCasesOnly, filters.query, filters.caseId, onlyStarred, starredIds, filterInViewOnly, mapBounds, isCoordInView]);
 
   const casesWithCoords = useMemo(
     () => filteredCases.filter((c) => c.latitude !== null && c.longitude !== null),

@@ -1,12 +1,12 @@
 import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { prisma } from '@/lib/prisma';
+import { apiServer } from '@/lib/backend/api-client';
 import Navigation from '@/components/Navigation';
 import { Button } from '@/components/ui/Button';
 import EmptyState from '@/components/EmptyState';
-import { canCreateResource } from '@/lib/billing/subscription';
 import { getTranslations } from 'next-intl/server';
+import type { Group } from '@/types/api/group';
 
 const ITEMS_PER_PAGE = 24;
 
@@ -21,47 +21,19 @@ export default async function GroupsPage({
     redirect('/login');
   }
 
-  const [t, tCommon, canCreate, params] = await Promise.all([
+  const [t, tCommon, params] = await Promise.all([
     getTranslations('groups'),
     getTranslations('common'),
-    canCreateResource(session.user.id, 'groups'),
     searchParams,
   ]);
 
   const currentPage = Number(params.page) || 1;
   const skip = (currentPage - 1) * ITEMS_PER_PAGE;
 
-  // Get total count for pagination and groups in parallel
-  const [totalCount, groups] = await Promise.all([
-    prisma.group.count({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-      },
-    }),
-    prisma.group.findMany({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      include: {
-        _count: {
-          select: {
-            people: {
-              where: {
-                person: { deletedAt: null },
-              },
-            },
-          },
-        },
-      },
-      orderBy: {
-        name: 'asc',
-      },
-      skip,
-      take: ITEMS_PER_PAGE,
-    }),
-  ]);
+  const res = await apiServer.get<{ groups: Group[] }>('/api/groups');
+  const allGroups = res?.groups || [];
+  const totalCount = allGroups.length;
+  const groups = allGroups.slice(skip, skip + ITEMS_PER_PAGE);
 
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
 
@@ -81,23 +53,9 @@ export default async function GroupsPage({
             <h1 className="text-3xl font-bold text-foreground">
               {t('title')}
             </h1>
-            {canCreate.allowed ? (
-              <Button href="/groups/new">
-                {t('addGroup')}
-              </Button>
-            ) : (
-              <div className="relative group">
-                <span className="px-4 py-2 min-h-11 sm:min-h-0 bg-muted/50 text-white rounded-lg font-semibold cursor-not-allowed inline-flex items-center justify-center">
-                  {t('addGroup')}
-                </span>
-                <div className="invisible group-hover:visible absolute right-0 top-full mt-2 w-64 p-3 bg-surface-elevated text-white text-sm rounded-lg shadow-lg z-10">
-                  <p className="mb-2">{t('limitReached', { limit: canCreate.limit })}</p>
-                  <Link href="/settings/billing" className="text-primary hover:text-primary-dark underline">
-                    {t('upgradePlan')}
-                  </Link>
-                </div>
-              </div>
-            )}
+            <Button href="/groups/new">
+              {t('addGroup')}
+            </Button>
           </div>
 
           {totalCount === 0 ? (
@@ -122,39 +80,42 @@ export default async function GroupsPage({
                 </div>
               )}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {groups.map((group) => (
-                  <Link
-                    key={group.id}
-                    href={`/groups/${group.id}`}
-                    className="bg-surface shadow-sm rounded-lg p-6 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1">
-                        <h3 className="text-lg font-semibold text-foreground mb-1">
-                          {group.name}
-                        </h3>
-                        {group.description && (
-                          <p className="text-sm text-muted">
-                            {group.description}
-                          </p>
+                {groups.map((group) => {
+                  const memberCount = group.people?.length ?? 0;
+                  return (
+                    <Link
+                      key={group.id}
+                      href={`/groups/${group.id}`}
+                      className="bg-surface shadow-sm rounded-lg p-6 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200"
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <h3 className="text-lg font-semibold text-foreground mb-1">
+                            {group.name}
+                          </h3>
+                          {group.description && (
+                            <p className="text-sm text-muted">
+                              {group.description}
+                            </p>
+                          )}
+                        </div>
+                        {group.color && (
+                          <div
+                            className="w-6 h-6 rounded-full ml-3 flex-shrink-0"
+                            style={{ backgroundColor: group.color }}
+                          />
                         )}
                       </div>
-                      {group.color && (
-                        <div
-                          className="w-6 h-6 rounded-full ml-3 flex-shrink-0"
-                          style={{ backgroundColor: group.color }}
-                        />
-                      )}
-                    </div>
-                    <div className="mt-4 pt-4 border-t border-border">
-                      <p className="text-sm text-muted">
-                        {group._count.people === 0 && t('noMembersYet')}
-                        {group._count.people === 1 && t('oneMember')}
-                        {group._count.people > 1 && t('membersCount', { count: group._count.people })}
-                      </p>
-                    </div>
-                  </Link>
-                ))}
+                      <div className="mt-4 pt-4 border-t border-border">
+                        <p className="text-sm text-muted">
+                          {memberCount === 0 && t('noMembersYet')}
+                          {memberCount === 1 && t('oneMember')}
+                          {memberCount > 1 && t('membersCount', { count: memberCount })}
+                        </p>
+                      </div>
+                    </Link>
+                  );
+                })}
               </div>
 
               {totalPages > 1 && (

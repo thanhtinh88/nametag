@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { parseVCard as vCardToPerson } from '@/lib/carddav/vcard-parser';
+import { parseVCard as vCardToPerson } from '@/lib/vcard/vcard-parser';
 import CompactContactRow from './CompactContactRow';
 import GroupsSelector from './GroupsSelector';
 import { useSearchIndex } from '@/components/SearchIndexProvider';

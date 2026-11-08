@@ -1,4 +1,4 @@
-import type { CustomFieldType } from '@prisma/client';
+import type { CustomFieldType } from '@/types/api/custom-field-template';
 
 /**
  * Returns the X- vCard property key for a custom field template slug.
@@ -9,7 +9,7 @@ export function customFieldXKey(slug: string): string {
 }
 
 export interface SerializeInput {
-  template: { slug: string; type: CustomFieldType; deletedAt: Date | null };
+  template: { slug: string; type: CustomFieldType | string; deletedAt?: Date | string | null };
   value: string;
 }
 
@@ -26,7 +26,7 @@ export interface XLine {
 export function buildCustomFieldXLines(inputs: SerializeInput[]): XLine[] {
   const out: XLine[] = [];
   for (const input of inputs) {
-    if (input.template.deletedAt !== null) continue;
+    if (input.template.deletedAt) continue;
     out.push({
       key: customFieldXKey(input.template.slug),
       params: { TYPE: `NAMETAG-FIELD-${input.template.type}` },

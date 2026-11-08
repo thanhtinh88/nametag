@@ -106,6 +106,8 @@ export interface Event {
   journalEntries?: EventJournalEntry[];
 }
 
+export type EventDto = Event;
+
 export interface EventListResponse {
   events: Event[];
 }

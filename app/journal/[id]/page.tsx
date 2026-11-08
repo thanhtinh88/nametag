@@ -1,7 +1,7 @@
 import { auth } from '@/lib/auth';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
-import { prisma } from '@/lib/prisma';
+import { apiServer } from '@/lib/backend/api-client';
 import { getTranslations } from 'next-intl/server';
 import Navigation from '@/components/Navigation';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/Button';
 import DeleteJournalEntryButton from '@/components/DeleteJournalEntryButton';
 import JournalEntryDateLine from '@/components/JournalEntryDateLine';
 import { getUserDisplayPreferences } from '@/lib/user-preferences';
+import type { JournalEntry } from '@/types/api/journal';
 
 export default async function JournalEntryDetailPage({
   params,
@@ -25,45 +26,12 @@ export default async function JournalEntryDetailPage({
 
   const { id } = await params;
 
-  const [entry, preferences] = await Promise.all([
-    prisma.journalEntry.findUnique({
-      where: {
-        id,
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      include: {
-        people: {
-          where: { person: { deletedAt: null } },
-          include: {
-            person: {
-              select: {
-                id: true,
-                name: true,
-                surname: true,
-                nickname: true,
-                displayNameOverride: true,
-              },
-            },
-          },
-        },
-        events: {
-          where: { event: { deletedAt: null } },
-          include: {
-            event: {
-              select: {
-                id: true,
-                title: true,
-                status: true,
-              },
-            },
-          },
-        },
-      },
-    }),
+  const [entryRes, preferences] = await Promise.all([
+    apiServer.get<{ entry: JournalEntry }>(`/api/journal/${id}`).catch(() => null),
     getUserDisplayPreferences(session.user.id),
   ]);
 
+  const entry = entryRes?.entry;
   if (!entry) {
     notFound();
   }
@@ -97,7 +65,11 @@ export default async function JournalEntryDetailPage({
                 <h1 className="text-3xl font-bold text-foreground mb-1">
                   {entry.title}
                 </h1>
-                <JournalEntryDateLine dateIso={entry.date.toISOString()} hasTime={entry.hasTime} locale={locale} />
+                <JournalEntryDateLine
+                  dateIso={typeof entry.date === 'string' ? entry.date : new Date(entry.date).toISOString()}
+                  hasTime={entry.hasTime}
+                  locale={locale}
+                />
               </div>
               <div className="flex gap-2">
                 <Button href={`/journal/${entry.id}/edit`} size="sm" variant="secondary">
@@ -107,13 +79,13 @@ export default async function JournalEntryDetailPage({
               </div>
             </div>
 
-            {entry.events.length > 0 && (
+            {entry.events && entry.events.length > 0 && (
               <div className="mb-4">
                 <p className="text-xs font-medium text-muted uppercase tracking-wide mb-2">
                   Related Cases (Vụ án liên quan)
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {entry.events.map(({ event }) => (
+                  {entry.events.map(({ event }) => event && (
                     <Link
                       key={event.id}
                       href={`/events/${event.id}`}
@@ -126,13 +98,13 @@ export default async function JournalEntryDetailPage({
               </div>
             )}
 
-            {entry.people.length > 0 && (
+            {entry.people && entry.people.length > 0 && (
               <div className="mb-6">
                 <p className="text-xs font-medium text-muted uppercase tracking-wide mb-2">
                   {t('detail.taggedPeople')}
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {entry.people.map(({ person }) => (
+                  {entry.people.map(({ person }) => person && (
                     <Link
                       key={person.id}
                       href={`/people/${person.id}`}

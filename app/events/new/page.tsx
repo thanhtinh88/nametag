@@ -1,10 +1,11 @@
 import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
-import { prisma } from '@/lib/prisma';
+import { apiServer } from '@/lib/backend/api-client';
 import Navigation from '@/components/Navigation';
 import EventForm from '@/components/event-form/EventForm';
 import { getTranslations } from 'next-intl/server';
 import { getUserDisplayPreferences } from '@/lib/user-preferences';
+import type { Group } from '@/types/api/group';
 
 export default async function NewEventPage() {
   const session = await auth();
@@ -14,36 +15,14 @@ export default async function NewEventPage() {
     redirect('/login');
   }
 
-  const [{ nameOrder }, groups, availablePeople] = await Promise.all([
+  const [{ nameOrder }, groupsRes, peopleRes] = await Promise.all([
     getUserDisplayPreferences(session.user.id),
-    prisma.group.findMany({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      orderBy: {
-        name: 'asc',
-      },
-    }),
-    prisma.person.findMany({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        name: true,
-        surname: true,
-        middleName: true,
-        secondLastName: true,
-        nickname: true,
-        displayNameOverride: true,
-      },
-      orderBy: {
-        name: 'asc',
-      },
-    }),
+    apiServer.get<{ groups: Group[] }>('/api/groups').catch(() => ({ groups: [] })),
+    apiServer.get<{ people: any[] }>('/api/people').catch(() => ({ people: [] })),
   ]);
+
+  const groups = groupsRes?.groups || [];
+  const availablePeople = peopleRes?.people || [];
 
   return (
     <div className="min-h-screen bg-background">
@@ -64,7 +43,7 @@ export default async function NewEventPage() {
           <div className="bg-surface shadow rounded-lg p-6">
             <EventForm
               mode="create"
-              groups={groups}
+              groups={(groups || []).map((g) => ({ id: g.id, name: g.name, color: g.color ?? null }))}
               availablePeople={availablePeople}
               nameOrder={nameOrder}
             />
@@ -74,4 +53,3 @@ export default async function NewEventPage() {
     </div>
   );
 }
-

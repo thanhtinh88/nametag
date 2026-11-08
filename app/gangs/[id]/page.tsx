@@ -1,13 +1,14 @@
 import { auth } from '@/lib/auth';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
-import { prisma } from '@/lib/prisma';
+import { apiServer } from '@/lib/backend/api-client';
 import Navigation from '@/components/Navigation';
 import { Button } from '@/components/ui/Button';
 import GangMembersManager from '@/components/GangMembersManager';
 import DeleteGangButton from '@/components/DeleteGangButton';
 import { getTranslations } from 'next-intl/server';
 import { getUserDisplayPreferences } from '@/lib/user-preferences';
+import type { Gang } from '@/types/api/gang';
 
 export default async function GangDetailsPage({
   params,
@@ -25,56 +26,14 @@ export default async function GangDetailsPage({
     getTranslations('gangs'),
   ]);
 
-  const [gang, allPeople, preferences] = await Promise.all([
-    prisma.gang.findUnique({
-      where: {
-        id,
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      include: {
-        members: {
-          include: {
-            person: {
-              select: {
-                id: true,
-                name: true,
-                surname: true,
-                nickname: true,
-                displayNameOverride: true,
-                photo: true,
-                managementLevel: true,
-                threatLevel: true,
-              },
-            },
-          },
-          orderBy: {
-            createdAt: 'asc',
-          },
-        },
-      },
-    }),
-    prisma.person.findMany({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        name: true,
-        surname: true,
-        nickname: true,
-        displayNameOverride: true,
-        photo: true,
-        managementLevel: true,
-        threatLevel: true,
-      },
-      orderBy: {
-        name: 'asc',
-      },
-    }),
+  const [gangRes, peopleRes, preferences] = await Promise.all([
+    apiServer.get<{ gang: Gang }>(`/api/gangs/${id}`).catch(() => null),
+    apiServer.get<{ people: any[] }>('/api/people').catch(() => ({ people: [] })),
     getUserDisplayPreferences(session.user.id),
   ]);
+
+  const gang = gangRes?.gang;
+  const allPeople = peopleRes?.people || [];
 
   if (!gang) {
     notFound();
@@ -134,7 +93,7 @@ export default async function GangDetailsPage({
                   </h1>
 
                   <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-surface-elevated text-foreground border border-border">
-                    {t('memberCount', { count: gang.members.length })}
+                    {t('memberCount', { count: gang.members?.length || 0 })}
                   </span>
                 </div>
 
@@ -159,7 +118,22 @@ export default async function GangDetailsPage({
             gangId={gang.id}
             gangName={gang.name}
             gangColor={gang.color}
-            currentMembers={gang.members}
+            currentMembers={(gang.members || []).map((m) => ({
+              id: m.id,
+              gangId: m.gangId,
+              personId: m.personId,
+              role: m.role,
+              notes: m.notes ?? null,
+              person: {
+                id: m.person?.id || m.personId,
+                name: m.person?.name || '',
+                surname: m.person?.surname ?? null,
+                nickname: m.person?.nickname ?? null,
+                photo: m.person?.photo ?? null,
+                managementLevel: m.person?.managementLevel ?? null,
+                threatLevel: m.person?.threatLevel ?? null,
+              },
+            }))}
             availablePeople={allPeople}
             nameOrder={preferences.nameOrder}
             nameDisplayFormat={preferences.nameDisplayFormat as any}
@@ -169,4 +143,3 @@ export default async function GangDetailsPage({
     </div>
   );
 }
-

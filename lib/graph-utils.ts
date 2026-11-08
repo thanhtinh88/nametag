@@ -1,4 +1,3 @@
-import { Prisma } from '@prisma/client';
 import { formatGraphName, type NameDisplayFormat } from './nameUtils';
 import type { PersonTacticalData } from './filters/person-filter-types';
 
@@ -186,14 +185,19 @@ export function inverseRelationshipToGraphEdge(
   };
 }
 
-type Group = Prisma.GroupGetPayload<{
-  select: { id: true; name: true; color: true };
-}>;
+type Group = {
+  id: string;
+  name: string;
+  color?: string | null;
+};
 
-interface Person
-  extends Prisma.PersonGetPayload<{
-    select: { id: true; name: true; surname: true; nickname: true; displayNameOverride: true; photo: true };
-  }> {
+interface Person {
+  id: string;
+  name: string;
+  surname?: string | null;
+  nickname?: string | null;
+  displayNameOverride?: string | null;
+  photo?: string | null;
   middleName?: string | null;
   groups: { group: Group }[];
   managementLevel?: string | null;

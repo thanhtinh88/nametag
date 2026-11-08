@@ -25,7 +25,7 @@ import MarkdownEditor from '../MarkdownEditor';
 import { Button } from '../ui/Button';
 import CardDavSyncSection from './CardDavSyncSection';
 import CustomFieldsSection from '../customFields/CustomFieldsSection';
-import type { CustomFieldTemplate } from '@prisma/client';
+import type { CustomFieldTemplate } from '@/types/api/custom-field-template';
 import { useSearchIndex } from '@/components/SearchIndexProvider';
 import { isHeicFile, convertHeicToJpeg } from '@/lib/photo-client';
 import type { NameDisplayFormat } from '@/lib/nameUtils';

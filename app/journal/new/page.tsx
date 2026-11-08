@@ -1,6 +1,6 @@
 import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
-import { prisma } from '@/lib/prisma';
+import { apiServer } from '@/lib/backend/api-client';
 import { getTranslations } from 'next-intl/server';
 import Navigation from '@/components/Navigation';
 import JournalEntryForm from '@/components/JournalEntryForm';
@@ -14,35 +14,14 @@ export default async function NewJournalEntryPage() {
     redirect('/login');
   }
 
-  const [preferences, availablePeople, availableEvents] = await Promise.all([
+  const [preferences, peopleRes, eventsRes] = await Promise.all([
     getUserDisplayPreferences(session.user.id),
-    prisma.person.findMany({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        name: true,
-        surname: true,
-        nickname: true,
-        displayNameOverride: true,
-      },
-      orderBy: { name: 'asc' },
-    }),
-    prisma.event.findMany({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        title: true,
-      },
-      orderBy: { title: 'asc' },
-    }),
+    apiServer.get<{ people: any[] }>('/api/people').catch(() => ({ people: [] })),
+    apiServer.get<{ events: any[] }>('/api/events').catch(() => ({ events: [] })),
   ]);
 
+  const availablePeople = peopleRes?.people || [];
+  const availableEvents = eventsRes?.events || [];
   const { nameOrder, dateFormat } = preferences;
 
   return (

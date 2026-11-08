@@ -1,13 +1,13 @@
 import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { prisma } from '@/lib/prisma';
+import { apiServer } from '@/lib/backend/api-client';
 import Navigation from '@/components/Navigation';
 import { Button } from '@/components/ui/Button';
 import EmptyState from '@/components/EmptyState';
 import DeleteRelationshipTypeButton from '@/components/DeleteRelationshipTypeButton';
 import { getTranslations } from 'next-intl/server';
-import { createPreloadedRelationshipTypes, type RelationshipCategory } from '@/lib/relationship-types';
+import type { RelationshipCategory, RelationshipType } from '@/types/api/relationship';
 
 interface PageProps {
   searchParams?: Promise<{
@@ -37,57 +37,12 @@ export default async function RelationshipTypesPage({ searchParams }: PageProps)
 
   const selectedCategory = params.category || 'ALL';
 
-  // Check if user has any relationship types; if not, seed investigation defaults
-  const totalCount = await prisma.relationshipType.count({
-    where: {
-      userId: session.user.id,
-      deletedAt: null,
-    },
-  });
-
-  if (totalCount === 0) {
-    await createPreloadedRelationshipTypes(prisma, session.user.id);
-  }
-
-  const allRelationshipTypes = await prisma.relationshipType.findMany({
-    where: {
-      userId: session.user.id,
-      deletedAt: null,
-    },
-    include: {
-      inverse: {
-        select: {
-          id: true,
-          name: true,
-          label: true,
-        },
-      },
-      _count: {
-        select: {
-          relationships: {
-            where: {
-              person: { deletedAt: null },
-              relatedPerson: { deletedAt: null },
-            },
-          },
-        },
-      },
-    },
-    orderBy: [
-      { category: 'asc' },
-      { label: 'asc' },
-    ],
-  });
-
-  // Calculate usage counts
-  const typesWithUsage = allRelationshipTypes.map((type) => ({
-    ...type,
-    totalUsageCount: type._count.relationships,
-  }));
+  const res = await apiServer.get<{ relationshipTypes: RelationshipType[] }>('/api/relationship-types');
+  const allRelationshipTypes = res?.relationshipTypes || [];
 
   // Group counts by category
   const categoryCounts: Record<string, number> = {
-    ALL: typesWithUsage.length,
+    ALL: allRelationshipTypes.length,
     CRIMINAL: 0,
     FINANCIAL: 0,
     FAMILY: 0,
@@ -95,7 +50,7 @@ export default async function RelationshipTypesPage({ searchParams }: PageProps)
     SOCIAL: 0,
   };
 
-  typesWithUsage.forEach((t) => {
+  allRelationshipTypes.forEach((t) => {
     const cat = t.category || 'SOCIAL';
     if (categoryCounts[cat] !== undefined) {
       categoryCounts[cat]++;
@@ -105,8 +60,8 @@ export default async function RelationshipTypesPage({ searchParams }: PageProps)
   // Filter by selected category
   const filteredTypes =
     selectedCategory === 'ALL'
-      ? typesWithUsage
-      : typesWithUsage.filter((t) => (t.category || 'SOCIAL') === selectedCategory);
+      ? allRelationshipTypes
+      : allRelationshipTypes.filter((t) => (t.category || 'SOCIAL') === selectedCategory);
 
   const categories: Array<{ key: string; label: string; icon: string }> = [
     { key: 'ALL', label: t('allCategories'), icon: '📂' },
@@ -234,7 +189,6 @@ export default async function RelationshipTypesPage({ searchParams }: PageProps)
                             {type.label}
                           </div>
                           <div className="text-xs text-muted flex items-center gap-1.5 mt-0.5">
-                            <span>{t('usedTimes', { count: type.totalUsageCount })}</span>
                             {isDashed && (
                               <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">
                                 • {t('lineStyles.DASHED')}
@@ -285,7 +239,7 @@ export default async function RelationshipTypesPage({ searchParams }: PageProps)
                             <DeleteRelationshipTypeButton
                               relationshipTypeId={type.id}
                               relationshipTypeName={type.label}
-                              usageCount={type.totalUsageCount}
+                              usageCount={0}
                             />
                           </div>
                         </td>

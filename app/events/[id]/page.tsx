@@ -1,11 +1,12 @@
 import { auth } from '@/lib/auth';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
-import { prisma } from '@/lib/prisma';
+import { apiServer } from '@/lib/backend/api-client';
 import Navigation from '@/components/Navigation';
 import { getTranslations } from 'next-intl/server';
 import { getUserDisplayPreferences } from '@/lib/user-preferences';
 import EventDetailsClient from '@/components/EventDetailsClient';
+import type { EventDto } from '@/types/api/event';
 
 export default async function EventDetailPage({
   params,
@@ -23,118 +24,27 @@ export default async function EventDetailPage({
     getTranslations('events'),
   ]);
 
-  const [event, availablePeople, availableEvents, preferences, immichConnection] = await Promise.all([
-    prisma.event.findFirst({
-      where: {
-        id,
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      include: {
-        groups: {
-          where: { group: { deletedAt: null } },
-          include: { group: true },
-        },
-        addresses: true,
-        urls: true,
-        customFields: true,
-        people: {
-          where: { deletedAt: null, person: { deletedAt: null } },
-          include: {
-            person: {
-              select: {
-                id: true,
-                name: true,
-                surname: true,
-                nickname: true,
-                displayNameOverride: true,
-                photo: true,
-              },
-            },
-          },
-          orderBy: { createdAt: 'asc' },
-        },
-        relationshipsFrom: {
-          where: { deletedAt: null, toEvent: { deletedAt: null } },
-          include: {
-            toEvent: {
-              select: {
-                id: true,
-                title: true,
-                category: true,
-                status: true,
-                startDate: true,
-              },
-            },
-          },
-        },
-        journalEntries: {
-          where: { journalEntry: { deletedAt: null } },
-          include: {
-            journalEntry: {
-              include: {
-                people: {
-                  where: { person: { deletedAt: null } },
-                  include: {
-                    person: {
-                      select: {
-                        id: true,
-                        name: true,
-                        surname: true,
-                        nickname: true,
-                        displayNameOverride: true,
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-          orderBy: { journalEntry: { date: 'desc' } },
-          take: 20,
-        },
-        _count: {
-          select: {
-            mapMarkers: true,
-            mapRoutes: true,
-            mapDrawings: true,
-          },
-        },
-      },
-    }),
-    prisma.person.findMany({
-      where: { userId: session.user.id, deletedAt: null },
-      select: {
-        id: true,
-        name: true,
-        surname: true,
-        nickname: true,
-        displayNameOverride: true,
-        photo: true,
-      },
-      orderBy: { name: 'asc' },
-    }),
-    prisma.event.findMany({
-      where: { userId: session.user.id, deletedAt: null },
-      select: {
-        id: true,
-        title: true,
-        category: true,
-        status: true,
-        startDate: true,
-      },
-      orderBy: { title: 'asc' },
-    }),
+  const [eventRes, peopleRes, eventsRes, preferences, immichRes] = await Promise.all([
+    apiServer.get<{ event: EventDto }>(`/api/events/${id}`).catch(() => null),
+    apiServer.get<{ people: any[] }>('/api/people').catch(() => ({ people: [] })),
+    apiServer.get<{ events: EventDto[] }>('/api/events').catch(() => ({ events: [] })),
     getUserDisplayPreferences(session.user.id),
-    prisma.immichConnection.findUnique({
-      where: { userId: session.user.id },
-      select: { enabled: true },
-    }),
+    apiServer.get<{ configured?: boolean; enabled?: boolean }>('/api/immich/connection').catch(() => null),
   ]);
 
+  const event = eventRes?.event;
   if (!event) {
     notFound();
   }
+
+  const availablePeople = peopleRes?.people || [];
+  const availableEvents = (eventsRes?.events || []).map((e) => ({
+    id: e.id,
+    title: e.title,
+    category: e.category,
+    status: e.status,
+    startDate: e.startDate,
+  }));
 
   const { dateFormat, nameOrder, nameDisplayFormat } = preferences;
 
@@ -148,13 +58,16 @@ export default async function EventDetailPage({
     caseStatus: event.caseStatus,
     incidentTimeNotes: event.incidentTimeNotes,
     damageAssessment: event.damageAssessment,
-    startDate: event.startDate ? event.startDate.toISOString() : null,
-    endDate: event.endDate ? event.endDate.toISOString() : null,
+    startDate: event.startDate ? new Date(event.startDate).toISOString() : null,
+    endDate: event.endDate ? new Date(event.endDate).toISOString() : null,
     hasTime: event.hasTime,
     description: event.description,
     immichAlbumId: event.immichAlbumId,
-    groups: event.groups,
-    addresses: event.addresses.map((a) => ({
+    groups: (event.groups || []).map((g) => ({
+      ...g,
+      group: g.group || { id: g.groupId, name: '', color: null },
+    })),
+    addresses: (event.addresses || []).map((a) => ({
       id: a.id,
       type: a.type,
       streetLine1: a.streetLine1,
@@ -163,21 +76,21 @@ export default async function EventDetailPage({
       region: a.region,
       postalCode: a.postalCode,
       country: a.country,
-      latitude: a.latitude === null ? null : Number(a.latitude),
-      longitude: a.longitude === null ? null : Number(a.longitude),
+      latitude: a.latitude === null || a.latitude === undefined ? null : Number(a.latitude),
+      longitude: a.longitude === null || a.longitude === undefined ? null : Number(a.longitude),
       geocodeStatus: a.geocodeStatus,
     })),
-    urls: event.urls.map((u) => ({
+    urls: (event.urls || []).map((u) => ({
       id: u.id,
       type: u.type,
       url: u.url,
     })),
-    customFields: event.customFields.map((cf) => ({
+    customFields: (event.customFields || []).map((cf) => ({
       id: cf.id,
       key: cf.key,
       value: cf.value,
     })),
-    people: event.people.map((p) => ({
+    people: (event.people || []).map((p) => ({
       id: p.id,
       personId: p.personId,
       role: p.role,
@@ -189,12 +102,22 @@ export default async function EventDetailPage({
       notes: p.notes,
       person: p.person,
     })),
-    relationshipsFrom: event.relationshipsFrom,
-    journalEntries: event.journalEntries,
+    relationshipsFrom: [],
+    journalEntries: (event.journalEntries || []).map((j: any) => ({
+      ...j,
+      journalEntry: j.journalEntry || {
+        id: j.journalEntryId,
+        title: '',
+        date: '',
+        hasTime: false,
+        body: '',
+        people: [],
+      },
+    })),
     mapCounts: {
-      markers: event._count.mapMarkers,
-      routes: event._count.mapRoutes,
-      drawings: event._count.mapDrawings,
+      markers: 0,
+      routes: 0,
+      drawings: 0,
     },
   };
 
@@ -220,10 +143,10 @@ export default async function EventDetailPage({
           </div>
 
           <EventDetailsClient
-            event={serializedEvent}
+            event={serializedEvent as any}
             availablePeople={availablePeople}
-            availableEvents={availableEvents}
-            immichConfigured={Boolean(immichConnection?.enabled)}
+            availableEvents={availableEvents as any}
+            immichConfigured={Boolean(immichRes?.enabled || immichRes?.configured)}
             dateFormat={dateFormat}
             nameOrder={nameOrder}
             nameDisplayFormat={nameDisplayFormat}

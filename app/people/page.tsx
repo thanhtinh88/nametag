@@ -2,22 +2,14 @@ import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { Suspense } from 'react';
-import { prisma } from '@/lib/prisma';
-import { Prisma } from '@prisma/client';
+import { apiServer } from '@/lib/backend/api-client';
 import Navigation from '@/components/Navigation';
 import { Button } from '@/components/ui/Button';
 import EmptyState from '@/components/EmptyState';
 import ImportSuccessToast from '@/components/ImportSuccessToast';
-import { canCreateResource } from '@/lib/billing/subscription';
 import { getTranslations } from 'next-intl/server';
 import PeopleListClient from '@/components/PeopleListClient';
 import { getUserDisplayPreferences } from '@/lib/user-preferences';
-import {
-  getContactRecencyFilter,
-  getRecordRecencyFilter,
-  type ContactRecencyPreset,
-  type RecordRecencyPreset,
-} from '@/lib/investigation-dates';
 
 const DEFAULT_PAGE_SIZE = 25;
 const ALLOWED_PAGE_SIZES = [10, 25, 50, 100];
@@ -47,10 +39,9 @@ export default async function PeoplePage({
     redirect('/login');
   }
 
-  const [t, tCommon, canCreate, { dateFormat, nameOrder, nameDisplayFormat }, params] = await Promise.all([
+  const [t, tCommon, { dateFormat, nameOrder, nameDisplayFormat }, params] = await Promise.all([
     getTranslations('people'),
     getTranslations('common'),
-    canCreateResource(session.user.id, 'people'),
     getUserDisplayPreferences(session.user.id),
     searchParams,
   ]);
@@ -79,309 +70,119 @@ export default async function PeoplePage({
     }
   }
 
-  const skip = (currentPage - 1) * pageSize;
+  const [peopleRes, groupsRes, relTypesRes, templatesRes] = await Promise.all([
+    apiServer.get<{ people: any[] }>('/api/people?includeAll=true&includeDetails=true').catch(() => ({ people: [] })),
+    apiServer.get<{ groups: any[] }>('/api/groups').catch(() => ({ groups: [] })),
+    apiServer.get<{ relationshipTypes: any[] }>('/api/relationship-types').catch(() => ({ relationshipTypes: [] })),
+    apiServer.get<{ customFieldTemplates: any[] }>('/api/custom-field-templates').catch(() => ({ customFieldTemplates: [] })),
+  ]);
 
-  // Build where clause for people query
-  const peopleWhere: Prisma.PersonWhereInput = {
-    userId: session.user.id,
-    deletedAt: null,
-  };
+  const allPeopleRaw = peopleRes?.people || [];
+  const allGroups = groupsRes?.groups || [];
+  const relationshipTypes = relTypesRes?.relationshipTypes || [];
+  const customFieldTemplates = templatesRes?.customFieldTemplates || [];
 
-  // Search keyword (q)
+  // Filter
+  let filtered = allPeopleRaw;
+
   if (query) {
-    peopleWhere.OR = [
-      { name: { contains: query, mode: 'insensitive' } },
-      { surname: { contains: query, mode: 'insensitive' } },
-      { nickname: { contains: query, mode: 'insensitive' } },
-      { citizenId: { contains: query, mode: 'insensitive' } },
-      {
-        vehicles: {
-          some: {
-            plateNumber: { contains: query, mode: 'insensitive' },
-            deletedAt: null,
-          },
-        },
-      },
-      {
-        physicalMarks: {
-          some: {
-            description: { contains: query, mode: 'insensitive' },
-            deletedAt: null,
-          },
-        },
-      },
-    ];
+    const qLower = query.toLowerCase();
+    filtered = filtered.filter((p: any) => {
+      if (p.name && p.name.toLowerCase().includes(qLower)) return true;
+      if (p.surname && p.surname.toLowerCase().includes(qLower)) return true;
+      if (p.nickname && p.nickname.toLowerCase().includes(qLower)) return true;
+      if (p.citizenId && p.citizenId.toLowerCase().includes(qLower)) return true;
+      if (p.vehicles && p.vehicles.some((v: any) => v.plateNumber?.toLowerCase().includes(qLower))) return true;
+      return false;
+    });
+  }
+
+  if (managementFilter) {
+    filtered = filtered.filter((p: any) => p.managementLevel === managementFilter);
+  }
+
+  if (threatFilter) {
+    filtered = filtered.filter((p: any) => p.threatLevel === threatFilter);
   }
 
   if (groupFilter === 'none') {
-    peopleWhere.groups = { none: {} };
+    filtered = filtered.filter((p: any) => !p.groups || p.groups.length === 0);
   } else if (groupFilter) {
-    peopleWhere.groups = { some: { groupId: groupFilter } };
-  }
-
-  if (relationshipFilter === 'none') {
-    peopleWhere.AND = [
-      { relationshipsFrom: { none: {} } },
-      { relationshipsTo: { none: {} } },
-    ];
-  } else if (relationshipFilter) {
-    peopleWhere.OR = [
-      { relationshipsFrom: { some: { relationshipTypeId: relationshipFilter, deletedAt: null } } },
-      { relationshipsTo: { some: { relationshipTypeId: relationshipFilter, deletedAt: null } } },
-    ];
-  }
-
-  if (managementFilter === 'monitored') {
-    peopleWhere.managementLevel = { in: ['SURVEILLANCE', 'KEY_TARGET'] };
-  } else if (managementFilter === 'KEY_TARGET' || managementFilter === 'SURVEILLANCE' || managementFilter === 'NORMAL') {
-    peopleWhere.managementLevel = managementFilter;
-  }
-
-  if (threatFilter === 'armed') {
-    peopleWhere.threatLevel = 'ARMED_DANGEROUS';
-  } else if (threatFilter === 'high') {
-    peopleWhere.threatLevel = { in: ['HIGH', 'ARMED_DANGEROUS'] };
-  } else if (threatFilter) {
-    peopleWhere.threatLevel = threatFilter;
+    filtered = filtered.filter((p: any) => (p.groups || []).some((g: any) => g.groupId === groupFilter || g.id === groupFilter));
   }
 
   if (hasRecordFilter === 'true') {
-    peopleWhere.criminalRecords = { some: { deletedAt: null } };
+    filtered = filtered.filter((p: any) => p.criminalRecords && p.criminalRecords.length > 0);
   }
 
-  if (contactRecencyFilter) {
-    const filter = getContactRecencyFilter(contactRecencyFilter as ContactRecencyPreset);
-    if (filter) {
-      if (filter.condition === 'lt') {
-        peopleWhere.AND = [
-          ...(Array.isArray(peopleWhere.AND)
-            ? peopleWhere.AND
-            : peopleWhere.AND
-            ? [peopleWhere.AND]
-            : []),
-          { OR: [{ lastContact: { lt: filter.threshold } }, { lastContact: null }] },
-        ];
-      } else {
-        peopleWhere.lastContact = { gte: filter.threshold };
-      }
-    }
-  }
-
-  if (recordRecencyFilter) {
-    const threshold = getRecordRecencyFilter(recordRecencyFilter as RecordRecencyPreset);
-    if (threshold) {
-      peopleWhere.criminalRecords = {
-        some: {
-          deletedAt: null,
-          OR: [
-            { verdictDate: { gte: threshold } },
-            { incidentDate: { gte: threshold } },
-          ],
-        },
-      };
-    }
-  }
-
-  if (cfFilter) {
-    peopleWhere.customFieldValues = {
-      some: {
-        value: { equals: cfFilter.value, mode: 'insensitive' },
-        template: {
-          slug: cfFilter.slug,
-          userId: session.user.id,
-          deletedAt: null,
-        },
-      },
-    };
-  }
-
-  const isDbSortable = ['name', 'surname', 'lastContact', 'nickname'].includes(sortBy);
-
-  let prismaOrderBy: Prisma.PersonOrderByWithRelationInput[] = [];
-  if (isDbSortable) {
+  // Sort
+  filtered.sort((a: any, b: any) => {
+    let cmp = 0;
     if (sortBy === 'name') {
-      prismaOrderBy = nameOrder === 'EASTERN'
-        ? [{ surname: order }, { name: order }]
-        : [{ name: order }, { surname: order }];
-    } else if (sortBy === 'surname') {
-      prismaOrderBy = [{ surname: order }, { name: order }];
-    } else if (sortBy === 'lastContact') {
-      prismaOrderBy = [{ lastContact: order }, { name: 'asc' }];
-    } else if (sortBy === 'nickname') {
-      prismaOrderBy = [{ nickname: order }, { name: 'asc' }];
+      const aName = `${a.name || ''} ${a.surname || ''}`.trim();
+      const bName = `${b.name || ''} ${b.surname || ''}`.trim();
+      cmp = aName.localeCompare(bName);
+    } else if (sortBy === 'citizenId') {
+      cmp = (a.citizenId || '').localeCompare(b.citizenId || '');
+    } else if (sortBy === 'managementLevel') {
+      cmp = (a.managementLevel || '').localeCompare(b.managementLevel || '');
+    } else if (sortBy === 'threatLevel') {
+      cmp = (a.threatLevel || '').localeCompare(b.threatLevel || '');
+    } else if (sortBy === 'createdAt') {
+      cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    } else {
+      const aName = `${a.name || ''} ${a.surname || ''}`.trim();
+      const bName = `${b.name || ''} ${b.surname || ''}`.trim();
+      cmp = aName.localeCompare(bName);
     }
-  }
+    return order === 'desc' ? -cmp : cmp;
+  });
 
-  const personInclude = {
-    relationshipToUser: { select: { label: true, color: true } },
-    groups: {
-      where: { group: { deletedAt: null } },
-      include: { group: { select: { name: true, color: true } } },
-    },
-    relationshipsFrom: { select: { id: true } },
-    relationshipsTo: { select: { id: true } },
-    vehicles: {
-      where: { deletedAt: null },
-      select: { plateNumber: true, brandModel: true, color: true },
-      take: 3,
-    },
-    physicalMarks: {
-      where: { deletedAt: null },
-      select: { type: true, location: true, description: true },
-      take: 3,
-    },
-    criminalRecords: {
-      where: { deletedAt: null },
-      select: { id: true },
-    },
-    gangMemberships: {
-      where: { gang: { deletedAt: null } },
-      include: { gang: { select: { id: true, name: true, color: true } } },
-    },
-    events: {
-      where: { deletedAt: null },
-      select: { eventId: true },
-    },
-  };
-
-  // Get total count for pagination, quick chips counts, and records in parallel
-  const [
-    totalCount,
-    totalAll,
-    countKeyTarget,
-    countSurveillance,
-    countHighRisk,
-    countCriminal,
-    countUnassignedGroup,
-    allGroups,
-    relationshipTypes,
-    customFieldTemplates,
-    rawDbPeople,
-  ] = await Promise.all([
-    prisma.person.count({ where: peopleWhere }),
-    prisma.person.count({ where: { userId: session.user.id, deletedAt: null } }),
-    prisma.person.count({ where: { userId: session.user.id, deletedAt: null, managementLevel: 'KEY_TARGET' } }),
-    prisma.person.count({ where: { userId: session.user.id, deletedAt: null, managementLevel: 'SURVEILLANCE' } }),
-    prisma.person.count({ where: { userId: session.user.id, deletedAt: null, threatLevel: { in: ['HIGH', 'ARMED_DANGEROUS'] } } }),
-    prisma.person.count({ where: { userId: session.user.id, deletedAt: null, criminalRecords: { some: { deletedAt: null } } } }),
-    prisma.person.count({ where: { userId: session.user.id, deletedAt: null, groups: { none: {} } } }),
-    prisma.group.findMany({
-      where: { userId: session.user.id, deletedAt: null },
-      orderBy: { name: 'asc' },
-      select: { id: true, name: true, color: true },
-    }),
-    prisma.relationshipType.findMany({
-      where: { userId: session.user.id, deletedAt: null },
-      orderBy: { label: 'asc' },
-      select: { id: true, label: true, color: true },
-    }),
-    prisma.customFieldTemplate.findMany({
-      where: { userId: session.user.id, deletedAt: null },
-      orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
-    }),
-    isDbSortable
-      ? prisma.person.findMany({
-          where: peopleWhere,
-          include: personInclude,
-          orderBy: prismaOrderBy,
-          skip,
-          take: pageSize,
-        })
-      : null,
-  ]);
+  const totalCount = filtered.length;
+  const totalAll = allPeopleRaw.length;
+  const countKeyTarget = allPeopleRaw.filter((p: any) => p.managementLevel === 'KEY_TARGET').length;
+  const countSurveillance = allPeopleRaw.filter((p: any) => p.managementLevel === 'SURVEILLANCE').length;
+  const countHighRisk = allPeopleRaw.filter((p: any) => p.threatLevel === 'HIGH' || p.threatLevel === 'ARMED_DANGEROUS').length;
+  const countCriminal = allPeopleRaw.filter((p: any) => p.criminalRecords && p.criminalRecords.length > 0).length;
+  const countUnassignedGroup = allPeopleRaw.filter((p: any) => !p.groups || p.groups.length === 0).length;
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const skip = (currentPage - 1) * pageSize;
+  const pagedPeople = filtered.slice(skip, skip + pageSize);
 
-  let people: Array<{
-    id: string;
-    name: string;
-    middleName: string | null;
-    surname: string | null;
-    secondLastName: string | null;
-    nickname: string | null;
-    displayNameOverride?: string | null;
-    photo: string | null;
-    lastContact: Date | null;
-    relationshipToUser: { label: string; color: string | null } | null;
-    groups: Array<{ groupId: string; group: { name: string; color: string | null } }>;
-    relationshipsFrom: Array<{ id: string }>;
-    relationshipsTo: Array<{ id: string }>;
-    managementLevel?: string | null;
-    threatLevel?: string | null;
-    citizenId?: string | null;
-    vehicles?: Array<{ plateNumber: string; brandModel: string | null; color: string | null }>;
-    physicalMarks?: Array<{ type: string; location: string; description: string | null }>;
-    criminalRecordsCount?: number;
-    gangs?: Array<{ id: string; name: string; color: string | null }>;
-    casesCount?: number;
-  }> = [];
-
-  if (isDbSortable && rawDbPeople) {
-    people = rawDbPeople.map((p) => ({
-      ...p,
-      vehicles: p.vehicles,
-      physicalMarks: p.physicalMarks,
-      criminalRecordsCount: p.criminalRecords.length,
-      gangs: p.gangMemberships.map((gm) => gm.gang),
-      casesCount: p.events.length,
-    }));
-  } else {
-    // In-memory sort fallback for relations count or groups
-    const allPeople = await prisma.person.findMany({
-      where: peopleWhere,
-      include: personInclude,
-    });
-
-    const sortedPeople = [...allPeople].sort((a, b) => {
-      let primaryComparison = 0;
-      switch (sortBy) {
-        case 'relationship': {
-          const aCount = a.relationshipsFrom.length + a.relationshipsTo.length;
-          const bCount = b.relationshipsFrom.length + b.relationshipsTo.length;
-          primaryComparison = bCount - aCount;
-          break;
-        }
-        case 'group': {
-          const aGroup = a.groups[0]?.group.name || 'zzz';
-          const bGroup = b.groups[0]?.group.name || 'zzz';
-          primaryComparison = aGroup.localeCompare(bGroup);
-          break;
-        }
-        default: {
-          const aFull = `${a.name} ${a.surname || ''}`.trim();
-          const bFull = `${b.name} ${b.surname || ''}`.trim();
-          primaryComparison = aFull.localeCompare(bFull);
-        }
-      }
-
-      const ordered = order === 'desc' ? -primaryComparison : primaryComparison;
-      if (ordered !== 0) return ordered;
-      const aFallback = `${a.name} ${a.surname || ''}`.trim();
-      const bFallback = `${b.name} ${b.surname || ''}`.trim();
-      return aFallback.localeCompare(bFallback);
-    });
-
-    people = sortedPeople.slice(skip, skip + pageSize).map((p) => ({
-      ...p,
-      vehicles: p.vehicles,
-      physicalMarks: p.physicalMarks,
-      criminalRecordsCount: p.criminalRecords.length,
-      gangs: p.gangMemberships.map((gm) => gm.gang),
-      casesCount: p.events.length,
-    }));
-  }
-
-  const quickCounts = {
-    totalAll,
-    countKeyTarget,
-    countSurveillance,
-    countHighRisk,
-    countCriminal,
-    countUnassignedGroup,
-  };
+  const people = pagedPeople.map((p: any) => ({
+    id: p.id,
+    name: p.name,
+    middleName: p.middleName || null,
+    surname: p.surname || null,
+    secondLastName: p.secondLastName || null,
+    nickname: p.nickname || null,
+    displayNameOverride: p.displayNameOverride || null,
+    photo: p.photo || null,
+    lastContact: p.lastContact ? new Date(p.lastContact) : null,
+    relationshipToUser: p.relationshipToUser || null,
+    groups: (p.groups || []).map((g: any) => ({
+      groupId: g.groupId || g.id,
+      group: g.group || { name: g.name || '', color: g.color || null },
+    })),
+    relationshipsFrom: p.relationshipsFrom || [],
+    relationshipsTo: p.relationshipsTo || [],
+    managementLevel: p.managementLevel || null,
+    threatLevel: p.threatLevel || null,
+    citizenId: p.citizenId || null,
+    vehicles: p.vehicles || [],
+    physicalMarks: p.physicalMarks || [],
+    criminalRecordsCount: (p.criminalRecords || []).length,
+    gangs: (p.gangMemberships || []).map((gm: any) => gm.gang || gm),
+    casesCount: (p.events || []).length,
+  }));
 
   return (
     <div className="min-h-screen bg-background">
+      <Suspense fallback={null}>
+        <ImportSuccessToast />
+      </Suspense>
+
       <Navigation
         userEmail={session.user.email || undefined}
         userName={session.user.name}
@@ -389,9 +190,6 @@ export default async function PeoplePage({
         userPhoto={session.user.photo}
         currentPath="/people"
       />
-      <Suspense>
-        <ImportSuccessToast />
-      </Suspense>
 
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8 animate-page-enter">
         <div className="px-4 py-6 sm:px-0">
@@ -399,32 +197,13 @@ export default async function PeoplePage({
             <h1 className="text-3xl font-bold text-foreground">
               {t('title')}
             </h1>
-            <div className="flex flex-wrap gap-3 w-full sm:w-auto">
-              <Button href="/people/duplicates" variant="secondary" className="flex-1 sm:flex-initial">
-                {t('duplicates.findDuplicates')}
-              </Button>
-              {canCreate.allowed ? (
-                <Button href="/people/new" className="flex-1 sm:flex-initial">
-                  {t('addPerson')}
-                </Button>
-              ) : (
-                <div className="relative group flex-1 sm:flex-initial">
-                  <span className="px-4 py-2 min-h-11 sm:min-h-0 bg-muted/50 text-white rounded-lg font-semibold cursor-not-allowed inline-flex items-center justify-center w-full">
-                    {t('addPerson')}
-                  </span>
-                  <div className="invisible group-hover:visible absolute right-0 top-full mt-2 w-64 p-3 bg-surface-elevated text-white text-sm rounded-lg shadow-lg z-10">
-                    <p className="mb-2">{t('limitReached', { limit: canCreate.limit })}</p>
-                    <Link href="/settings/billing" className="text-primary hover:text-primary-dark underline">
-                      {t('upgradePlan')}
-                    </Link>
-                  </div>
-                </div>
-              )}
-            </div>
+            <Button href="/people/new">
+              {t('addPerson')}
+            </Button>
           </div>
 
-          {totalCount === 0 && !groupFilter && !relationshipFilter && !cfFilter && !managementFilter && !threatFilter && !hasRecordFilter && !query ? (
-            <div className="bg-surface rounded-lg border border-border">
+          {totalCount === 0 && !query && !groupFilter && !managementFilter && !threatFilter && !hasRecordFilter ? (
+            <div className="bg-surface shadow rounded-lg">
               <EmptyState
                 icon={
                   <svg className="w-12 h-12 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -440,6 +219,9 @@ export default async function PeoplePage({
           ) : (
             <PeopleListClient
               people={people}
+              availableGroups={allGroups}
+              relationshipTypes={relationshipTypes}
+              customFieldTemplates={customFieldTemplates}
               totalCount={totalCount}
               currentPage={currentPage}
               totalPages={totalPages}
@@ -453,13 +235,17 @@ export default async function PeoplePage({
               hasRecordFilter={hasRecordFilter}
               contactRecencyFilter={contactRecencyFilter}
               recordRecencyFilter={recordRecencyFilter}
-              query={query}
               cfFilter={cfFilter}
-              quickCounts={quickCounts}
+              query={query}
+              quickCounts={{
+                totalAll,
+                countKeyTarget,
+                countSurveillance,
+                countHighRisk,
+                countCriminal,
+                countUnassignedGroup,
+              }}
               dateFormat={dateFormat}
-              availableGroups={allGroups}
-              relationshipTypes={relationshipTypes}
-              customFieldTemplates={customFieldTemplates}
               nameOrder={nameOrder}
               nameDisplayFormat={nameDisplayFormat}
               translations={{
@@ -472,11 +258,7 @@ export default async function PeoplePage({
                 actions: t('actions'),
                 indirect: t('indirect'),
                 orphanWarning: t('orphanWarning'),
-                showing: t('showing', {
-                  start: totalCount === 0 ? 0 : skip + 1,
-                  end: Math.min(skip + pageSize, totalCount),
-                  total: totalCount,
-                }),
+                showing: t('showing'),
                 page: t('page'),
                 of: t('of'),
                 pageSize: t('pageSize'),

@@ -1,14 +1,14 @@
 import { auth } from '@/lib/auth';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
-import { prisma } from '@/lib/prisma';
+import { apiServer } from '@/lib/backend/api-client';
 import DeleteGroupButton from '@/components/DeleteGroupButton';
 import Navigation from '@/components/Navigation';
 import GroupMembersManager from '@/components/GroupMembersManager';
 import GroupSuspectedCases, { type SuspectedCaseItem } from '@/components/GroupSuspectedCases';
 import { getTranslations } from 'next-intl/server';
 import { getUserDisplayPreferences } from '@/lib/user-preferences';
-
+import type { Group } from '@/types/api/group';
 
 export default async function GroupDetailsPage({
   params,
@@ -27,150 +27,32 @@ export default async function GroupDetailsPage({
     getTranslations('common'),
   ]);
 
-  const [group, allPeople, preferences] = await Promise.all([
-    prisma.group.findUnique({
-      where: {
-        id,
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      include: {
-        people: {
-          where: {
-            person: { deletedAt: null },
-          },
-          include: {
-            person: {
-              select: {
-                id: true,
-                name: true,
-                surname: true,
-                nickname: true,
-                displayNameOverride: true,
-                photo: true,
-              },
-            },
-          },
-        },
-      },
-    }),
-    prisma.person.findMany({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        name: true,
-        surname: true,
-        nickname: true,
-        displayNameOverride: true,
-        photo: true,
-      },
-      orderBy: {
-        name: 'asc',
-      },
-    }),
+  const [groupRes, allPeopleRes, preferences, eventsRes] = await Promise.all([
+    apiServer.get<{ group: Group }>(`/api/groups/${id}`).catch(() => null),
+    apiServer.get<{ people: any[] }>('/api/people').catch(() => ({ people: [] })),
     getUserDisplayPreferences(session.user.id),
+    apiServer.get<{ events: any[] }>('/api/events').catch(() => ({ events: [] })),
   ]);
 
+  const group = groupRes?.group;
   if (!group) {
     notFound();
   }
 
+  const allPeople = allPeopleRes?.people || [];
   const { nameOrder, nameDisplayFormat, dateFormat } = preferences;
-  const currentMembers = group.people.map((pg) => pg.person);
+
+  const currentMembers = (group.people || [])
+    .map((pg) => pg.person)
+    .filter((p): p is NonNullable<typeof p> => p != null);
   const currentMemberIds = currentMembers.map((m) => m.id);
-
-  // Fetch suspected cases where members of this group are involved or cases directly assigned to this group
-  const rawEvents = await prisma.event.findMany({
-    where: {
-      userId: session.user.id,
-      deletedAt: null,
-      OR: [
-        {
-          groups: {
-            some: {
-              groupId: id,
-            },
-          },
-        },
-        ...(currentMemberIds.length > 0
-          ? [
-              {
-                people: {
-                  some: {
-                    personId: { in: currentMemberIds },
-                    deletedAt: null,
-                  },
-                },
-              },
-            ]
-          : []),
-      ],
-    },
-    select: {
-      id: true,
-      title: true,
-      caseCode: true,
-      crimeType: true,
-      caseStatus: true,
-      status: true,
-      startDate: true,
-      endDate: true,
-      incidentTimeNotes: true,
-      damageAssessment: true,
-      groups: {
-        where: { groupId: id },
-        select: { groupId: true },
-      },
-      addresses: {
-        select: {
-          id: true,
-          streetLine1: true,
-          locality: true,
-          region: true,
-          country: true,
-        },
-      },
-      people: {
-        where: {
-          deletedAt: null,
-          person: { deletedAt: null },
-        },
-        select: {
-          id: true,
-          personId: true,
-          role: true,
-          involvementType: true,
-          verificationStatus: true,
-          confidence: true,
-          reasonForSuspicion: true,
-          alibi: true,
-          notes: true,
-          person: {
-            select: {
-              id: true,
-              name: true,
-              surname: true,
-              nickname: true,
-              displayNameOverride: true,
-              photo: true,
-            },
-          },
-        },
-        orderBy: { createdAt: 'asc' },
-      },
-    },
-    orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
-  });
-
   const memberIdSet = new Set(currentMemberIds);
 
+  const rawEvents = eventsRes?.events || [];
   const suspectedCases: SuspectedCaseItem[] = rawEvents
-    .map((e) => {
-      const isDirectlyAssignedToGroup = e.groups.length > 0;
-      const involvedGroupMembers = e.people.filter((p) => memberIdSet.has(p.personId));
+    .map((e: any) => {
+      const isDirectlyAssignedToGroup = (e.groups || []).some((g: any) => g.groupId === id);
+      const involvedGroupMembers = (e.people || []).filter((p: any) => memberIdSet.has(p.personId));
 
       return {
         id: e.id,
@@ -179,16 +61,16 @@ export default async function GroupDetailsPage({
         crimeType: e.crimeType,
         caseStatus: e.caseStatus,
         status: e.status,
-        startDate: e.startDate ? e.startDate.toISOString() : null,
-        endDate: e.endDate ? e.endDate.toISOString() : null,
+        startDate: e.startDate || null,
+        endDate: e.endDate || null,
         incidentTimeNotes: e.incidentTimeNotes,
         damageAssessment: e.damageAssessment,
         isDirectlyAssignedToGroup,
-        addresses: e.addresses,
+        addresses: e.addresses || [],
         involvedGroupMembers,
       };
     })
-    .filter((c) => c.isDirectlyAssignedToGroup || c.involvedGroupMembers.length > 0);
+    .filter((c: any) => c.isDirectlyAssignedToGroup || c.involvedGroupMembers.length > 0);
 
   return (
     <div className="min-h-screen bg-background">

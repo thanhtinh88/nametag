@@ -1,6 +1,6 @@
 import { cache } from 'react';
 import { cookies, headers } from 'next/headers';
-import { prisma } from './prisma';
+import { apiServer } from './backend/api-client';
 import { createModuleLogger } from './logger';
 
 const log = createModuleLogger('locale');
@@ -150,15 +150,16 @@ export async function detectBrowserLocale(): Promise<SupportedLocale> {
 /**
  * Get user's language preference from database
  */
-export const getUserLanguageFromDB = cache(async (userId: string): Promise<SupportedLocale | null> => {
+export const getUserLanguageFromDB = cache(async (_userId: string): Promise<SupportedLocale | null> => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { language: true },
+    const res = await apiServer<{ user?: { language?: string } }>('/api/user/profile', {
+      autoNotFound: false,
+      autoRedirect: false,
     });
 
-    if (user?.language && isSupportedLocale(user.language)) {
-      return user.language;
+    const lang = res?.user?.language;
+    if (lang && isSupportedLocale(lang)) {
+      return lang;
     }
 
     return null;
@@ -198,14 +199,11 @@ export async function getUserLocale(userId?: string): Promise<SupportedLocale> {
  * Update user's language preference in database
  */
 export async function updateUserLanguage(
-  userId: string,
+  _userId: string,
   locale: SupportedLocale
 ): Promise<boolean> {
   try {
-    await prisma.user.update({
-      where: { id: userId },
-      data: { language: locale },
-    });
+    await apiServer.put('/api/user/language', { language: locale });
     return true;
   } catch (error) {
     log.error({ err: error instanceof Error ? error : new Error(String(error)) }, 'Error updating user language');

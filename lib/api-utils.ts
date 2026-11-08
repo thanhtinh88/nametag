@@ -5,7 +5,6 @@ import { auth } from './auth';
 import { logger, createModuleLogger } from './logger';
 import { validateOrigin } from '@/lib/csrf';
 import { runWithContext, updateContext } from '@/lib/logging/context';
-import { resolveApiToken } from '@/lib/api-tokens';
 import {
   resolveTrustedClientIp,
   getRawTrustedProxyHeaderForLogging,
@@ -372,31 +371,6 @@ export function withAuth(
     request: Request,
     context?: RouteContext
   ): Promise<Response | NextResponse> => {
-    // API-token (Bearer) auth path: for programmatic clients and MCP servers.
-    // Bearer tokens are not subject to CSRF, so the Origin check is skipped
-    // (a non-browser client has no Origin header to validate anyway).
-    const bearer = allowApiToken ? extractBearerToken(request) : null;
-    if (bearer) {
-      const resolved = await resolveApiToken(bearer);
-
-      if (!resolved) {
-        return apiResponse.unauthorized('Invalid or expired API token');
-      }
-
-      // Read-only tokens may only perform safe (non-mutating) requests.
-      if (resolved.scope === 'READ' && !READ_ONLY_METHODS.has(request.method)) {
-        return apiResponse.forbidden('This API token is read-only');
-      }
-
-      updateContext({ userId: resolved.userId });
-
-      const tokenSession = {
-        user: { id: resolved.userId },
-      } as AuthenticatedSession;
-
-      return handler(request, tokenSession, context as RouteContext);
-    }
-
     // Session (cookie) auth path.
     if (!validateOrigin(request)) {
       return apiResponse.forbidden('Invalid request origin');

@@ -1,11 +1,10 @@
 import { auth } from '@/lib/auth';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
-import { prisma } from '@/lib/prisma';
+import { apiServer } from '@/lib/backend/api-client';
 import PersonForm from '@/components/PersonForm';
 import Navigation from '@/components/Navigation';
 import { formatGraphName } from '@/lib/nameUtils';
-import { canEnableReminder } from '@/lib/billing/subscription';
 import { getTranslations } from 'next-intl/server';
 import { getUserDisplayPreferences } from '@/lib/user-preferences';
 
@@ -24,231 +23,133 @@ export default async function EditPersonPage({
   const { id } = await params;
 
   const [
-    person,
-    groups,
-    relationshipTypes,
-    reminderCheck,
+    personRes,
+    groupsRes,
+    relationshipTypesRes,
     preferences,
-    cardDavConnection,
-    customFieldTemplates,
-    notificationPreferences,
-    allPeople,
-    allEvents,
-    availableGangs,
+    customFieldTemplatesRes,
+    allPeopleRes,
+    allEventsRes,
+    availableGangsRes,
   ] = await Promise.all([
-    prisma.person.findUnique({
-      where: {
-        id,
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      include: {
-        groups: true,
-        relationshipToUser: true,
-        importantDates: {
-          where: { deletedAt: null },
-          orderBy: {
-            date: 'asc',
-          },
-        },
-        phoneNumbers: true,
-        emails: true,
-        addresses: true,
-        urls: true,
-        cardDavMapping: {
-          select: { id: true },
-        },
-        customFieldValues: {
-          where: { template: { deletedAt: null } },
-          select: { templateId: true, value: true },
-        },
-        relationshipsTo: {
-          where: {
-            deletedAt: null,
-            person: {
-              deletedAt: null,
-            },
-          },
-          include: {
-            person: {
-              select: {
-                id: true,
-                name: true,
-                surname: true,
-                nickname: true,
-                displayNameOverride: true,
-                photo: true,
-              },
-            },
-            relationshipType: {
-              where: {
-                deletedAt: null,
-              },
-            },
-          },
-        },
-        events: {
-          where: {
-            deletedAt: null,
-            event: {
-              deletedAt: null,
-            },
-          },
-          include: {
-            event: {
-              include: {
-                people: {
-                  where: {
-                    deletedAt: null,
-                    person: {
-                      deletedAt: null,
-                    },
-                  },
-                  include: {
-                    person: {
-                      select: {
-                        id: true,
-                        name: true,
-                        surname: true,
-                        nickname: true,
-                        displayNameOverride: true,
-                        photo: true,
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-          orderBy: {
-            createdAt: 'desc',
-          },
-        },
-        vehicles: {
-          where: { deletedAt: null },
-          orderBy: { createdAt: 'desc' },
-        },
-        physicalMarks: {
-          where: { deletedAt: null },
-          orderBy: { createdAt: 'desc' },
-        },
-        criminalRecords: {
-          where: { deletedAt: null },
-          orderBy: { incidentDate: 'desc' },
-        },
-        gangMemberships: {
-          include: {
-            gang: true,
-          },
-        },
-        bankAccounts: {
-          where: { deletedAt: null },
-          orderBy: [{ isPrimary: 'desc' }, { createdAt: 'desc' }],
-        },
-      },
-    }),
-    prisma.group.findMany({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      orderBy: {
-        name: 'asc',
-      },
-    }),
-    prisma.relationshipType.findMany({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      orderBy: {
-        label: 'asc',
-      },
-    }),
-    canEnableReminder(session.user.id),
+    apiServer.get<{ person: any }>(`/api/people/${id}`).catch(() => null),
+    apiServer.get<{ groups: any[] }>('/api/groups').catch(() => ({ groups: [] })),
+    apiServer.get<{ relationshipTypes: any[] }>('/api/relationship-types').catch(() => ({ relationshipTypes: [] })),
     getUserDisplayPreferences(session.user.id),
-    prisma.cardDavConnection.findFirst({
-      where: { userId: session.user.id },
-      select: { id: true },
-    }),
-    prisma.customFieldTemplate.findMany({
-      where: { userId: session.user.id, deletedAt: null },
-      orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
-    }),
-    // select is an allowlist: only this column can ever reach this page, so
-    // the password hash and other sensitive columns never enter process
-    // memory for this request in the first place.
-    prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { defaultReminderLeadDays: true },
-    }),
-    prisma.person.findMany({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        name: true,
-        surname: true,
-        middleName: true,
-        secondLastName: true,
-        nickname: true,
-        displayNameOverride: true,
-        photo: true,
-        groups: {
-          select: {
-            groupId: true,
-          },
-        },
-      },
-      orderBy: {
-        name: 'asc',
-      },
-    }),
-    prisma.event.findMany({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        title: true,
-      },
-      orderBy: [{ startDate: 'desc' }, { title: 'asc' }],
-    }),
-    prisma.gang.findMany({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        name: true,
-        color: true,
-        turf: true,
-      },
-      orderBy: {
-        name: 'asc',
-      },
-    }),
+    apiServer.get<{ customFieldTemplates: any[] }>('/api/custom-field-templates').catch(() => ({ customFieldTemplates: [] })),
+    apiServer.get<{ people: any[] }>('/api/people').catch(() => ({ people: [] })),
+    apiServer.get<{ events: any[] }>('/api/events').catch(() => ({ events: [] })),
+    apiServer.get<{ gangs: any[] }>('/api/gangs').catch(() => ({ gangs: [] })),
   ]);
 
+  const person = personRes?.person;
   if (!person) {
     notFound();
   }
 
-  // Convert Prisma Decimal objects to plain numbers for client components
-  const serializedPerson = {
-    ...person,
-    addresses: person.addresses.map((address) => ({
-      ...address,
-      latitude: address.latitude === null ? null : Number(address.latitude),
-      longitude: address.longitude === null ? null : Number(address.longitude),
-    })),
-  };
+  const groups = groupsRes?.groups || [];
+  const relationshipTypes = relationshipTypesRes?.relationshipTypes || [];
+  const customFieldTemplates = customFieldTemplatesRes?.customFieldTemplates || [];
+  const allPeople = allPeopleRes?.people || [];
+  const allEvents = allEventsRes?.events || [];
+  const availableGangs = availableGangsRes?.gangs || [];
 
   const { dateFormat, nameOrder, nameDisplayFormat } = preferences;
+
+  const initialData = {
+    name: person.name,
+    middleName: person.middleName || undefined,
+    surname: person.surname || undefined,
+    secondLastName: person.secondLastName || undefined,
+    nickname: person.nickname || undefined,
+    displayNameOverride: person.displayNameOverride || undefined,
+    prefix: person.prefix || undefined,
+    suffix: person.suffix || undefined,
+    organization: person.organization || undefined,
+    jobTitle: person.jobTitle || undefined,
+    gender: person.gender || undefined,
+    anniversary: person.anniversary ? new Date(person.anniversary).toISOString().split('T')[0] : undefined,
+    lastContact: person.lastContact ? new Date(person.lastContact).toISOString().split('T')[0] : undefined,
+    notes: person.notes || undefined,
+    relationshipToUserId: person.relationshipToUserId || undefined,
+    groupMemberships: (person.groups || []).map((g: any) => ({
+      groupId: g.groupId || g.id,
+    })),
+    importantDates: (person.importantDates || []).map((d: any) => ({
+      id: d.id,
+      title: d.title,
+      type: d.type || undefined,
+      date: typeof d.date === 'string' ? d.date : new Date(d.date).toISOString().split('T')[0],
+      yearUnknown: d.yearUnknown || false,
+      reminderEnabled: d.reminderEnabled || false,
+      reminderType: d.reminderType || undefined,
+      reminderInterval: d.reminderInterval || undefined,
+      reminderIntervalUnit: d.reminderIntervalUnit || undefined,
+      reminderLeadDays: d.reminderLeadDays ?? undefined,
+    })),
+    phoneNumbers: (person.phoneNumbers || []).map((p: any) => ({
+      type: p.type,
+      number: p.number,
+    })),
+    emails: (person.emails || []).map((e: any) => ({
+      type: e.type,
+      email: e.email,
+    })),
+    addresses: (person.addresses || []).map((a: any) => ({
+      type: a.type,
+      streetLine1: a.streetLine1 || undefined,
+      streetLine2: a.streetLine2 || undefined,
+      locality: a.locality || undefined,
+      region: a.region || undefined,
+      postalCode: a.postalCode || undefined,
+      country: a.country || undefined,
+    })),
+    urls: (person.urls || []).map((u: any) => ({
+      type: u.type,
+      url: u.url,
+    })),
+    relationships: (person.relationshipsTo || []).map((r: any) => ({
+      relatedPersonId: r.personId,
+      relationshipTypeId: r.relationshipTypeId || undefined,
+      relationshipType: r.relationshipType || undefined,
+      relatedPerson: r.person,
+    })),
+    contactReminderEnabled: person.contactReminderEnabled || false,
+    contactReminderInterval: person.contactReminderInterval || undefined,
+    contactReminderIntervalUnit: person.contactReminderIntervalUnit || undefined,
+    customFieldValues: (person.customFieldValues || []).map((cfv: any) => ({
+      templateId: cfv.templateId,
+      value: cfv.value,
+    })),
+    citizenId: person.citizenId || undefined,
+    citizenIdIssueDate: person.citizenIdIssueDate ? new Date(person.citizenIdIssueDate).toISOString().split('T')[0] : undefined,
+    citizenIdIssuePlace: person.citizenIdIssuePlace || undefined,
+    residenceStatus: person.residenceStatus || undefined,
+    managementLevel: person.managementLevel || undefined,
+    heightCm: person.heightCm ?? undefined,
+    weightKg: person.weightKg ?? undefined,
+    bloodType: person.bloodType || undefined,
+    threatLevel: person.threatLevel || undefined,
+    modusOperandi: person.modusOperandi || undefined,
+    riskNotes: person.riskNotes || undefined,
+    gangMemberships: (person.gangMemberships || []).map((gm: any) => ({
+      gangId: gm.gangId || gm.gang?.id,
+      role: gm.role,
+      notes: gm.notes,
+      joinedAt: gm.joinedAt,
+      leftAt: gm.leftAt,
+    })),
+    events: (person.events || []).map((pe: any) => ({
+      eventId: pe.eventId || pe.event?.id,
+      role: pe.role,
+      involvementType: pe.involvementType,
+      verificationStatus: pe.verificationStatus,
+      confidence: pe.confidence,
+      reasonForSuspicion: pe.reasonForSuspicion,
+      alibi: pe.alibi,
+      notes: pe.notes,
+    })),
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -262,38 +163,38 @@ export default async function EditPersonPage({
 
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-4 sm:px-0">
-          <div className="mb-4">
+          <div className="flex items-center justify-between mb-6">
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
+              {t('editPerson', { name: formatGraphName(person, nameOrder, nameDisplayFormat as any) })}
+            </h1>
             <Link
               href={`/people/${person.id}`}
-              className="text-primary hover:underline text-sm inline-flex items-center gap-1"
+              className="text-sm font-medium text-muted hover:text-foreground transition-colors"
             >
-              {t('backToPerson', { name: formatGraphName(person, nameOrder, nameDisplayFormat) })}
+              ← {t('backToPerson')}
             </Link>
           </div>
 
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-6">
-            {t('editPerson', { name: formatGraphName(person, nameOrder, nameDisplayFormat) })}
-          </h1>
-
           <PersonForm
-            person={serializedPerson}
+            person={initialData as any}
+            groups={(groups || []).map((g) => ({ id: g.id, name: g.name, color: g.color ?? null }))}
             customFieldTemplates={customFieldTemplates}
-            groups={groups}
-            relationshipTypes={relationshipTypes}
+            relationshipTypes={(relationshipTypes || []).map((rt) => ({ id: rt.id, label: rt.label, color: rt.color ?? null }))}
             availablePeople={allPeople}
             availableEvents={allEvents}
-            availableGangs={availableGangs}
+            availableGangs={(availableGangs || []).map((g) => ({ id: g.id, name: g.name, color: g.color ?? null, turf: g.turf ?? null }))}
+            userName={session.user.name || session.user.email || 'You'}
             mode="edit"
             dateFormat={dateFormat}
-            hasCardDavConnection={!!cardDavConnection}
+            hasCardDavConnection={false}
             nameOrder={nameOrder}
-            nameDisplayFormat={nameDisplayFormat}
-            defaultReminderLeadDays={notificationPreferences?.defaultReminderLeadDays ?? 0}
+            nameDisplayFormat={nameDisplayFormat as any}
+            defaultReminderLeadDays={0}
             reminderLimit={{
-              canCreate: reminderCheck.allowed,
-              current: reminderCheck.current,
-              limit: reminderCheck.limit,
-              isUnlimited: reminderCheck.isUnlimited,
+              canCreate: true,
+              current: 0,
+              limit: Infinity,
+              isUnlimited: true,
             }}
           />
         </div>

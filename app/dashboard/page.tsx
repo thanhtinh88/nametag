@@ -2,7 +2,7 @@ import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import Navigation from '@/components/Navigation';
 import InstallPrompt from '@/components/InstallPrompt';
-import { prisma } from '@/lib/prisma';
+import { apiServer } from '@/lib/backend/api-client';
 import { getUserDisplayPreferences } from '@/lib/user-preferences';
 import DashboardHeader from '@/components/dashboard/DashboardHeader';
 import DashboardMetrics from '@/components/dashboard/DashboardMetrics';
@@ -13,6 +13,10 @@ import RecentPeopleWidget, { type RecentPersonItem } from '@/components/dashboar
 import CollapsibleGraphWidget from '@/components/dashboard/CollapsibleGraphWidget';
 import EmptyState from '@/components/EmptyState';
 import { getTranslations } from 'next-intl/server';
+import type { EventDto } from '@/types/api/event';
+import type { Gang } from '@/types/api/gang';
+import type { Group } from '@/types/api/group';
+import type { JournalEntry } from '@/types/api/journal';
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -30,203 +34,136 @@ export default async function DashboardPage() {
   const hour = now.getHours();
   const greetingKey = hour < 12 ? 'greetingMorning' : hour < 18 ? 'greetingAfternoon' : 'greetingEvening';
 
-  // Parallel data fetching for optimal performance — only real, active data
   const [
     t,
     { dateFormat, graphMode },
-    totalPeople,
-    convictedPeople,
-    recentPeopleMonth,
-    totalCases,
-    activeCasesCount,
-    unresolvedCasesCount,
-    totalGangs,
-    totalJournalEntries,
-    recentJournalMonth,
-    gangTurfs,
-    priorityCasesRaw,
-    recentJournalEntries,
-    prominentGangsRaw,
-    recentPeopleRaw,
-    groups,
-    allCasesForFilter,
-    customFieldTemplates,
+    peopleRes,
+    eventsRes,
+    gangsRes,
+    journalRes,
+    groupsRes,
+    templatesRes,
   ] = await Promise.all([
     getTranslations('dashboard'),
     getUserDisplayPreferences(userId),
-    // 1. Total people count
-    prisma.person.count({
-      where: { userId, deletedAt: null },
-    }),
-    // 2. People with criminal records
-    prisma.person.count({
-      where: {
-        userId,
-        deletedAt: null,
-        criminalRecords: { some: { deletedAt: null } },
-      },
-    }),
-    // 3. New people added this month
-    prisma.person.count({
-      where: {
-        userId,
-        deletedAt: null,
-        createdAt: { gte: thirtyDaysAgo },
-      },
-    }),
-    // 4. Total cases
-    prisma.event.count({
-      where: { userId, deletedAt: null },
-    }),
-    // 5. Active cases (ongoing)
-    prisma.event.count({
-      where: { userId, deletedAt: null, status: 'ONGOING' },
-    }),
-    // 6. Unresolved cases (planned / new)
-    prisma.event.count({
-      where: { userId, deletedAt: null, status: 'PLANNED' },
-    }),
-    // 7. Total gangs
-    prisma.gang.count({
-      where: { userId, deletedAt: null },
-    }),
-    // 8. Total journal entries
-    prisma.journalEntry.count({
-      where: { userId, deletedAt: null },
-    }),
-    // 9. Recent journal entries this month
-    prisma.journalEntry.count({
-      where: {
-        userId,
-        deletedAt: null,
-        createdAt: { gte: thirtyDaysAgo },
-      },
-    }),
-    // 10. Distinct turfs count
-    prisma.gang.findMany({
-      where: { userId, deletedAt: null, turf: { not: null } },
-      select: { turf: true },
-    }),
-    // 11. Priority cases (take 5)
-    prisma.event.findMany({
-      where: {
-        userId,
-        deletedAt: null,
-        status: { in: ['ONGOING', 'PLANNED'] },
-      },
-      orderBy: [{ updatedAt: 'desc' }],
-      take: 5,
-      include: {
-        people: {
-          where: { deletedAt: null, person: { deletedAt: null } },
-          include: {
-            person: {
-              select: {
-                id: true,
-                name: true,
-                surname: true,
-                nickname: true,
-                photo: true,
-              },
-            },
-          },
-        },
-      },
-    }),
-    // 12. Recent investigation journal entries (take 4)
-    prisma.journalEntry.findMany({
-      where: { userId, deletedAt: null },
-      orderBy: { date: 'desc' },
-      take: 4,
-      include: {
-        people: {
-          where: { person: { deletedAt: null } },
-          include: {
-            person: {
-              select: { id: true, name: true, surname: true, nickname: true },
-            },
-          },
-        },
-        events: {
-          where: { event: { deletedAt: null } },
-          include: {
-            event: {
-              select: { id: true, title: true },
-            },
-          },
-        },
-      },
-    }),
-    // 13. Prominent gangs (take 3)
-    prisma.gang.findMany({
-      where: { userId, deletedAt: null },
-      orderBy: { members: { _count: 'desc' } },
-      take: 3,
-      include: {
-        members: {
-          where: { person: { deletedAt: null } },
-          include: {
-            person: {
-              select: { id: true, name: true, surname: true, photo: true },
-            },
-          },
-        },
-      },
-    }),
-    // 14. Recently updated subjects (take 4)
-    prisma.person.findMany({
-      where: { userId, deletedAt: null },
-      orderBy: [{ updatedAt: 'desc' }],
-      take: 4,
-      include: {
-        criminalRecords: {
-          where: { deletedAt: null },
-          select: { id: true },
-        },
-        gangMemberships: {
-          include: {
-            gang: {
-              select: { id: true, name: true },
-            },
-          },
-        },
-      },
-    }),
-    // 15. Groups for graph filter
-    prisma.group.findMany({
-      where: { userId, deletedAt: null },
-      orderBy: { name: 'asc' },
-    }),
-    // 16. All cases for graph filter
-    prisma.event.findMany({
-      where: { userId, deletedAt: null },
-      orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
-      select: { id: true, title: true, status: true },
-    }),
-    // 17. Custom field templates for graph
-    prisma.customFieldTemplate.findMany({
-      where: { userId, deletedAt: null },
-      orderBy: { order: 'asc' },
-      select: { id: true, name: true, slug: true, type: true, options: true },
-    }),
+    apiServer.get<{ people: any[] }>('/api/people?includeAll=true&includeDetails=true').catch(() => ({ people: [] })),
+    apiServer.get<{ events: EventDto[] }>('/api/events').catch(() => ({ events: [] })),
+    apiServer.get<{ gangs: Gang[] }>('/api/gangs').catch(() => ({ gangs: [] })),
+    apiServer.get<{ entries: JournalEntry[] }>('/api/journal').catch(() => ({ entries: [] })),
+    apiServer.get<{ groups: Group[] }>('/api/groups').catch(() => ({ groups: [] })),
+    apiServer.get<{ customFieldTemplates: any[] }>('/api/custom-field-templates').catch(() => ({ customFieldTemplates: [] })),
   ]);
 
-  // Unique turfs count
-  const turfsCount = new Set(gangTurfs.map((g) => g.turf?.trim()).filter(Boolean)).size;
+  const allPeople = peopleRes?.people || [];
+  const allEvents = eventsRes?.events || [];
+  const allGangs = gangsRes?.gangs || [];
+  const allJournal = journalRes?.entries || [];
+  const groups = groupsRes?.groups || [];
+  const customFieldTemplates = templatesRes?.customFieldTemplates || [];
 
-  const prominentGangs: ProminentGangItem[] = prominentGangsRaw;
-  const priorityCases: PriorityCaseItem[] = priorityCasesRaw;
+  const totalPeople = allPeople.length;
+  const convictedPeople = allPeople.filter((p: any) => p.criminalRecords && p.criminalRecords.length > 0).length;
+  const recentPeopleMonth = allPeople.filter((p: any) => new Date(p.createdAt) >= thirtyDaysAgo).length;
 
-  // Format recently updated subjects
-  const recentPeople: RecentPersonItem[] = recentPeopleRaw.map((p) => ({
-    id: p.id,
-    name: p.name,
-    surname: p.surname,
-    nickname: p.nickname,
-    photo: p.photo,
-    updatedAt: p.updatedAt,
-    criminalRecordsCount: p.criminalRecords.length,
-    gangName: p.gangMemberships[0]?.gang?.name || null,
+  const totalCases = allEvents.length;
+  const activeCasesCount = allEvents.filter((e) => e.status === 'ONGOING').length;
+  const unresolvedCasesCount = allEvents.filter((e) => e.status === 'PLANNED').length;
+
+  const totalGangs = allGangs.length;
+  const totalJournalEntries = allJournal.length;
+  const recentJournalMonth = allJournal.filter((j) => new Date(j.createdAt || j.date) >= thirtyDaysAgo).length;
+
+  const turfsCount = new Set(allGangs.map((g) => g.turf?.trim()).filter(Boolean)).size;
+
+  // Priority cases: planned or ongoing, sorted by updatedAt/startDate desc, take 5
+  const priorityCasesRaw = [...allEvents]
+    .filter((e) => e.status === 'ONGOING' || e.status === 'PLANNED')
+    .sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime())
+    .slice(0, 5);
+
+  const priorityCases: PriorityCaseItem[] = priorityCasesRaw.map((e) => ({
+    id: e.id,
+    title: e.title,
+    status: e.status,
+    caseCode: e.caseCode || null,
+    crimeType: e.crimeType || null,
+    caseStatus: e.caseStatus || null,
+    startDate: e.startDate ? new Date(e.startDate) : null,
+    updatedAt: new Date(e.updatedAt),
+    people: (e.people || []).map((p: any) => ({
+      person: {
+        id: p.person?.id || p.personId,
+        name: p.person?.name || '',
+        surname: p.person?.surname || null,
+        nickname: p.person?.nickname || null,
+        photo: p.person?.photo || null,
+      },
+    })),
+  }));
+
+  // Recent journal entries (take 4)
+  const recentJournalEntries = [...allJournal]
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, 4)
+    .map((j) => ({
+      id: j.id,
+      title: j.title,
+      date: new Date(j.date),
+      body: j.body || '',
+      people: (j.people || []).map((p: any) => ({
+        person: {
+          id: p.person?.id || p.personId,
+          name: p.person?.name || '',
+          surname: p.person?.surname || null,
+          nickname: p.person?.nickname || null,
+        },
+      })),
+      events: (j.events || []).map((ev: any) => ({
+        event: {
+          id: ev.event?.id || ev.eventId,
+          title: ev.event?.title || '',
+        },
+      })),
+    }));
+
+  // Prominent gangs (take 3)
+  const prominentGangs: ProminentGangItem[] = [...allGangs]
+    .sort((a, b) => (b.members?.length || 0) - (a.members?.length || 0))
+    .slice(0, 3)
+    .map((g) => ({
+      id: g.id,
+      name: g.name,
+      turf: g.turf || null,
+      color: g.color || null,
+      members: (g.members || []).map((m: any) => ({
+        person: {
+          id: m.person?.id || m.personId,
+          name: m.person?.name || '',
+          surname: m.person?.surname || null,
+          photo: m.person?.photo || null,
+        },
+      })),
+    }));
+
+  // Recent people (take 4)
+  const recentPeople: RecentPersonItem[] = [...allPeople]
+    .sort((a: any, b: any) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime())
+    .slice(0, 4)
+    .map((p: any) => ({
+      id: p.id,
+      name: p.name,
+      surname: p.surname || null,
+      nickname: p.nickname || null,
+      photo: p.photo || null,
+      updatedAt: new Date(p.updatedAt || p.createdAt),
+      criminalRecordsCount: (p.criminalRecords || []).length,
+      gangName: p.gangMemberships?.[0]?.gang?.name || null,
+    }));
+
+  const allCasesForFilter = allEvents.map((e) => ({
+    id: e.id,
+    title: e.title,
+    status: e.status,
   }));
 
   const hasData = totalPeople > 0 || totalCases > 0;
@@ -251,7 +188,7 @@ export default async function DashboardPage() {
 
           <InstallPrompt />
 
-          {/* Key Metrics Stat Cards - 4 Core Operational Modules */}
+          {/* Key Metrics Stat Cards */}
           <DashboardMetrics
             totalPeople={totalPeople}
             convictedPeople={convictedPeople}
@@ -267,7 +204,6 @@ export default async function DashboardPage() {
 
           {/* Main 2-Column Tactical Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
-            {/* Left Column (Primary Cases & Scout Journal): 7 Cols on Large */}
             <div className="lg:col-span-7 space-y-6">
               <PriorityCasesList
                 cases={priorityCases}
@@ -281,7 +217,6 @@ export default async function DashboardPage() {
               />
             </div>
 
-            {/* Right Column (Prominent Gangs & Recent Subjects): 5 Cols on Large */}
             <div className="lg:col-span-5 space-y-6">
               <ProminentGangsWidget
                 gangs={prominentGangs}
@@ -300,14 +235,14 @@ export default async function DashboardPage() {
           {hasData ? (
             <div className="mb-8">
               <CollapsibleGraphWidget
-                groups={groups}
+                groups={(groups || []).map((g) => ({ id: g.id, name: g.name, color: g.color ?? null }))}
                 events={allCasesForFilter}
-                customFieldTemplates={customFieldTemplates.map((t) => ({
-                  id: t.id,
-                  name: t.name,
-                  slug: t.slug,
-                  type: t.type,
-                  options: Array.isArray(t.options) ? (t.options as string[]) : undefined,
+                customFieldTemplates={customFieldTemplates.map((tmpl: any) => ({
+                  id: tmpl.id,
+                  name: tmpl.name,
+                  slug: tmpl.slug,
+                  type: tmpl.type,
+                  options: Array.isArray(tmpl.options) ? (tmpl.options as string[]) : undefined,
                 }))}
                 graphMode={graphMode}
                 peopleCount={totalPeople}

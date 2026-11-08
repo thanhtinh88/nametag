@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import type { CustomFieldTemplate } from '@prisma/client';
+import type { CustomFieldTemplate } from '@/types/api/custom-field-template';
 
 interface Props {
   templates: CustomFieldTemplate[];

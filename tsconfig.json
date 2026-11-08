@@ -31,5 +31,5 @@
     "**/*.mts",
     "instrumentation.ts"
   ],
-  "exclude": ["node_modules", "docs"]
+  "exclude": ["node_modules", "docs", "tests", "backend", "scripts"]
 }

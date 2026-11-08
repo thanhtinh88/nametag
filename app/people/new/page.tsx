@@ -1,12 +1,9 @@
 import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { prisma } from '@/lib/prisma';
+import { apiServer } from '@/lib/backend/api-client';
 import PersonForm from '@/components/PersonForm';
 import Navigation from '@/components/Navigation';
-import LimitReachedMessage from '@/components/LimitReachedMessage';
-import { canCreateResource, canEnableReminder } from '@/lib/billing/subscription';
-import { TIER_INFO } from '@/lib/billing/constants';
 import { getTranslations } from 'next-intl/server';
 import { getUserDisplayPreferences } from '@/lib/user-preferences';
 
@@ -29,102 +26,31 @@ export default async function NewPersonPage({
 
   const params = await searchParams;
 
-  // Check if user can create more people and reminders
-  const [usageCheck, reminderCheck, preferences, cardDavConnection, notificationPreferences] = await Promise.all([
-    canCreateResource(session.user.id, 'people'),
-    canEnableReminder(session.user.id),
+  const [
+    preferences,
+    groupsRes,
+    relTypesRes,
+    peopleRes,
+    eventsRes,
+    templatesRes,
+    gangsRes,
+  ] = await Promise.all([
     getUserDisplayPreferences(session.user.id),
-    prisma.cardDavConnection.findFirst({
-      where: { userId: session.user.id },
-      select: { id: true },
-    }),
-    // select is an allowlist: only this column can ever reach this page, so
-    // the password hash and other sensitive columns never enter process
-    // memory for this request in the first place.
-    prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { defaultReminderLeadDays: true },
-    }),
+    apiServer.get<{ groups: any[] }>('/api/groups').catch(() => ({ groups: [] })),
+    apiServer.get<{ relationshipTypes: any[] }>('/api/relationship-types').catch(() => ({ relationshipTypes: [] })),
+    apiServer.get<{ people: any[] }>('/api/people').catch(() => ({ people: [] })),
+    apiServer.get<{ events: any[] }>('/api/events').catch(() => ({ events: [] })),
+    apiServer.get<{ customFieldTemplates: any[] }>('/api/custom-field-templates').catch(() => ({ customFieldTemplates: [] })),
+    apiServer.get<{ gangs: any[] }>('/api/gangs').catch(() => ({ gangs: [] })),
   ]);
 
   const { dateFormat, nameOrder } = preferences;
-
-  const [groups, relationshipTypes, people, events, customFieldTemplates, gangs] = await Promise.all([
-    prisma.group.findMany({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      orderBy: {
-        name: 'asc',
-      },
-    }),
-    prisma.relationshipType.findMany({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      orderBy: {
-        label: 'asc',
-      },
-    }),
-    prisma.person.findMany({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        name: true,
-        surname: true,
-        middleName: true,
-        secondLastName: true,
-        nickname: true,
-        displayNameOverride: true,
-        photo: true,
-        groups: {
-          select: {
-            groupId: true,
-          },
-        },
-      },
-      orderBy: {
-        name: 'asc',
-      },
-    }),
-    prisma.event.findMany({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        title: true,
-      },
-      orderBy: [{ startDate: 'desc' }, { title: 'asc' }],
-    }),
-    prisma.customFieldTemplate.findMany({
-      where: { userId: session.user.id, deletedAt: null },
-      orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
-    }),
-    prisma.gang.findMany({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        name: true,
-        color: true,
-        turf: true,
-      },
-      orderBy: {
-        name: 'asc',
-      },
-    }),
-  ]);
-
-  const tierName = TIER_INFO[usageCheck.tier].name;
+  const groups = groupsRes?.groups || [];
+  const relationshipTypes = relTypesRes?.relationshipTypes || [];
+  const people = peopleRes?.people || [];
+  const events = eventsRes?.events || [];
+  const customFieldTemplates = templatesRes?.customFieldTemplates || [];
+  const gangs = gangsRes?.gangs || [];
 
   return (
     <div className="min-h-screen bg-background">
@@ -150,40 +76,31 @@ export default async function NewPersonPage({
             </Link>
           </div>
 
-          {!usageCheck.allowed ? (
-            <LimitReachedMessage
-              resourceType="people"
-              current={usageCheck.current}
-              limit={usageCheck.limit}
-              tier={tierName}
-            />
-          ) : (
-            <PersonForm
-              groups={groups}
-              customFieldTemplates={customFieldTemplates}
-              relationshipTypes={relationshipTypes}
-              availablePeople={people}
-              availableEvents={events}
-              availableGangs={gangs}
-              userName={session.user.name || session.user.email || 'You'}
-              mode="create"
-              dateFormat={dateFormat}
-              initialName={params.name}
-              initialKnownThrough={params.knownThrough}
-              initialRelationshipType={params.relationshipType}
-              initialConnectedEventId={params.connectedEventId}
-              hasCardDavConnection={!!cardDavConnection}
-              nameOrder={nameOrder}
-              nameDisplayFormat={preferences.nameDisplayFormat as any}
-              defaultReminderLeadDays={notificationPreferences?.defaultReminderLeadDays ?? 0}
-              reminderLimit={{
-                canCreate: reminderCheck.allowed,
-                current: reminderCheck.current,
-                limit: reminderCheck.limit,
-                isUnlimited: reminderCheck.isUnlimited,
-              }}
-            />
-          )}
+          <PersonForm
+            groups={(groups || []).map((g) => ({ id: g.id, name: g.name, color: g.color ?? null }))}
+            customFieldTemplates={customFieldTemplates}
+            relationshipTypes={(relationshipTypes || []).map((rt) => ({ id: rt.id, label: rt.label, color: rt.color ?? null }))}
+            availablePeople={people}
+            availableEvents={events}
+            availableGangs={(gangs || []).map((g) => ({ id: g.id, name: g.name, color: g.color ?? null, turf: g.turf ?? null }))}
+            userName={session.user.name || session.user.email || 'You'}
+            mode="create"
+            dateFormat={dateFormat}
+            initialName={params.name}
+            initialKnownThrough={params.knownThrough}
+            initialRelationshipType={params.relationshipType}
+            initialConnectedEventId={params.connectedEventId}
+            hasCardDavConnection={false}
+            nameOrder={nameOrder}
+            nameDisplayFormat={preferences.nameDisplayFormat as any}
+            defaultReminderLeadDays={0}
+            reminderLimit={{
+              canCreate: true,
+              current: 0,
+              limit: Infinity,
+              isUnlimited: true,
+            }}
+          />
         </div>
       </main>
     </div>

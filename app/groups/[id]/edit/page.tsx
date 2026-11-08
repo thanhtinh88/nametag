@@ -1,11 +1,12 @@
 import { auth } from '@/lib/auth';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
-import { prisma } from '@/lib/prisma';
+import { apiServer } from '@/lib/backend/api-client';
 import GroupForm from '@/components/GroupForm';
 import Navigation from '@/components/Navigation';
 import { getTranslations } from 'next-intl/server';
 import { getUserDisplayPreferences } from '@/lib/user-preferences';
+import type { Group } from '@/types/api/group';
 
 export default async function EditGroupPage({
   params,
@@ -21,19 +22,15 @@ export default async function EditGroupPage({
 
   const { id } = await params;
 
-  const group = await prisma.group.findUnique({
-    where: {
-      id,
-      userId: session.user.id,
-      deletedAt: null,
-    },
-  });
+  const [groupRes, { nameOrder }] = await Promise.all([
+    apiServer.get<{ group: Group }>(`/api/groups/${id}`).catch(() => null),
+    getUserDisplayPreferences(session.user.id),
+  ]);
 
+  const group = groupRes?.group;
   if (!group) {
     notFound();
   }
-
-  const { nameOrder } = await getUserDisplayPreferences(session.user.id);
 
   return (
     <div className="min-h-screen bg-background">
@@ -62,7 +59,12 @@ export default async function EditGroupPage({
 
           <div className="bg-surface shadow rounded-lg p-6">
             <GroupForm
-              group={group}
+              group={{
+                id: group.id,
+                name: group.name,
+                description: group.description ?? null,
+                color: group.color ?? null,
+              }}
               mode="edit"
               nameOrder={nameOrder}
             />

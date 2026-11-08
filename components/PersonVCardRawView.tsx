@@ -2,9 +2,9 @@
 
 import { useState, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
-import { personToVCard } from '@/lib/carddav/vcard-export';
+import { personToVCard } from '@/lib/vcard/vcard-export';
 import { copyToClipboard } from '@/lib/vcard-client-utils';
-import type { PersonWithRelations } from '@/lib/carddav/types';
+import type { PersonWithRelations } from '@/lib/vcard/types';
 
 interface PersonVCardRawViewProps {
   person: PersonWithRelations;

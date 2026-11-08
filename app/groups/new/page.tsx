@@ -1,11 +1,8 @@
 import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
-import { prisma } from '@/lib/prisma';
+import { apiServer } from '@/lib/backend/api-client';
 import GroupForm from '@/components/GroupForm';
 import Navigation from '@/components/Navigation';
-import LimitReachedMessage from '@/components/LimitReachedMessage';
-import { canCreateResource } from '@/lib/billing/subscription';
-import { TIER_INFO } from '@/lib/billing/constants';
 import { getTranslations } from 'next-intl/server';
 import { getUserDisplayPreferences } from '@/lib/user-preferences';
 
@@ -17,30 +14,13 @@ export default async function NewGroupPage() {
     redirect('/login');
   }
 
-  // Check if user can create more groups
-  const usageCheck = await canCreateResource(session.user.id, 'groups');
-  const tierName = TIER_INFO[usageCheck.tier].name;
+  // Fetch user's name order preference and available people
+  const [{ nameOrder }, peopleRes] = await Promise.all([
+    getUserDisplayPreferences(session.user.id),
+    apiServer.get<{ people: any[] }>('/api/people').catch(() => ({ people: [] })),
+  ]);
 
-  // Fetch user's name order preference
-  const { nameOrder } = await getUserDisplayPreferences(session.user.id);
-
-  // Fetch available people to add to the group
-  const availablePeople = await prisma.person.findMany({
-    where: {
-      userId: session.user.id,
-      deletedAt: null,
-    },
-    select: {
-      id: true,
-      name: true,
-      surname: true,
-      nickname: true,
-      displayNameOverride: true,
-    },
-    orderBy: {
-      name: 'asc',
-    },
-  });
+  const availablePeople = peopleRes?.people || [];
 
   return (
     <div className="min-h-screen bg-background">
@@ -58,22 +38,13 @@ export default async function NewGroupPage() {
             {t('createNewGroup')}
           </h1>
 
-          {!usageCheck.allowed ? (
-            <LimitReachedMessage
-              resourceType="groups"
-              current={usageCheck.current}
-              limit={usageCheck.limit}
-              tier={tierName}
+          <div className="bg-surface shadow rounded-lg p-6">
+            <GroupForm
+              mode="create"
+              availablePeople={availablePeople}
+              nameOrder={nameOrder}
             />
-          ) : (
-            <div className="bg-surface shadow rounded-lg p-6">
-              <GroupForm
-                mode="create"
-                availablePeople={availablePeople}
-                nameOrder={nameOrder}
-              />
-            </div>
-          )}
+          </div>
         </div>
       </main>
     </div>

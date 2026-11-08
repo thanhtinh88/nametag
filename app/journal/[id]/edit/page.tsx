@@ -1,10 +1,11 @@
 import { auth } from '@/lib/auth';
 import { redirect, notFound } from 'next/navigation';
-import { prisma } from '@/lib/prisma';
+import { apiServer } from '@/lib/backend/api-client';
 import { getTranslations } from 'next-intl/server';
 import Navigation from '@/components/Navigation';
 import JournalEntryForm from '@/components/JournalEntryForm';
 import { getUserDisplayPreferences } from '@/lib/user-preferences';
+import type { JournalEntry } from '@/types/api/journal';
 
 export default async function EditJournalEntryPage({
   params,
@@ -20,65 +21,29 @@ export default async function EditJournalEntryPage({
 
   const { id } = await params;
 
-  const [entry, preferences, availablePeople, availableEvents] = await Promise.all([
-    prisma.journalEntry.findUnique({
-      where: {
-        id,
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      include: {
-        people: {
-          where: { person: { deletedAt: null } },
-          select: { personId: true },
-        },
-        events: {
-          where: { event: { deletedAt: null } },
-          select: { eventId: true },
-        },
-      },
-    }),
+  const [entryRes, preferences, peopleRes, eventsRes] = await Promise.all([
+    apiServer.get<{ entry: JournalEntry }>(`/api/journal/${id}`).catch(() => null),
     getUserDisplayPreferences(session.user.id),
-    prisma.person.findMany({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        name: true,
-        surname: true,
-        nickname: true,
-        displayNameOverride: true,
-      },
-      orderBy: { name: 'asc' },
-    }),
-    prisma.event.findMany({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        title: true,
-      },
-      orderBy: { title: 'asc' },
-    }),
+    apiServer.get<{ people: any[] }>('/api/people').catch(() => ({ people: [] })),
+    apiServer.get<{ events: any[] }>('/api/events').catch(() => ({ events: [] })),
   ]);
 
+  const entry = entryRes?.entry;
   if (!entry) {
     notFound();
   }
 
+  const availablePeople = peopleRes?.people || [];
+  const availableEvents = eventsRes?.events || [];
   const { nameOrder, dateFormat } = preferences;
 
   const initialData = {
     title: entry.title,
-    dateIso: entry.date.toISOString(),
+    dateIso: typeof entry.date === 'string' ? entry.date : new Date(entry.date).toISOString(),
     hasTime: entry.hasTime,
     body: entry.body,
-    personIds: entry.people.map((p) => p.personId),
-    eventIds: entry.events.map((ev) => ev.eventId),
+    personIds: (entry.people || []).map((p) => p.personId),
+    eventIds: (entry.events || []).map((ev) => ev.eventId),
   };
 
   return (

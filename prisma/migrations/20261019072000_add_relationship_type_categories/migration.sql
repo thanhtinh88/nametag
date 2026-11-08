@@ -1,5 +1,0 @@
--- AlterTable
-ALTER TABLE "relationship_types" ADD COLUMN "category" TEXT NOT NULL DEFAULT 'CRIMINAL',
-ADD COLUMN "directionType" TEXT NOT NULL DEFAULT 'BIDIRECTIONAL',
-ADD COLUMN "lineStyle" TEXT DEFAULT 'SOLID';
-

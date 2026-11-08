@@ -1,7 +1,7 @@
 import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { prisma } from '@/lib/prisma';
+import { apiServer } from '@/lib/backend/api-client';
 import Navigation from '@/components/Navigation';
 import { Button } from '@/components/ui/Button';
 import EmptyState from '@/components/EmptyState';
@@ -9,6 +9,7 @@ import PersonAvatar from '@/components/PersonPhoto';
 import { getTranslations } from 'next-intl/server';
 import { getUserDisplayPreferences } from '@/lib/user-preferences';
 import { formatFullName } from '@/lib/nameUtils';
+import type { Gang } from '@/types/api/gang';
 
 export default async function GangsPage({
   searchParams,
@@ -29,48 +30,18 @@ export default async function GangsPage({
 
   const searchQuery = params.q?.trim() || '';
 
-  const whereClause: any = {
-    userId: session.user.id,
-    deletedAt: null,
-  };
+  const res = await apiServer.get<{ gangs: Gang[] }>('/api/gangs');
+  let gangs = res?.gangs || [];
 
   if (searchQuery) {
-    whereClause.OR = [
-      { name: { contains: searchQuery, mode: 'insensitive' } },
-      { turf: { contains: searchQuery, mode: 'insensitive' } },
-      { description: { contains: searchQuery, mode: 'insensitive' } },
-    ];
+    const q = searchQuery.toLowerCase();
+    gangs = gangs.filter(
+      (g) =>
+        g.name.toLowerCase().includes(q) ||
+        (g.turf && g.turf.toLowerCase().includes(q)) ||
+        (g.description && g.description.toLowerCase().includes(q))
+    );
   }
-
-  const gangs = await prisma.gang.findMany({
-    where: whereClause,
-    include: {
-      _count: {
-        select: {
-          members: true,
-        },
-      },
-      members: {
-        include: {
-          person: {
-            select: {
-              id: true,
-              name: true,
-              surname: true,
-              nickname: true,
-              photo: true,
-            },
-          },
-        },
-        orderBy: {
-          createdAt: 'asc',
-        },
-      },
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-  });
 
   return (
     <div className="min-h-screen bg-background">
@@ -159,8 +130,9 @@ export default async function GangsPage({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               {gangs.map((gang) => {
-                const leader = gang.members.find((m) => m.role === 'LEADER');
-                const second = gang.members.find((m) => m.role === 'SECOND_IN_COMMAND');
+                const members = gang.members || [];
+                const leader = members.find((m) => m.role === 'LEADER');
+                const second = members.find((m) => m.role === 'SECOND_IN_COMMAND');
                 const gangColor = gang.color || '#EF4444';
 
                 return (
@@ -186,7 +158,7 @@ export default async function GangsPage({
                         </Link>
 
                         <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-surface-elevated text-foreground border border-border shrink-0">
-                          {gang._count.members} thành viên
+                          {members.length} thành viên
                         </span>
                       </div>
 
@@ -207,7 +179,7 @@ export default async function GangsPage({
 
                       {/* Leadership highlights */}
                       <div className="pt-2 border-t border-border/60 space-y-1.5 text-xs">
-                        {leader && (
+                        {leader && leader.person && (
                           <div className="flex items-center gap-2">
                             <span className="text-[11px] font-bold text-red-500 shrink-0">👑 Cầm đầu:</span>
                             <div className="flex items-center gap-1.5 truncate">
@@ -228,7 +200,7 @@ export default async function GangsPage({
                           </div>
                         )}
 
-                        {second && (
+                        {second && second.person && (
                           <div className="flex items-center gap-2">
                             <span className="text-[11px] font-bold text-orange-500 shrink-0">⚔️ Phó tướng:</span>
                             <div className="flex items-center gap-1.5 truncate">
@@ -249,7 +221,7 @@ export default async function GangsPage({
                           </div>
                         )}
 
-                        {!leader && !second && gang._count.members > 0 && (
+                        {!leader && !second && members.length > 0 && (
                           <p className="text-[11px] text-muted italic">
                             Chưa phân định đối tượng cầm đầu
                           </p>

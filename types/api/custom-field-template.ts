@@ -1,5 +1,10 @@
 export type CustomFieldType = 'TEXT' | 'NUMBER' | 'BOOLEAN' | 'SELECT';
 
+export interface CustomFieldValueInput {
+  templateId: string;
+  value: string;
+}
+
 export interface CustomFieldTemplateCount {
   values: number;
 }

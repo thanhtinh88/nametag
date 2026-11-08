@@ -1,10 +1,11 @@
 import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { prisma } from '@/lib/prisma';
+import { apiServer } from '@/lib/backend/api-client';
 import RelationshipTypeForm from '@/components/RelationshipTypeForm';
 import Navigation from '@/components/Navigation';
 import { getTranslations } from 'next-intl/server';
+import type { RelationshipType } from '@/types/api/relationship';
 
 export default async function NewRelationshipTypePage() {
   const session = await auth();
@@ -15,20 +16,14 @@ export default async function NewRelationshipTypePage() {
   }
 
   // Get all available types for inverse relationship selection
-  const availableTypes = await prisma.relationshipType.findMany({
-    where: {
-      userId: session.user.id,
-      deletedAt: null,
-    },
-    select: {
-      id: true,
-      name: true,
-      label: true,
-      color: true,
-      inverseId: true,
-    },
-    orderBy: { name: 'asc' },
-  });
+  const res = await apiServer.get<{ relationshipTypes: RelationshipType[] }>('/api/relationship-types').catch(() => ({ relationshipTypes: [] }));
+  const availableTypes = (res?.relationshipTypes || []).map((t) => ({
+    id: t.id,
+    name: t.name,
+    label: t.label,
+    color: t.color || null,
+    inverseId: t.inverseId || null,
+  }));
 
   return (
     <div className="min-h-screen bg-background">

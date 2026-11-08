@@ -1,11 +1,11 @@
 import { auth } from '@/lib/auth';
 import { redirect, notFound } from 'next/navigation';
 import BackLink from '@/components/BackLink';
-import { prisma } from '@/lib/prisma';
+import { apiServer } from '@/lib/backend/api-client';
 import Navigation from '@/components/Navigation';
 import { getTranslations } from 'next-intl/server';
-import { customFieldValuesInclude } from '@/lib/prisma-queries';
 import PersonDetailsClient from '@/components/PersonDetailsClient';
+import { getUserDisplayPreferences } from '@/lib/user-preferences';
 import type { NameDisplayFormat } from '@/lib/nameUtils';
 
 type TranslationFn = (key: string, values?: Record<string, string | number | Date>) => string;
@@ -13,8 +13,8 @@ type TranslationFn = (key: string, values?: Record<string, string | number | Dat
 function getContactReminderDescription(
   person: {
     contactReminderEnabled: boolean;
-    contactReminderInterval: number | null;
-    contactReminderIntervalUnit: string | null;
+    contactReminderInterval?: number | null;
+    contactReminderIntervalUnit?: string | null;
   },
   t: TranslationFn
 ): string | null {
@@ -43,267 +43,74 @@ export default async function PersonDetailsPage({
     getTranslations('people'),
   ]);
 
-  // Fetch user profile, person, relationships, groups, and connections in parallel
   const [
-    user,
-    person,
-    allPeople,
-    relationshipTypes,
-    cardDavConnection,
-    latestJournalEntry,
-    allEvents,
-    immichConnection,
+    preferences,
+    personRes,
+    peopleRes,
+    relTypesRes,
+    journalRes,
+    eventsRes,
+    immichRes,
   ] = await Promise.all([
-    prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: {
-        dateFormat: true,
-        nameOrder: true,
-        nameDisplayFormat: true,
-        language: true,
-        name: true,
-        surname: true,
-        nickname: true,
-        photo: true,
-      },
-    }),
-    prisma.person.findUnique({
-      where: {
-        id,
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      include: {
-        relationshipToUser: {
-          where: {
-            deletedAt: null,
-          },
-        },
-        groups: {
-          where: {
-            group: {
-              deletedAt: null,
-            },
-          },
-          include: {
-            group: true,
-          },
-        },
-        relationshipsTo: {
-          where: {
-            deletedAt: null,
-            person: {
-              deletedAt: null,
-            },
-          },
-          include: {
-            person: {
-              select: {
-                id: true,
-                name: true,
-                surname: true,
-                nickname: true,
-                displayNameOverride: true,
-                photo: true,
-              },
-            },
-            relationshipType: {
-              where: {
-                deletedAt: null,
-              },
-            },
-          },
-        },
-        importantDates: {
-          where: {
-            deletedAt: null,
-          },
-          orderBy: {
-            date: 'asc',
-          },
-        },
-        phoneNumbers: true,
-        emails: true,
-        addresses: true,
-        urls: true,
-        imHandles: true,
-        locations: true,
-        customFields: true,
-        customFieldValues: customFieldValuesInclude(),
-        relationshipsFrom: {
-          where: {
-            deletedAt: null,
-          },
-          include: {
-            relatedPerson: true,
-          },
-        },
-        events: {
-          where: {
-            deletedAt: null,
-            event: {
-              deletedAt: null,
-            },
-          },
-          include: {
-            event: {
-              include: {
-                people: {
-                  where: {
-                    deletedAt: null,
-                    person: {
-                      deletedAt: null,
-                    },
-                  },
-                  include: {
-                    person: {
-                      select: {
-                        id: true,
-                        name: true,
-                        surname: true,
-                        nickname: true,
-                        displayNameOverride: true,
-                        photo: true,
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-          orderBy: {
-            createdAt: 'desc',
-          },
-        },
-        cardDavMapping: true,
-        vehicles: {
-          orderBy: { createdAt: 'desc' },
-        },
-        physicalMarks: {
-          orderBy: { createdAt: 'desc' },
-        },
-        criminalRecords: {
-          orderBy: { incidentDate: 'desc' },
-        },
-        gangMemberships: {
-          include: {
-            gang: true,
-          },
-        },
-        bankAccounts: {
-          where: { deletedAt: null },
-          orderBy: [{ isPrimary: 'desc' }, { createdAt: 'desc' }],
-        },
-      },
-    }),
-    prisma.person.findMany({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-        NOT: { id },
-      },
-      select: {
-        id: true,
-        name: true,
-        surname: true,
-        nickname: true,
-        displayNameOverride: true,
-      },
-      orderBy: {
-        name: 'asc',
-      },
-    }),
-    prisma.relationshipType.findMany({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        name: true,
-        label: true,
-        color: true,
-        inverseId: true,
-      },
-      orderBy: { name: 'asc' },
-    }),
-    prisma.cardDavConnection.findUnique({
-      where: { userId: session.user.id },
-      select: { id: true },
-    }),
-    prisma.journalEntry.findFirst({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-        people: { some: { personId: id } },
-      },
-      include: {
-        people: {
-          where: { person: { deletedAt: null } },
-          include: {
-            person: {
-              select: {
-                id: true,
-                name: true,
-                surname: true,
-                nickname: true,
-                displayNameOverride: true,
-              },
-            },
-          },
-        },
-      },
-      orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
-    }),
-    prisma.event.findMany({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        title: true,
-      },
-      orderBy: [{ startDate: 'desc' }, { title: 'asc' }],
-    }),
-    prisma.immichConnection.findUnique({
-      where: { userId: session.user.id },
-      select: { enabled: true },
-    }),
+    getUserDisplayPreferences(session.user.id),
+    apiServer.get<{ person: any }>(`/api/people/${id}`).catch(() => null),
+    apiServer.get<{ people: any[] }>('/api/people').catch(() => ({ people: [] })),
+    apiServer.get<{ relationshipTypes: any[] }>('/api/relationship-types').catch(() => ({ relationshipTypes: [] })),
+    apiServer.get<{ entries: any[] }>(`/api/journal?personId=${id}`).catch(() => ({ entries: [] })),
+    apiServer.get<{ events: any[] }>('/api/events').catch(() => ({ events: [] })),
+    apiServer.get<{ configured?: boolean; enabled?: boolean }>('/api/immich/connection').catch(() => null),
   ]);
 
-  const dateFormat = user?.dateFormat || 'DMY';
-  const nameOrder = user?.nameOrder;
-  const nameDisplayFormat: NameDisplayFormat = (user?.nameDisplayFormat as NameDisplayFormat) || 'FULL';
-
+  const person = personRes?.person;
   if (!person) {
     notFound();
   }
 
-  // Convert Prisma Decimal objects to plain numbers for client components
-  const serializedLocations = person.locations.map((loc) => ({
-    ...loc,
-    latitude: Number(loc.latitude),
-    longitude: Number(loc.longitude),
-  }));
-  const serializedAddresses = person.addresses.map((address) => ({
-    ...address,
-    latitude: address.latitude === null ? null : Number(address.latitude),
-    longitude: address.longitude === null ? null : Number(address.longitude),
-  }));
+  const allPeople = peopleRes?.people || [];
+  const relationshipTypes = relTypesRes?.relationshipTypes || [];
+  const latestJournalEntry = journalRes?.entries?.[0] || null;
+  const allEvents = eventsRes?.events || [];
+
+  const { dateFormat, nameOrder, nameDisplayFormat, language } = preferences;
 
   const serializedPerson = {
     ...person,
-    locations: serializedLocations,
-    addresses: serializedAddresses,
+    groups: person.groups || [],
+    relationshipsTo: person.relationshipsTo || [],
+    relationshipsFrom: person.relationshipsFrom || [],
+    importantDates: (person.importantDates || []).map((d: any) => ({
+      ...d,
+      date: typeof d.date === 'string' ? d.date : new Date(d.date).toISOString(),
+    })),
+    phoneNumbers: person.phoneNumbers || [],
+    emails: person.emails || [],
+    urls: person.urls || [],
+    imHandles: person.imHandles || [],
+    customFields: person.customFields || [],
+    customFieldValues: person.customFieldValues || [],
+    events: person.events || [],
+    vehicles: person.vehicles || [],
+    physicalMarks: person.physicalMarks || [],
+    criminalRecords: person.criminalRecords || [],
+    gangMemberships: person.gangMemberships || [],
+    bankAccounts: person.bankAccounts || [],
+    locations: (person.locations || []).map((loc: any) => ({
+      ...loc,
+      latitude: Number(loc.latitude),
+      longitude: Number(loc.longitude),
+    })),
+    addresses: (person.addresses || []).map((address: any) => ({
+      ...address,
+      latitude: address.latitude === null || address.latitude === undefined ? null : Number(address.latitude),
+      longitude: address.longitude === null || address.longitude === undefined ? null : Number(address.longitude),
+    })),
   };
 
-  // Filter out people who already have a relationship
   const relatedPersonIds = new Set(
-    person.relationshipsTo.map((r) => r.personId)
+    (person.relationshipsTo || []).map((r: any) => r.personId)
   );
   const availablePeople = allPeople.filter(
-    (p) => !relatedPersonIds.has(p.id)
+    (p: any) => p.id !== id && !relatedPersonIds.has(p.id)
   );
 
   const contactReminderDesc = getContactReminderDescription(person, t);
@@ -329,17 +136,17 @@ export default async function PersonDetailsPage({
         </div>
 
         <PersonDetailsClient
-          person={serializedPerson}
+          person={serializedPerson as any}
           availablePeople={availablePeople}
           relationshipTypes={relationshipTypes}
-          hasCardDavConnection={Boolean(cardDavConnection)}
+          hasCardDavConnection={false}
           latestJournalEntry={latestJournalEntry}
           allEvents={allEvents}
-          immichConfigured={Boolean(immichConnection?.enabled)}
+          immichConfigured={Boolean(immichRes?.enabled || immichRes?.configured)}
           dateFormat={dateFormat}
           nameOrder={nameOrder}
-          nameDisplayFormat={nameDisplayFormat}
-          userLanguage={user?.language || 'vi'}
+          nameDisplayFormat={nameDisplayFormat as NameDisplayFormat}
+          userLanguage={language || 'vi'}
           contactReminderDesc={contactReminderDesc}
         />
       </main>

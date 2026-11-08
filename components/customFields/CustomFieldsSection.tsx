@@ -1,10 +1,11 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import type { CustomFieldTemplate } from '@prisma/client';
-import type { CustomFieldValueInput } from '@/lib/customFields/persistence';
-
-export type { CustomFieldValueInput };
+import type { CustomFieldTemplate } from '@/types/api/custom-field-template';
+export interface CustomFieldValueInput {
+  templateId: string;
+  value: string;
+}
 
 interface Props {
   templates: CustomFieldTemplate[];

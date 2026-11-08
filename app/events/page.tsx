@@ -1,8 +1,7 @@
 import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { prisma } from '@/lib/prisma';
-import { Prisma } from '@prisma/client';
+import { apiServer } from '@/lib/backend/api-client';
 import Navigation from '@/components/Navigation';
 import { Button } from '@/components/ui/Button';
 import { getTranslations } from 'next-intl/server';
@@ -12,6 +11,8 @@ import EventsListClient, {
   type QuickEventCounts,
   type CrossCaseSuspectEntry,
 } from '@/components/EventsListClient';
+import type { EventDto } from '@/types/api/event';
+import type { Group } from '@/types/api/group';
 
 const DEFAULT_PAGE_SIZE = 25;
 const ALLOWED_PAGE_SIZES = [10, 25, 50, 100];
@@ -42,7 +43,7 @@ export default async function EventsPage({
     redirect('/login');
   }
 
-  const [t, tCommon, { dateFormat, nameOrder, nameDisplayFormat }, params] = await Promise.all([
+  const [t, _tCommon, { dateFormat, nameOrder, nameDisplayFormat }, params] = await Promise.all([
     getTranslations('events'),
     getTranslations('common'),
     getUserDisplayPreferences(session.user.id),
@@ -67,250 +68,113 @@ export default async function EventsPage({
   const datePreset = params.datePreset || '';
   const dateField = params.dateField === 'createdAt' ? 'createdAt' : 'startDate';
 
-  const skip = (currentPage - 1) * pageSize;
+  const [eventsRes, groupsRes, peopleRes] = await Promise.all([
+    apiServer.get<{ events: EventDto[] }>('/api/events').catch(() => ({ events: [] })),
+    apiServer.get<{ groups: Group[] }>('/api/groups').catch(() => ({ groups: [] })),
+    apiServer.get<{ people: any[] }>('/api/people').catch(() => ({ people: [] })),
+  ]);
 
-  // Build where clause
-  const eventsWhere: Prisma.EventWhereInput = {
-    userId: session.user.id,
-    deletedAt: null,
-  };
+  const allEvents = eventsRes?.events || [];
+  const allGroups = groupsRes?.groups || [];
+  const allPeople = peopleRes?.people || [];
 
-  if (fromDate || toDate) {
-    eventsWhere[dateField] = {
-      ...(fromDate ? { gte: new Date(`${fromDate}T00:00:00.000Z`) } : {}),
-      ...(toDate ? { lte: new Date(`${toDate}T23:59:59.999Z`) } : {}),
-    };
-  }
+  // Filter in memory for rich multi-facet search
+  let filtered = allEvents;
 
   if (query) {
-    eventsWhere.OR = [
-      { title: { contains: query, mode: 'insensitive' } },
-      { caseCode: { contains: query, mode: 'insensitive' } },
-      { crimeType: { contains: query, mode: 'insensitive' } },
-      { description: { contains: query, mode: 'insensitive' } },
-      { incidentTimeNotes: { contains: query, mode: 'insensitive' } },
-      { damageAssessment: { contains: query, mode: 'insensitive' } },
-      {
-        people: {
-          some: {
-            person: {
-              OR: [
-                { name: { contains: query, mode: 'insensitive' } },
-                { surname: { contains: query, mode: 'insensitive' } },
-                { nickname: { contains: query, mode: 'insensitive' } },
-              ],
-              deletedAt: null,
-            },
-            deletedAt: null,
-          },
-        },
-      },
-    ];
+    const qLower = query.toLowerCase();
+    filtered = filtered.filter((ev) => {
+      if (ev.title.toLowerCase().includes(qLower)) return true;
+      if (ev.caseCode && ev.caseCode.toLowerCase().includes(qLower)) return true;
+      if (ev.crimeType && ev.crimeType.toLowerCase().includes(qLower)) return true;
+      if (ev.description && ev.description.toLowerCase().includes(qLower)) return true;
+      if (ev.incidentTimeNotes && ev.incidentTimeNotes.toLowerCase().includes(qLower)) return true;
+      if (ev.damageAssessment && ev.damageAssessment.toLowerCase().includes(qLower)) return true;
+      if (
+        ev.people &&
+        ev.people.some((p) => {
+          const person = p.person;
+          if (!person) return false;
+          return (
+            person.name.toLowerCase().includes(qLower) ||
+            (person.surname && person.surname.toLowerCase().includes(qLower)) ||
+            (person.nickname && person.nickname.toLowerCase().includes(qLower))
+          );
+        })
+      ) {
+        return true;
+      }
+      return false;
+    });
   }
 
   if (caseStatusFilter === 'UNRESOLVED') {
-    eventsWhere.AND = [
-      ...(Array.isArray(eventsWhere.AND)
-        ? eventsWhere.AND
-        : eventsWhere.AND
-        ? [eventsWhere.AND]
-        : []),
-      { OR: [{ caseStatus: 'UNRESOLVED' }, { caseStatus: null }] },
-    ];
+    filtered = filtered.filter((ev) => !ev.caseStatus || ev.caseStatus === 'UNRESOLVED');
   } else if (caseStatusFilter) {
-    eventsWhere.caseStatus = caseStatusFilter;
+    filtered = filtered.filter((ev) => ev.caseStatus === caseStatusFilter);
   }
 
   if (statusFilter === 'ACTIVE_ONLY') {
-    eventsWhere.status = { in: ['PLANNED', 'ONGOING'] };
-  } else if (statusFilter === 'PLANNED' || statusFilter === 'ONGOING' || statusFilter === 'COMPLETED' || statusFilter === 'CANCELLED') {
-    eventsWhere.status = statusFilter;
+    filtered = filtered.filter((ev) => ev.status === 'PLANNED' || ev.status === 'ONGOING');
+  } else if (statusFilter) {
+    filtered = filtered.filter((ev) => ev.status === statusFilter);
   }
 
   if (groupFilter === 'none') {
-    eventsWhere.groups = { none: {} };
+    filtered = filtered.filter((ev) => !ev.groups || ev.groups.length === 0);
   } else if (groupFilter) {
-    eventsWhere.groups = { some: { groupId: groupFilter } };
+    filtered = filtered.filter((ev) => (ev.groups || []).some((g) => g.groupId === groupFilter));
   }
 
   if (personFilter) {
-    eventsWhere.people = { some: { personId: personFilter, deletedAt: null } };
+    filtered = filtered.filter((ev) => (ev.people || []).some((p) => p.personId === personFilter));
   }
 
   if (categoryFilter) {
-    eventsWhere.category = categoryFilter;
+    filtered = filtered.filter((ev) => ev.category === categoryFilter);
   }
 
-  // Order By construction
-  let orderByClause: Prisma.EventOrderByWithRelationInput[];
-  if (sortBy === 'title') {
-    orderByClause = [{ title: order }, { createdAt: 'desc' }];
-  } else if (sortBy === 'caseCode') {
-    orderByClause = [{ caseCode: order }, { createdAt: 'desc' }];
-  } else if (sortBy === 'createdAt') {
-    orderByClause = [{ createdAt: order }];
-  } else {
-    // Default: startDate
-    orderByClause = [{ startDate: order }, { createdAt: 'desc' }];
+  if (fromDate || toDate) {
+    filtered = filtered.filter((ev) => {
+      const dStr = dateField === 'createdAt' ? ev.createdAt : ev.startDate;
+      if (!dStr) return false;
+      const d = new Date(dStr);
+      if (fromDate && d < new Date(`${fromDate}T00:00:00.000Z`)) return false;
+      if (toDate && d > new Date(`${toDate}T23:59:59.999Z`)) return false;
+      return true;
+    });
   }
 
-  // Parallel data fetching: counts, events list, dropdown options & cross-case data
-  const [
-    totalCount,
-    totalAll,
-    countUnresolved,
-    countInvestigating,
-    countSolved,
-    countSuspended,
-    countActive,
-    events,
-    allGroups,
-    allPeople,
-    categoryResults,
-    crossCaseRaw,
-  ] = await Promise.all([
-    prisma.event.count({ where: eventsWhere }),
-    prisma.event.count({ where: { userId: session.user.id, deletedAt: null } }),
-    prisma.event.count({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-        OR: [{ caseStatus: 'UNRESOLVED' }, { caseStatus: null }],
-      },
-    }),
-    prisma.event.count({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-        caseStatus: 'INVESTIGATING',
-      },
-    }),
-    prisma.event.count({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-        caseStatus: 'SOLVED',
-      },
-    }),
-    prisma.event.count({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-        caseStatus: 'SUSPENDED',
-      },
-    }),
-    prisma.event.count({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-        status: { in: ['PLANNED', 'ONGOING'] },
-      },
-    }),
-    prisma.event.findMany({
-      where: eventsWhere,
-      orderBy: orderByClause,
-      skip,
-      take: pageSize,
-      include: {
-        groups: {
-          where: { group: { deletedAt: null } },
-          include: { group: { select: { id: true, name: true, color: true } } },
-        },
-        people: {
-          where: { deletedAt: null, person: { deletedAt: null } },
-          include: {
-            person: {
-              select: {
-                id: true,
-                name: true,
-                surname: true,
-                nickname: true,
-                displayNameOverride: true,
-                photo: true,
-              },
-            },
-          },
-        },
-        addresses: {
-          select: {
-            id: true,
-            type: true,
-            locality: true,
-            country: true,
-            latitude: true,
-            longitude: true,
-            geocodeStatus: true,
-          },
-        },
-        relationshipsFrom: {
-          where: { deletedAt: null, toEvent: { deletedAt: null } },
-          select: { id: true },
-        },
-      },
-    }),
-    prisma.group.findMany({
-      where: { userId: session.user.id, deletedAt: null },
-      orderBy: { name: 'asc' },
-      select: { id: true, name: true, color: true },
-    }),
-    prisma.person.findMany({
-      where: { userId: session.user.id, deletedAt: null },
-      orderBy: { name: 'asc' },
-      select: {
-        id: true,
-        name: true,
-        surname: true,
-        nickname: true,
-        displayNameOverride: true,
-      },
-    }),
-    prisma.event.findMany({
-      where: {
-        userId: session.user.id,
-        deletedAt: null,
-        category: { not: null },
-      },
-      select: { category: true },
-      distinct: ['category'],
-    }),
-    prisma.personEvent.findMany({
-      where: {
-        event: {
-          userId: session.user.id,
-          deletedAt: null,
-          caseStatus: { not: 'SOLVED' },
-        },
-        deletedAt: null,
-        verificationStatus: { not: 'RULED_OUT' },
-      },
-      select: {
-        personId: true,
-        involvementType: true,
-        verificationStatus: true,
-        event: {
-          select: {
-            id: true,
-            title: true,
-            status: true,
-          },
-        },
-        person: {
-          select: {
-            id: true,
-            name: true,
-            surname: true,
-            nickname: true,
-            displayNameOverride: true,
-            photo: true,
-          },
-        },
-      },
-    }),
-  ]);
+  // Sort
+  filtered.sort((a, b) => {
+    let cmp = 0;
+    if (sortBy === 'title') {
+      cmp = a.title.localeCompare(b.title);
+    } else if (sortBy === 'caseCode') {
+      cmp = (a.caseCode || '').localeCompare(b.caseCode || '');
+    } else if (sortBy === 'createdAt') {
+      cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    } else {
+      const da = a.startDate ? new Date(a.startDate).getTime() : 0;
+      const db = b.startDate ? new Date(b.startDate).getTime() : 0;
+      cmp = da - db;
+    }
+    return order === 'asc' ? cmp : -cmp;
+  });
+
+  const totalCount = filtered.length;
+  const totalAll = allEvents.length;
+  const countUnresolved = allEvents.filter((e) => !e.caseStatus || e.caseStatus === 'UNRESOLVED').length;
+  const countInvestigating = allEvents.filter((e) => e.caseStatus === 'INVESTIGATING').length;
+  const countSolved = allEvents.filter((e) => e.caseStatus === 'SOLVED').length;
+  const countSuspended = allEvents.filter((e) => e.caseStatus === 'SUSPENDED').length;
+  const countActive = allEvents.filter((e) => e.status === 'PLANNED' || e.status === 'ONGOING').length;
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const skip = (currentPage - 1) * pageSize;
+  const pagedEvents = filtered.slice(skip, skip + pageSize);
 
-  // Compute Cross-Case Suspect Analysis
+  // Cross-case suspects analysis
   const personCasesMap = new Map<
     string,
     {
@@ -319,25 +183,28 @@ export default async function EventsPage({
     }
   >();
 
-  for (const item of crossCaseRaw) {
-    if (!item.person) continue;
-    const existing = personCasesMap.get(item.personId);
-    const caseEntry = {
-      id: item.event.id,
-      title: item.event.title,
-      status: item.event.status,
-      involvementType: item.involvementType || 'SUSPECT',
-      verificationStatus: item.verificationStatus || 'HYPOTHESIS',
-    };
-    if (existing) {
-      if (!existing.cases.some((c) => c.id === caseEntry.id)) {
-        existing.cases.push(caseEntry);
+  for (const ev of allEvents) {
+    if (ev.caseStatus === 'SOLVED') continue;
+    for (const p of ev.people || []) {
+      if (!p.person || p.verificationStatus === 'RULED_OUT') continue;
+      const caseEntry = {
+        id: ev.id,
+        title: ev.title,
+        status: ev.status,
+        involvementType: p.involvementType || 'SUSPECT',
+        verificationStatus: p.verificationStatus || 'HYPOTHESIS',
+      };
+      const existing = personCasesMap.get(p.personId);
+      if (existing) {
+        if (!existing.cases.some((c) => c.id === caseEntry.id)) {
+          existing.cases.push(caseEntry);
+        }
+      } else {
+        personCasesMap.set(p.personId, {
+          person: p.person as any,
+          cases: [caseEntry],
+        });
       }
-    } else {
-      personCasesMap.set(item.personId, {
-        person: item.person,
-        cases: [caseEntry],
-      });
     }
   }
 
@@ -345,44 +212,50 @@ export default async function EventsPage({
     .filter((entry) => entry.cases.length >= 2)
     .sort((a, b) => b.cases.length - a.cases.length);
 
-  const availableCategories = categoryResults
-    .map((r) => r.category)
-    .filter((c): c is string => Boolean(c))
-    .sort();
+  const availableCategories = Array.from(
+    new Set(allEvents.map((e) => e.category).filter((c): c is string => Boolean(c)))
+  ).sort();
 
-  const serializedEvents: SerializedEventItem[] = events.map((ev) => ({
+  const serializedEvents: SerializedEventItem[] = pagedEvents.map((ev) => ({
     id: ev.id,
     title: ev.title,
-    category: ev.category,
+    category: ev.category ?? null,
     status: ev.status,
-    caseCode: ev.caseCode,
-    crimeType: ev.crimeType,
-    caseStatus: ev.caseStatus,
-    incidentTimeNotes: ev.incidentTimeNotes,
-    damageAssessment: ev.damageAssessment,
-    startDate: ev.startDate ? ev.startDate.toISOString() : null,
-    endDate: ev.endDate ? ev.endDate.toISOString() : null,
+    caseCode: ev.caseCode ?? null,
+    crimeType: ev.crimeType ?? null,
+    caseStatus: ev.caseStatus ?? null,
+    incidentTimeNotes: ev.incidentTimeNotes ?? null,
+    damageAssessment: ev.damageAssessment ?? null,
+    startDate: ev.startDate ? new Date(ev.startDate).toISOString() : null,
+    endDate: ev.endDate ? new Date(ev.endDate).toISOString() : null,
     hasTime: ev.hasTime,
-    description: ev.description,
-    groups: ev.groups,
-    addresses: ev.addresses.map((a) => ({
+    description: ev.description ?? null,
+    groups: (ev.groups || []).map((g) => ({
+      groupId: g.groupId,
+      group: {
+        id: g.group?.id || g.groupId,
+        name: g.group?.name || '',
+        color: g.group?.color ?? null,
+      },
+    })),
+    addresses: (ev.addresses || []).map((a) => ({
       id: a.id,
       type: a.type,
-      locality: a.locality,
-      country: a.country,
-      latitude: a.latitude === null ? null : Number(a.latitude),
-      longitude: a.longitude === null ? null : Number(a.longitude),
-      geocodeStatus: a.geocodeStatus,
+      locality: a.locality ?? null,
+      country: a.country ?? null,
+      latitude: a.latitude === null || a.latitude === undefined ? null : Number(a.latitude),
+      longitude: a.longitude === null || a.longitude === undefined ? null : Number(a.longitude),
+      geocodeStatus: a.geocodeStatus ?? null,
     })),
-    people: ev.people.map((p) => ({
+    people: (ev.people || []).map((p) => ({
       id: p.id,
       personId: p.personId,
-      role: p.role,
+      role: p.role ?? null,
       involvementType: p.involvementType,
       verificationStatus: p.verificationStatus,
-      person: p.person,
+      person: p.person as any,
     })),
-    relatedEventsCount: ev.relationshipsFrom.length,
+    relatedEventsCount: 0,
   }));
 
   const quickCounts: QuickEventCounts = {
@@ -445,7 +318,7 @@ export default async function EventsPage({
             quickCounts={quickCounts}
             crossCaseSuspects={crossCaseSuspects}
             categories={availableCategories}
-            groups={allGroups}
+            groups={(allGroups || []).map((g) => ({ id: g.id, name: g.name, color: g.color ?? null }))}
             people={allPeople}
             dateFormat={dateFormat}
             nameOrder={nameOrder}

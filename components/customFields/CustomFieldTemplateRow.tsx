@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { CustomFieldType } from '@prisma/client';
+import { CustomFieldType } from '@/types/api/custom-field-template';
 import { TemplateWithCount } from './CustomFieldsManager';
 import CustomFieldTemplateForm from './CustomFieldTemplateForm';
 
